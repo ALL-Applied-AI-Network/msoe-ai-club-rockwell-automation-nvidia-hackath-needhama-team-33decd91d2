@@ -23,7 +23,7 @@ export SINGULARITY_CACHEDIR="$SHARED_CACHE"
 export SINGULARITY_TMPDIR="$SHARED_TMP"
 
 OUTPUT_SIF="${REPO_DIR}/shared/isaac-sim.sif"
-SOURCE_IMAGE="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:4.5.0}"
+SOURCE_IMAGE="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:6.0.0}"
 
 echo "Building SIF container on $(hostname)..."
 echo "Source: $SOURCE_IMAGE"

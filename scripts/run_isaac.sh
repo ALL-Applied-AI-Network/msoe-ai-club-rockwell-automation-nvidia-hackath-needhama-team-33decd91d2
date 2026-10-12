@@ -65,7 +65,7 @@ if command -v singularity >/dev/null 2>&1; then
     elif [ -f "$LOCAL_SIF" ]; then
         IMAGE_TARGET="$LOCAL_SIF"
     else
-        IMAGE_TARGET="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:4.5.0}"
+        IMAGE_TARGET="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:6.0.0}"
     fi
 
     echo "[run_isaac] Target container: $IMAGE_TARGET"
@@ -76,7 +76,7 @@ if command -v singularity >/dev/null 2>&1; then
         BINDS="$BINDS,/data:/data"
     fi
 
-    exec singularity exec --nv \
+    exec singularity exec --nv --cleanenv \
         --bind "$BINDS" \
         --pwd /workspace \
         "$IMAGE_TARGET" \
