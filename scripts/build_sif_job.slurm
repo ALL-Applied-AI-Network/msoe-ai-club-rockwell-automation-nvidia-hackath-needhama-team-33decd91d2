@@ -15,15 +15,14 @@ cd "$REPO_DIR"
 
 mkdir -p logs
 
-TEAM_BASE="/data/ai_club/team_14_2026"
-SHARED_CACHE="${TEAM_BASE}/cache/singularity"
-SHARED_TMP="${TEAM_BASE}/cache/tmp"
+SHARED_CACHE="${REPO_DIR}/shared/cache/singularity"
+SHARED_TMP="${REPO_DIR}/shared/cache/tmp"
 mkdir -p "$SHARED_CACHE" "$SHARED_TMP"
 
 export SINGULARITY_CACHEDIR="$SHARED_CACHE"
 export SINGULARITY_TMPDIR="$SHARED_TMP"
 
-OUTPUT_SIF="${TEAM_BASE}/isaac-sim.sif"
+OUTPUT_SIF="${REPO_DIR}/shared/isaac-sim.sif"
 SOURCE_IMAGE="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:4.5.0}"
 
 echo "Building SIF container on $(hostname)..."
@@ -40,4 +39,3 @@ chgrp ai_club "$OUTPUT_SIF" 2>/dev/null || true
 chmod 775 "$OUTPUT_SIF" 2>/dev/null || true
 
 echo "SIF build completed successfully at: $OUTPUT_SIF"
-

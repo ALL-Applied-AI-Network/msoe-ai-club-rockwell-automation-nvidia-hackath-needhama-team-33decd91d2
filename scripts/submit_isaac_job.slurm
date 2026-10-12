@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=isaac_sim
+#SBATCH --partition=dgxh100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
