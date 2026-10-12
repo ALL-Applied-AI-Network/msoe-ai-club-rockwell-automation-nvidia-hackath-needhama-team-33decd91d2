@@ -1,0 +1,6 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/isaac-sim:6.0.0
+
+%post
+    chmod -R a+rX /isaac-sim
+

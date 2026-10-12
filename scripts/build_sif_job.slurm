@@ -30,8 +30,20 @@ echo "Source: $SOURCE_IMAGE"
 echo "Output: $OUTPUT_SIF"
 echo "Cache:  $SINGULARITY_CACHEDIR"
 
-# Build SIF image
-singularity build --force "$OUTPUT_SIF" "$SOURCE_IMAGE"
+SANDBOX_DIR="${SHARED_TMP}/isaac_sandbox"
+rm -rf "$SANDBOX_DIR"
+
+echo "Building sandbox from source image: $SOURCE_IMAGE..."
+singularity build --sandbox "$SANDBOX_DIR" "$SOURCE_IMAGE"
+
+echo "Applying world-readable permissions to /isaac-sim..."
+chmod -R a+rX "$SANDBOX_DIR/isaac-sim"
+
+echo "Repacking sandbox to final SIF: $OUTPUT_SIF..."
+singularity build --force "$OUTPUT_SIF" "$SANDBOX_DIR"
+
+echo "Cleaning up temporary sandbox..."
+rm -rf "$SANDBOX_DIR"
 
 # Ensure group ownership and permissions so the whole team can execute it
 echo "Setting permissions on $OUTPUT_SIF..."
