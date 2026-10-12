@@ -14,15 +14,10 @@ set -euo pipefail
 REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_DIR"
 
-TEAM_BASE="/data/ai_club/team_14_2026"
-# Configure shared team cache/temp so everyone on the team reuses downloaded layers
-if [ -d "/data/ai_club" ] || [ -d "$TEAM_BASE" ]; then
-    export SINGULARITY_CACHEDIR="${TEAM_BASE}/cache/singularity"
-    export SINGULARITY_TMPDIR="${TEAM_BASE}/cache/tmp"
-    mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
-elif [ -d "/data/scratch/$USER" ]; then
-    export SINGULARITY_CACHEDIR="/data/scratch/$USER/singularity_cache"
-    export SINGULARITY_TMPDIR="/data/scratch/$USER/singularity_tmp"
+# Singularity cache in ./shared/cache
+if [ -d "$REPO_DIR/shared/cache" ]; then
+    export SINGULARITY_CACHEDIR="$REPO_DIR/shared/cache/singularity"
+    export SINGULARITY_TMPDIR="$REPO_DIR/shared/cache/tmp"
     mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
 fi
 
@@ -34,5 +29,5 @@ if [ "$#" -gt 0 ]; then
     ./scripts/run_isaac.sh "$@"
 else
     echo "Running default CSI digital twin test render..."
-    ./scripts/run_isaac.sh data/csi_digital_twin_v1/tools/render_example.py --camera FillCam --frame 686 --out fill_test.png
+    ./scripts/run_isaac.sh shared/data/csi_digital_twin_v1/tools/render_example.py --camera FillCam --frame 686 --out runs/fill_test.png
 fi

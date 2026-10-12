@@ -6,8 +6,7 @@ set -euo pipefail
 #   ./scripts/run_isaac.sh <script.py> [args...]
 #
 # Examples:
-#   ./scripts/run_isaac.sh data/csi_digital_twin_v1/tools/render_example.py --camera FillCam --out fill.png
-#   ./scripts/run_isaac.sh data/fanuc_er4ia_sim/build_scene.py --headless --save runs/scene.usd
+#   ./scripts/run_isaac.sh shared/data/csi_digital_twin_v1/tools/render_example.py --camera FillCam --out runs/fill.png
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
@@ -43,11 +42,10 @@ fi
 if command -v singularity >/dev/null 2>&1; then
     echo "[run_isaac] Native Isaac Sim not found. Using Singularity on cluster..."
 
-    # Configure shared team cache/temp to allow team reuse and avoid $HOME quota issues
-    TEAM_BASE="/data/ai_club/team_14_2026"
-    if [ -d "/data/ai_club" ] || [ -d "$TEAM_BASE" ]; then
-        SHARED_CACHE="${TEAM_BASE}/cache/singularity"
-        SHARED_TMP="${TEAM_BASE}/cache/tmp"
+    # Configure shared cache directory
+    if [ -d "$REPO_ROOT/shared/cache" ]; then
+        SHARED_CACHE="$REPO_ROOT/shared/cache/singularity"
+        SHARED_TMP="$REPO_ROOT/shared/cache/tmp"
         mkdir -p "$SHARED_CACHE" "$SHARED_TMP"
         export SINGULARITY_CACHEDIR="${SINGULARITY_CACHEDIR:-$SHARED_CACHE}"
         export SINGULARITY_TMPDIR="${SINGULARITY_TMPDIR:-$SHARED_TMP}"
@@ -57,8 +55,8 @@ if command -v singularity >/dev/null 2>&1; then
         mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
     fi
 
-    # Locate image: prioritize explicit ISAAC_SIF, team shared .sif, local .sif, or NGC docker URI
-    SHARED_SIF="${TEAM_BASE}/isaac-sim.sif"
+    # Locate container image
+    SHARED_SIF="$REPO_ROOT/shared/isaac-sim.sif"
     LOCAL_SIF="$REPO_ROOT/isaac-sim.sif"
     if [ -n "${ISAAC_SIF:-}" ] && [ -f "$ISAAC_SIF" ]; then
         IMAGE_TARGET="$ISAAC_SIF"
@@ -67,12 +65,10 @@ if command -v singularity >/dev/null 2>&1; then
     elif [ -f "$LOCAL_SIF" ]; then
         IMAGE_TARGET="$LOCAL_SIF"
     else
-        # Direct docker image via Singularity (defaults to 4.5.0, or override via ISAAC_IMAGE)
         IMAGE_TARGET="${ISAAC_IMAGE:-docker://nvcr.io/nvidia/isaac-sim:4.5.0}"
     fi
 
     echo "[run_isaac] Target container: $IMAGE_TARGET"
-    echo "[run_isaac] Cache dir: ${SINGULARITY_CACHEDIR:-default}"
 
     # Set up bind mounts (repo root and /data shared storage if present)
     BINDS="$REPO_ROOT:/workspace"
