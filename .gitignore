@@ -1,6 +1,8 @@
 data.zip
 data/
 data
+team_14_2026/
+team_14_2026
 *.sif
 slurm-*.out
 slurm-*.err
