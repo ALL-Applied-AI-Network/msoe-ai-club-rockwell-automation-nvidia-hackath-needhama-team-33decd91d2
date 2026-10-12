@@ -1,2 +1,8 @@
-data/
 data.zip
+data/
+data
+*.sif
+slurm-*.out
+slurm-*.err
+logs/
+runs/
