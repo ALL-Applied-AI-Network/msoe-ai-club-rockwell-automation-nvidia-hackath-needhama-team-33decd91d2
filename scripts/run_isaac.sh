@@ -20,7 +20,7 @@ fi
 CANDIDATE_PATHS=(
     "${ISAAC:-}"
     "/data/ai_club/team_14_2026/isaacsim_6.1"
-    "${REPO_ROOT}/shared/isaacsim"
+    "${REPO_ROOT}/shared/isaacsim_6.1"
     "${HOME}/isaacsim"
     "/isaac-sim"
 )
