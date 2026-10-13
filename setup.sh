@@ -41,10 +41,9 @@ if [ -d "/data/ai_club" ] || [ -w "/data" 2>/dev/null ]; then
         ln -s "$TEAM_REMOTE_DIR" shared
     fi
 
-    # Set group ownership and shared permissions for team members
-    echo "Setting group ownership to ai_club and group permissions for ${TEAM_REMOTE_DIR}..."
-    chgrp -R ai_club "$TEAM_REMOTE_DIR" 2>/dev/null || true
-    chmod -R g+rwX "$TEAM_REMOTE_DIR" 2>/dev/null || true
+    # Set group ownership and shared permissions for team members (top-level + setgid for auto-inheritance)
+    chgrp ai_club "$TEAM_REMOTE_DIR" "$TARGET_DATA_DIR" "$SHARED_CACHE_DIR" 2>/dev/null || true
+    chmod g+rwxs "$TEAM_REMOTE_DIR" "$TARGET_DATA_DIR" "$SHARED_CACHE_DIR" 2>/dev/null || true
 else
     # Brev / Standalone: ./shared is a local folder containing data/, cache/, etc.
     IS_CLUSTER=false
@@ -97,10 +96,20 @@ if [ -d "$FANUC_DIR" ] && [ -f "$FANUC_DIR/bootstrap.sh" ]; then
         ./bootstrap.sh
     )
     if [ "$IS_CLUSTER" = true ]; then
-        chgrp -R ai_club "$FANUC_DIR" 2>/dev/null || true
-        chmod -R g+rwX "$FANUC_DIR" 2>/dev/null || true
+        chgrp ai_club "$FANUC_DIR" 2>/dev/null || true
+        chmod g+rwxs "$FANUC_DIR" 2>/dev/null || true
     fi
     echo "FANUC robot arm simulation initialized."
+fi
+
+# Ensure Isaac Sim 6.1 standalone is available
+if [ -f "scripts/install_isaac_standalone.sh" ]; then
+    if [ -x "shared/isaacsim_6.1/python.sh" ] || [ -x "${HOME}/isaacsim/python.sh" ]; then
+        echo "Isaac Sim 6.1 is already installed."
+    else
+        echo "Installing Isaac Sim 6.1 standalone into ./shared/isaacsim_6.1..."
+        ./scripts/install_isaac_standalone.sh
+    fi
 fi
 
 echo "Setup finished successfully. All data and assets accessible at ./shared/data/"

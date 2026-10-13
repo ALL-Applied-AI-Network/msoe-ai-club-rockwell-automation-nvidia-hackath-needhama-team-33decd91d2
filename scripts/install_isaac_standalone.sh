@@ -18,6 +18,12 @@ fi
 
 mkdir -p "$DOWNLOAD_DIR" "$TARGET_DIR"
 
+if [ -x "$TARGET_DIR/python.sh" ]; then
+    echo "Isaac Sim 6.1.0 is already installed at $TARGET_DIR (python.sh exists)."
+    echo "Nothing to do!"
+    exit 0
+fi
+
 if [ ! -f "$ZIP_FILE" ]; then
     echo "Downloading Isaac Sim 6.1.0 standalone (~12.4 GB)..."
     wget -c "$ZIP_URL" -O "$ZIP_FILE"

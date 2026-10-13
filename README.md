@@ -27,7 +27,7 @@ chmod +x setup.sh
 
 ## 2. Running on Rosie (HPC Cluster)
 
-On Rosie, jobs run on Tesla T4 compute nodes via Slurm using the team's shared standalone **Isaac Sim 6.1.0** install (`/data/ai_club/team_14_2026/isaacsim_6.1`).
+On Rosie, jobs run on Tesla T4 compute nodes via Slurm using the team's shared standalone **Isaac Sim 6.1.0** install located at `./shared/isaacsim_6.1`.
 
 ### Submitting Batch Jobs
 Submit batch jobs with `sbatch`. Because jobs run in the background on compute nodes, you can safely disconnect or close your session:
@@ -63,15 +63,38 @@ Rendered outputs are written to the `runs/` directory.
 
 On dedicated GPU instances (e.g., NVIDIA GB10 / Grace Blackwell `aarch64` or Brev `x86_64`), you have direct interactive shell access without Slurm queues.
 
-### A. One-Time Isaac Sim 6.1 Installation
-Run the installer script (it automatically detects `x86_64` vs `aarch64` / ARM, downloads the standalone package, and installs into `./shared/isaacsim_6.1` by default):
+### A. Connecting to GB10 via SSH (Windows PowerShell)
+To configure fast passwordless SSH access to the GB10 node from Windows PowerShell:
+
+1. **Copy your SSH public key to the node (in PowerShell):**
+   ```powershell
+   type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh hackathon3@spark3.ai.msoe.edu "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
+   ```
+   *(Or if using Git Bash / WSL: `ssh-copy-id -i ~/.ssh/id_ed25519 hackathon3@spark3.ai.msoe.edu`)*
+
+2. **Add the host alias to your local SSH config (`notepad $env:USERPROFILE\.ssh\config`):**
+   ```sshconfig
+   Host GB10
+       HostName spark3.ai.msoe.edu
+       User hackathon3
+       IdentityFile ~/.ssh/id_ed25519
+       ForwardAgent yes
+   ```
+
+3. **Connect anytime from PowerShell or Windows Terminal:**
+   ```powershell
+   ssh GB10
+   ```
+
+### B. Setup & Installation
+Run `./setup.sh` — it will extract data assets, bootstrap robot textures, and automatically install Isaac Sim 6.1 into `./shared/isaacsim_6.1`:
 
 ```bash
-# Automatically detects architecture (x86_64 vs aarch64) and installs to ./shared/isaacsim_6.1
-./scripts/install_isaac_standalone.sh
+./setup.sh
 ```
+*(Or install Isaac Sim independently anytime with `./scripts/install_isaac_standalone.sh`)*
 
-### B. Running Headless Simulations Directly
+### C. Running Headless Simulations Directly
 Run simulations directly via `./scripts/run_isaac.sh` (it automatically discovers `./shared/isaacsim_6.1` or `$ISAAC`):
 
 ```bash
@@ -86,12 +109,12 @@ Run simulations directly via `./scripts/run_isaac.sh` (it automatically discover
 ./scripts/run_isaac.sh shared/data/fanuc_er4ia_sim/build_scene.py --headless --save runs/fanuc_scene.usd
 ```
 
-### C. Transferring Rendered Outputs to Your Laptop
+### D. Transferring Rendered Outputs to Your Laptop
+- **From GB10 (SCP using configured host alias):**
+  ```bash
+  scp GB10:~/innovation-lab-fall-2026/runs/fill_test.png ~/Downloads/
+  ```
 - **From Brev:**
   ```bash
   brev copy <instance-name>:/home/ubuntu/innovation-lab-fall-2026/runs/fill_test.png ~/Downloads/
-  ```
-- **From GB10 (SCP/RSYNC):**
-  ```bash
-  scp user@<gb10-host>:~/innovation-lab-fall-2026/runs/fill_test.png ~/Downloads/
   ```
