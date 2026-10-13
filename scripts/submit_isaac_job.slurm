@@ -15,12 +15,7 @@ set -euo pipefail
 REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_DIR"
 
-# Singularity cache in ./shared/cache
-if [ -d "$REPO_DIR/shared/cache" ]; then
-    export SINGULARITY_CACHEDIR="$REPO_DIR/shared/cache/singularity"
-    export SINGULARITY_TMPDIR="$REPO_DIR/shared/cache/tmp"
-    mkdir -p "$SINGULARITY_CACHEDIR" "$SINGULARITY_TMPDIR"
-fi
+mkdir -p logs runs
 
 echo "Running on $(hostname) with GPU allocation:"
 nvidia-smi
