@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Standalone Isaac Sim 6.1.0 Installer for Rosie / Local Linux
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Standalone Isaac Sim 6.1.0 Installer for Rosie / Local Linux / GB10
 TARGET_DIR="${1:-$REPO_ROOT/shared/isaacsim_6.1}"
 DOWNLOAD_DIR="${HOME}/Downloads"
-ZIP_URL="https://downloads.isaacsim.nvidia.com/isaac-sim-standalone-6.1.0-linux-x86_64.zip"
-ZIP_FILE="${DOWNLOAD_DIR}/isaac-sim-standalone-6.1.0-linux-x86_64.zip"
+
+ARCH="$(uname -m)"
+if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    ZIP_URL="https://downloads.isaacsim.nvidia.com/isaac-sim-standalone-6.1.0-linux-aarch64.zip"
+    ZIP_FILE="${DOWNLOAD_DIR}/isaac-sim-standalone-6.1.0-linux-aarch64.zip"
+else
+    ZIP_URL="https://downloads.isaacsim.nvidia.com/isaac-sim-standalone-6.1.0-linux-x86_64.zip"
+    ZIP_FILE="${DOWNLOAD_DIR}/isaac-sim-standalone-6.1.0-linux-x86_64.zip"
+fi
 
 mkdir -p "$DOWNLOAD_DIR" "$TARGET_DIR"
 
