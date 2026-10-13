@@ -27,7 +27,7 @@ else
     echo "Running default CSI digital twin test render..."
     ./scripts/run_isaac.sh shared/data/csi_digital_twin_v1/tools/render_example.py \
         --camera FillCam \
-        --stage shared/data/csi_digital_twin_v1/stations/fill_station/fill_station.usda \
+        --stage stations/fill_station/fill_station.usda \
         --frame 686 \
         --out runs/fill_test.png
 fi
