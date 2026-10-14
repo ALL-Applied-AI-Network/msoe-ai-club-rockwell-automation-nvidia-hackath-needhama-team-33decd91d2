@@ -252,16 +252,18 @@ def render_fanuc(args, run_dir):
         from isaacsim.core.api import World
         from isaacsim.sensors.camera import Camera
 
-        world = World(stage_units_in_meters=1.0)
-        stage = omni.usd.get_context().get_stage()
-
-        # Use persistent USD scene if available, otherwise build fresh
+        # If loading prebuilt stage, open it before initializing World
         cached_scene = SHARED_DIR / "scenes" / "fanuc_scene.usd"
         if cached_scene.exists() and not args.stage:
             print(f"[render.py] Loading prebuilt scene: {cached_scene}")
             omni.usd.get_context().open_stage(str(cached_scene))
+            while omni.usd.get_context().get_stage_loading_status()[2] > 0:
+                kit.update()
             stage = omni.usd.get_context().get_stage()
+            world = World(stage_units_in_meters=1.0)
         else:
+            world = World(stage_units_in_meters=1.0)
+            stage = omni.usd.get_context().get_stage()
             cell.build(stage)
 
         _CAMS = {
