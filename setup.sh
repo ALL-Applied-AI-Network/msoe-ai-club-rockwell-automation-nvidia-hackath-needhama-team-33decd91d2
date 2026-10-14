@@ -112,4 +112,14 @@ if [ -f "scripts/install_isaac_standalone.sh" ]; then
     fi
 fi
 
+# Ensure persistent FANUC scene USD is built in shared/scenes/
+if [ ! -f "shared/scenes/fanuc_scene.usd" ]; then
+    # Only build automatically if we have a direct GPU (GB10, Brev, or compute node)
+    if [ -n "${CUDA_VISIBLE_DEVICES:-}" ] || nvidia-smi >/dev/null 2>&1; then
+        echo "Building initial persistent FANUC scene at shared/scenes/fanuc_scene.usd..."
+        mkdir -p shared/scenes
+        ./scripts/run_isaac.sh scripts/render.py --target build_fanuc 2>/dev/null || true
+    fi
+fi
+
 echo "Setup finished successfully. All data and assets accessible at ./shared/data/"
