@@ -97,15 +97,50 @@ To configure fast passwordless SSH access to the GB10 node from Windows PowerShe
    ssh GB10
    ```
 
-### B. Setup & Installation
-Run `./setup.sh` — it will extract data assets, bootstrap robot textures, and automatically install Isaac Sim 6.1 into `./shared/isaacsim_6.1`:
+### B. Connecting to Brev via SSH (Windows)
+Brev generates your SSH key and host details via its CLI in WSL, which can then be bridged to native Windows OpenSSH and VS Code:
+
+1. **Install Brev CLI and log in (in WSL terminal):**
+   ```bash
+   bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
+   brev login
+   ```
+   *(Brev will generate your private key `~/.brev/brev.pem` and host configs in `~/.brev/ssh_config`)*
+
+2. **Copy the Brev private key to Windows (run in Windows PowerShell):**
+   ```powershell
+   mkdir -Force $env:USERPROFILE\.brev
+   wsl cp ~/.brev/brev.pem /mnt/c/Users/$env:USERNAME/.brev/brev.pem
+   ```
+
+3. **Add the `brev` host entry to your Windows SSH config (`code $env:USERPROFILE\.ssh\config`):**
+   *(Grab the `Hostname` by running `wsl cat ~/.brev/ssh_config`)*
+   ```sshconfig
+   Host brev
+       HostName <hostname-from-cat-brev-ssh_config>
+       User ubuntu
+       Port 22
+       IdentityFile ~/.brev/brev.pem
+       ForwardAgent yes
+       StrictHostKeyChecking no
+   ```
+
+4. **Connect anytime in PowerShell:**
+   ```powershell
+   ssh brev
+   ```
+
+5. **Open in VS Code Desktop:**
+   Press `Ctrl + Shift + P` $\rightarrow$ type `Remote-SSH: Connect to Host...` $\rightarrow$ select `brev`.
+
+### C. Setup & Installation
+Once connected to GB10 or Brev, run `./setup.sh`. It will extract data assets, bootstrap textures, ensure Isaac Sim is available, and automatically prebuild the persistent FANUC scene (`shared/scenes/fanuc_scene.usd`):
 
 ```bash
 ./setup.sh
 ```
-*(Or install Isaac Sim independently anytime with `./scripts/install_isaac_standalone.sh`)*
 
-### C. Running Simulations Directly
+### D. Running Simulations Directly
 On GB10 or Brev, run the exact same `./render.sh` command (it automatically executes directly):
 
 ```bash
@@ -119,7 +154,7 @@ On GB10 or Brev, run the exact same `./render.sh` command (it automatically exec
 ./render.sh --target fanuc --camera side
 ```
 
-### D. Transferring Rendered Outputs to Your Laptop
+### E. Transferring Rendered Outputs to Your Laptop
 - **From GB10 (SCP using configured host alias):**
   ```bash
   scp -r GB10:~/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
