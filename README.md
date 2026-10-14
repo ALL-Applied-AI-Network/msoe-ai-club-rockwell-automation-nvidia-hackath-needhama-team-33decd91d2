@@ -134,11 +134,16 @@ Brev generates your SSH key and host details via its CLI in WSL, which can then 
    Press `Ctrl + Shift + P` $\rightarrow$ type `Remote-SSH: Connect to Host...` $\rightarrow$ select `brev`.
 
 ### C. Setup & Installation
-Once connected to GB10 or Brev, run `./setup.sh`. It will extract data assets, bootstrap textures, ensure Isaac Sim is available, and automatically prebuild the persistent FANUC scene (`shared/scenes/fanuc_scene.usd`):
+1. **Ensure host system dependencies (Required for headless RTX MaterialX on Ubuntu/Brev):**
+   ```bash
+   sudo apt-get update && sudo apt-get install -y libxt6
+   ```
 
-```bash
-./setup.sh
-```
+2. **Run the repository setup script:**
+   Once connected to GB10 or Brev, run `./setup.sh`. It will extract data assets, bootstrap textures, ensure Isaac Sim is available, and automatically prebuild the persistent FANUC scene (`shared/scenes/fanuc_scene.usd`):
+   ```bash
+   ./setup.sh
+   ```
 
 ### D. Running Simulations Directly
 On GB10 or Brev, run the exact same `./render.sh` command (it automatically executes directly):
