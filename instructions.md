@@ -12,7 +12,7 @@ A four-week physical AI hackathon with Rockwell Automation, NVIDIA, MSOE, and UW
 
 
 
-[Rockwell Automation](https://www.google.com/search?q=https://www.rockwellautomation.com/en-us.html), [NVIDIA](https://www.google.com/search?q=https://www.nvidia.com/en-us/), the [MSOE AI Club](https://www.google.com/search?q=https://msoe-maic.com/), and UWM's [Connected Systems Institute (CSI)](https://www.google.com/search?q=https://uwm.edu/csi/) are running a four-week physical AI hackathon. Teams will work with data and equipment from CSI's manufacturing testbed, then show a working solution at the finals.
+[Rockwell Automation](https://www.rockwellautomation.com/en-us.html), [NVIDIA](https://www.nvidia.com/en-us/), the [MSOE AI Club](https://msoe-maic.com/), and UWM's [Connected Systems Institute (CSI)](https://uwm.edu/csi/) are running a four-week physical AI hackathon. Teams will work with data and equipment from CSI's manufacturing testbed, then show a working solution at the finals.
 
 You do not need prior manufacturing or AI experience. You do need a team that is willing to test ideas, measure results, and explain what it learned.
 
@@ -24,12 +24,12 @@ You do not need prior manufacturing or AI experience. You do need a team that is
 
 Each student creates an account and joins or creates a team.
 
-* **[Sign up and manage your team](https://www.google.com/search?q=https://dashboard.all-ai-network.org/j/L36HEH)**
+* **[Sign up and manage your team](https://dashboard.all-ai-network.org/j/L36HEH)**
 
-* **[Submit your team plan](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK%3Fd%3D1ff0683a-39d7-4302-a363-0835ca390c98)** by 11:59 PM CT on Wednesday, October 14.
+* **[Submit your team plan](https://dashboard.all-ai-network.org/s/V28NHK?d=1ff0683a-39d7-4302-a363-0835ca390c98)** by 11:59 PM CT on Wednesday, October 14.
 
 
-* [Open the event workspace](https://www.google.com/search?q=https://dashboard.all-ai-network.org/e/innovation-lab-fall-2026-059658)
+* [Open the event workspace](https://dashboard.all-ai-network.org/e/innovation-lab-fall-2026-059658)
 
 
 **Use the same email address associated with your university if possible.** After you join a team, connect GitHub from your profile so the dashboard can send your team repository invitation.
@@ -38,7 +38,7 @@ Each student creates an account and joins or creates a team.
 
 
 
-Teams, repositories, and submissions for this lab are managed through the [ALL AI Network](https://www.google.com/search?q=https://dashboard.all-ai-network.org/e/innovation-lab-fall-2026-059658) event workspace.
+Teams, repositories, and submissions for this lab are managed through the [ALL AI Network](https://dashboard.all-ai-network.org/e/innovation-lab-fall-2026-059658) event workspace.
 
 * **MSOE and UWM students:** your teams have already been created. Create an account with your university email from the sign-up link above, and you will be placed on your team automatically.
 
@@ -73,7 +73,7 @@ CSI also has a separate FANUC robot setup that moves and sorts blocks and other 
 
 
 
-**[Rockwell Automation](https://www.google.com/search?q=https://www.rockwellautomation.com/en-us.html)** builds the industrial automation and control systems that run production lines across manufacturing, from the controllers on the plant floor to the FactoryTalk software that connects production data and workflows. Its Emulate3D tools let engineers model and test a manufacturing system as a digital twin before they change physical equipment.
+**[Rockwell Automation](https://www.rockwellautomation.com/en-us.html)** builds the industrial automation and control systems that run production lines across manufacturing, from the controllers on the plant floor to the FactoryTalk software that connects production data and workflows. Its Emulate3D tools let engineers model and test a manufacturing system as a digital twin before they change physical equipment.
 
 Rockwell's customers are under pressure to produce more product variants, in smaller batches, with fewer experienced people on the floor. A line that changes recipes or products often cannot wait weeks for a new inspection program or robot routine. For Rockwell, AI is valuable when it makes those changeovers faster and more reliable, and when operators can understand and trust what it is doing. Results that hold up on real equipment, with clear limits, matter more than results that only work in a clean demo.
 
@@ -81,7 +81,7 @@ Rockwell's customers are under pressure to produce more product variants, in sma
 
 
 
-**[NVIDIA](https://www.google.com/search?q=https://www.nvidia.com/en-us/)** provides the accelerated computing, AI models, simulation frameworks, and edge platforms used to build Physical AI systems—systems that can perceive, reason, plan, and act in the physical world. Across computer vision, robotics, and industrial automation, teams can train models, simulate and validate their behavior with NVIDIA Omniverse and Isaac Sim, generate synthetic data where real-world data is limited, and deploy them for real-time inference and control.
+**[NVIDIA](https://www.nvidia.com/en-us/)** provides the accelerated computing, AI models, simulation frameworks, and edge platforms used to build Physical AI systems—systems that can perceive, reason, plan, and act in the physical world. Across computer vision, robotics, and industrial automation, teams can train models, simulate and validate their behavior with NVIDIA Omniverse and Isaac Sim, generate synthetic data where real-world data is limited, and deploy them for real-time inference and control.
 
 NVIDIA sees Physical AI as the next major wave of computing. In manufacturing, that shift becomes tangible: teams can develop and train models, test them against a physically based digital twin of a production line, and then deploy validated systems into the physical production environment. This approach helps address some of manufacturing’s hardest challenges, including limited labeled data, frequent product and process changes, and the need for systems that operate safely and reliably alongside people and machines.
 
@@ -97,7 +97,7 @@ Rockwell brings deep knowledge of industrial operations and the systems manufact
 
 Most manufacturers have not yet adopted AI on the factory floor. Only about 3% of manufacturers used AI for automated inspection in the 2020 Annual Business Survey. A NIST survey estimated that defective products cost US discrete manufacturers $32–58 billion each year. The gap between what AI can do and what is actually running in plants is large, and much of it comes down to reliability, setup time, and trust.
 
-This lab asks teams to close a small piece of that gap: pick one real process on CSI's testbed, make it measurably better, and show the result working. The **[MSOE AI Club](https://www.google.com/search?q=https://msoe-maic.com/)** and UWM-CSI are bringing these tools and this testbed to student teams through this Innovation Lab.
+This lab asks teams to close a small piece of that gap: pick one real process on CSI's testbed, make it measurably better, and show the result working. The **[MSOE AI Club](https://msoe-maic.com/)** and UWM-CSI are bringing these tools and this testbed to student teams through this Innovation Lab.
 
 ---
 
@@ -107,25 +107,25 @@ This lab asks teams to close a small piece of that gap: pick one real process on
 
 We recommend that teams focus on building one strong solution around a single idea or dataset rather than spreading effort across several half-finished ideas. This is a recommendation, not a requirement, but it is the approach that has worked best for teams in past Innovation Labs.
 
-All of the data and digital twins are in the [Innovation Lab data folder](https://www.google.com/search?q=https://drive.google.com/drive/folders/1GWuHV2WUNLztq_Fga6xBH7qFzhxDaac8%3Fusp%3Dsharing). The real data from the line is there to look at, not to train on: teams generate their training data with the digital twins, as a high-mix, low-volume line would have to. Each dataset page explains why.
+All of the data and digital twins are in the [Innovation Lab data folder](https://drive.google.com/drive/folders/1GWuHV2WUNLztq_Fga6xBH7qFzhxDaac8?usp=sharing). The real data from the line is there to look at, not to train on: teams generate their training data with the digital twins, as a high-mix, low-volume line would have to. Each dataset page explains why.
 
 * **Dataset 1: Final Vial Inspection**
 Find missing caps, crooked caps, damaged vials, and unexpected empty positions after the robot fills a fixture.
 
 
-[See more details](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Vial-Inspection)
+[See more details](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Vial-Inspection)
 
 * **Dataset 2: Fluid Mixing Station 3**
 Use synchronized camera views to detect fill and color problems caused by recipes and fluid carryover.
 
 
-[See more details](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Fluid-Mixing)
+[See more details](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Fluid-Mixing)
 
 * **Dataset 3: Grasping and Sorting**
 Use a digital twin and multiple cameras to make a standalone FANUC arm grasp and sort objects more reliably. This robot is separate from the vial production line.
 
 
-[See more details](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Grasping-Sorting)
+[See more details](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Grasping-Sorting)
 
 
 #### Related guides
@@ -134,16 +134,16 @@ Use a digital twin and multiple cameras to make a standalone FANUC arm grasp and
 
 These four guides cover what every team needs beyond the datasets. Read them before you submit your team plan.
 
-* **[Compute: Brev, DGX Spark, and build.nvidia.com](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Compute):** how to get GPU power for your project. It covers Brev cloud GPUs and ready-made launchables (including Isaac Sim), the DGX Spark systems at UWM and Dell GB10 systems at MSOE, free model APIs on build.nvidia.com, and the workstation at CSI. Brev credits are spent whenever an instance is running, so read this before you start one.
+* **[Compute: Brev, DGX Spark, and build.nvidia.com](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Compute):** how to get GPU power for your project. It covers Brev cloud GPUs and ready-made launchables (including Isaac Sim), the DGX Spark systems at UWM and Dell GB10 systems at MSOE, free model APIs on build.nvidia.com, and the workstation at CSI. Brev credits are spent whenever an instance is running, so read this before you start one.
 
 
-* **[Collect and test your own data](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Data-Collection):** what you can and cannot do at the CSI testbed. It explains how to request a visit or extra data, how to collect your own data safely, how to use digital twins for synthetic data, and how to schedule a supervised test of your finished system on the real equipment.
+* **[Collect and test your own data](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Data-Collection):** what you can and cannot do at the CSI testbed. It explains how to request a visit or extra data, how to collect your own data safely, how to use digital twins for synthetic data, and how to schedule a supervised test of your finished system on the real equipment.
 
 
-* **[Coding agents](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Coding-Agents):** start free with Gemini in the Antigravity CLI, learn how to get more student usage, and request Claude or Codex plans in your team plan.
+* **[Coding agents](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Coding-Agents):** start free with Gemini in the Antigravity CLI, learn how to get more student usage, and request Claude or Codex plans in your team plan.
 
 
-* **[Tools and resources](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Resources):** a table matching each physical AI task to its tools and hardware, a step-by-step tutorial for synthetic data generation with Isaac Sim on Brev, AI coding tools, in-context learning with vision-language models, NVIDIA Cosmos, and other tools worth knowing. Start with a simple baseline, then use this page when you hit a specific question.
+* **[Tools and resources](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Resources):** a table matching each physical AI task to its tools and hardware, a step-by-step tutorial for synthetic data generation with Isaac Sim on Brev, AI coding tools, in-context learning with vision-language models, NVIDIA Cosmos, and other tools worth knowing. Start with a simple baseline, then use this page when you hit a specific question.
 
 
 
@@ -158,7 +158,7 @@ These four guides cover what every team needs beyond the datasets. Read them bef
 | Thursday, October 8 | Kickoff | Rockwell Automation HQ, 1201 S 2nd St, Milwaukee, 4:00–6:00 PM. Transportation is provided from both campuses.
 
  |
-| Wednesday, October 14 | Team plan due | Submit by 11:59 PM CT through the [team plan submission form](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK%3Fd%3D1ff0683a-39d7-4302-a363-0835ca390c98).
+| Wednesday, October 14 | Team plan due | Submit by 11:59 PM CT through the [team plan submission form](https://dashboard.all-ai-network.org/s/V28NHK?d=1ff0683a-39d7-4302-a363-0835ca390c98).
 
  |
 | Sunday, November 1 | Final submission due | About a five-minute video, a one-page summary, your repository, and references.
@@ -193,13 +193,13 @@ These four guides cover what every team needs beyond the datasets. Read them bef
 * [ ] Download the data and confirm that everyone who needs it can open it.
 
 
-* [ ] Review the [compute guide](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Compute) and request what your team expects to use inside the [team plan](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK%3Fd%3D1ff0683a-39d7-4302-a363-0835ca390c98).
+* [ ] Review the [compute guide](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Compute) and request what your team expects to use inside the [team plan](https://dashboard.all-ai-network.org/s/V28NHK?d=1ff0683a-39d7-4302-a363-0835ca390c98).
 
 
-* [ ] [Join the hackathon Slack workspace](https://www.google.com/search?q=https://join.slack.com/t/rockwellnvidi-wq82211/shared_invite/zt-4bp05nsn9-UW3afFtM9wjzWtZiQoJBHg), open `#hackathon-announcements`, and find the channel for your dataset.
+* [ ] [Join the hackathon Slack workspace](https://join.slack.com/t/rockwellnvidi-wq82211/shared_invite/zt-4bp05nsn9-UW3afFtM9wjzWtZiQoJBHg), open `#hackathon-announcements`, and find the channel for your dataset.
 
 
-* [ ] Submit the [team plan](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK%3Fd%3D1ff0683a-39d7-4302-a363-0835ca390c98) by Wednesday, October 14.
+* [ ] Submit the [team plan](https://dashboard.all-ai-network.org/s/V28NHK?d=1ff0683a-39d7-4302-a363-0835ca390c98) by Wednesday, October 14.
 
 
 
@@ -207,7 +207,7 @@ These four guides cover what every team needs beyond the datasets. Read them bef
 
 
 
-**[Submit your team plan here](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK%3Fd%3D1ff0683a-39d7-4302-a363-0835ca390c98)** by 11:59 PM CT on Wednesday, October 14.
+**[Submit your team plan here](https://dashboard.all-ai-network.org/s/V28NHK?d=1ff0683a-39d7-4302-a363-0835ca390c98)** by 11:59 PM CT on Wednesday, October 14.
 
 The plan is a short resource request, not a contract or graded paper. Anyone on the team can submit it, and any teammate can update the same team submission before the deadline. Organizers and sponsor mentors will use it to line up compute, data, and technical support.
 
@@ -228,7 +228,7 @@ The form asks for:
 * the compute you expect to use: Brev (including how many credits your team is requesting), a UWM DGX Spark, an MSOE Dell GB10 on Rosie, the CSI workstation, or build.nvidia.com;
 
 
-* [AI-agent credits or tools](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Coding-Agents) you need;
+* [AI-agent credits or tools](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Coding-Agents) you need;
 
 
 * the type of mentor support you want;
@@ -246,7 +246,7 @@ Plans may change once teams examine the data. Keep the first submission short an
 
 
 
-**[Submit your final project here](https://www.google.com/search?q=https://dashboard.all-ai-network.org/s/V28NHK)** by 11:59 PM CT on Sunday, November 1.
+**[Submit your final project here](https://dashboard.all-ai-network.org/s/V28NHK)** by 11:59 PM CT on Sunday, November 1.
 
 Each team submits:
 
@@ -269,7 +269,7 @@ Each team submits:
 
 Your video, summary, and finals presentation should:
 
-* **Demonstrate the solution operating on real hardware**, either the UWM CSI production line or the FANUC robotic arm. See the [data collection guide](https://www.google.com/search?q=https://msoe-maic.com/library%3Farticle%3DRockwell-NVIDIA-Fall-2026-Data-Collection) to schedule a supervised test.
+* **Demonstrate the solution operating on real hardware**, either the UWM CSI production line or the FANUC robotic arm. See the [data collection guide](https://msoe-maic.com/library?article=Rockwell-NVIDIA-Fall-2026-Data-Collection) to schedule a supervised test.
 
 
 * **Identify the specific problem being solved**, such as a defect type, a failure mode, or a slow manual step, and why it matters on this line.
@@ -324,7 +324,7 @@ The detailed judging criteria, category weights, and award categories are still 
 
 
 
-This year, teams will not be assigned one exact mentor or given a long directory of sponsor contacts. [Join the hackathon Slack workspace](https://www.google.com/search?q=https://join.slack.com/t/rockwellnvidi-wq82211/shared_invite/zt-4bp05nsn9-UW3afFtM9wjzWtZiQoJBHg), then ping the people below in the channel that matches the question. This keeps answers visible to other teams. Email is available if you do not get a response in Slack or would rather follow up directly.
+This year, teams will not be assigned one exact mentor or given a long directory of sponsor contacts. [Join the hackathon Slack workspace](https://join.slack.com/t/rockwellnvidi-wq82211/shared_invite/zt-4bp05nsn9-UW3afFtM9wjzWtZiQoJBHg), then ping the people below in the channel that matches the question. This keeps answers visible to other teams. Email is available if you do not get a response in Slack or would rather follow up directly.
 
 #### Recommended Slack channels to create
 
@@ -356,16 +356,16 @@ This year, teams will not be assigned one exact mentor or given a long directory
 
 
 
-* **More data, CSI visits, or physical testing:** Ping **Shamar Webster** in `#data-and-testbed-requests`. This includes requesting more production-line data, visiting CSI to collect your own data, and arranging a supervised test of your tool. Email fallback: [webste63@uwm.edu](https://www.google.com/search?q=mailto%3Awebste63%40uwm.edu).
+* **More data, CSI visits, or physical testing:** Ping **Shamar Webster** in `#data-and-testbed-requests`. This includes requesting more production-line data, visiting CSI to collect your own data, and arranging a supervised test of your tool. Email fallback: [webste63@uwm.edu](mailto:webste63@uwm.edu).
 
 
-* **Questions about the line or datasets:** Ping **Brett Storoe, Dr. Derek Riley, or Tanner Cellio** in the relevant dataset channel. These are the first contacts for non-critical questions about the equipment, dataset context, or problem your team is trying to understand. Email fallbacks: [storoeb@msoe.edu](https://www.google.com/search?q=mailto%3Astoroeb%40msoe.edu) and [driley@nvidia.com](https://www.google.com/search?q=mailto%3Adriley%40nvidia.com).
+* **Questions about the line or datasets:** Ping **Brett Storoe, Dr. Derek Riley, or Tanner Cellio** in the relevant dataset channel. These are the first contacts for non-critical questions about the equipment, dataset context, or problem your team is trying to understand. Email fallbacks: [storoeb@msoe.edu](mailto:storoeb@msoe.edu) and [driley@nvidia.com](mailto:driley@nvidia.com).
 
 
-* **Brev or compute:** Ping **Dan Schneider** in `#compute-questions`, or email [danschneider@nvidia.com](https://www.google.com/search?q=mailto%3Adanschneider%40nvidia.com).
+* **Brev or compute:** Ping **Dan Schneider** in `#compute-questions`, or email [danschneider@nvidia.com](mailto:danschneider@nvidia.com).
 
 
-* **Website, signup, team, or Slack access:** Ping **Brett Storoe** in `#hackathon-general`, or email [storoeb@msoe.edu](https://www.google.com/search?q=mailto%3Astoroeb%40msoe.edu).
+* **Website, signup, team, or Slack access:** Ping **Brett Storoe** in `#hackathon-general`, or email [storoeb@msoe.edu](mailto:storoeb@msoe.edu).
 
 
 
