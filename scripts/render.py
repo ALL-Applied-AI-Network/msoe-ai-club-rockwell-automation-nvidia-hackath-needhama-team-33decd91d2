@@ -128,6 +128,7 @@ def render_csi(args, run_dir):
         "height": rh
     })
 
+    success = False
     try:
         from isaacsim.core.utils.extensions import enable_extension
         enable_extension("omni.replicator.core")
@@ -230,6 +231,11 @@ def render_csi(args, run_dir):
         with open(run_dir / "meta.json", "w") as f:
             json.dump(meta, f, indent=2)
 
+        success = True
+    finally:
+        kit.close()
+
+    if success:
         print("\n" + "=" * 60)
         print(f"[render.py] SUCCESS: Render complete!")
         print(f"[render.py] Target:   {args.target} ({camera_name})")
@@ -238,9 +244,6 @@ def render_csi(args, run_dir):
         if len(rendered_files) == 1:
             print(f"[render.py] Image:    {rendered_files[0]}")
         print("=" * 60 + "\n", flush=True)
-
-    finally:
-        kit.close()
 
 
 def render_fanuc(args, run_dir):
@@ -254,6 +257,7 @@ def render_fanuc(args, run_dir):
     print(f"[render.py] Initializing SimulationApp for FANUC cell...")
     kit = SimulationApp({"headless": True, "renderer": args.renderer})
 
+    success = False
     try:
         sys.path.insert(0, str(FANUC_DIR))
         import omni.usd
@@ -318,6 +322,11 @@ def render_fanuc(args, run_dir):
         with open(run_dir / "meta.json", "w") as f:
             json.dump(meta, f, indent=2)
 
+        success = True
+    finally:
+        kit.close()
+
+    if success:
         print("\n" + "=" * 60)
         print(f"[render.py] SUCCESS: Render complete!")
         print(f"[render.py] Target:   FANUC Robot Cell ({camera_name})")
@@ -326,8 +335,6 @@ def render_fanuc(args, run_dir):
         if len(rendered_files) == 1:
             print(f"[render.py] Image:    {rendered_files[0]}")
         print("=" * 60 + "\n", flush=True)
-    finally:
-        kit.close()
 
 
 def main():
