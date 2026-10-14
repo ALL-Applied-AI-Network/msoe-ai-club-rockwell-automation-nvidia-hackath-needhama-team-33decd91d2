@@ -128,7 +128,6 @@ def render_csi(args, run_dir):
         "height": rh
     })
 
-    success = False
     try:
         from isaacsim.core.utils.extensions import enable_extension
         enable_extension("omni.replicator.core")
@@ -255,7 +254,6 @@ def render_fanuc(args, run_dir):
     print(f"[render.py] Initializing SimulationApp for FANUC cell...")
     kit = SimulationApp({"headless": True, "renderer": args.renderer})
 
-    success = False
     try:
         sys.path.insert(0, str(FANUC_DIR))
         import omni.usd
