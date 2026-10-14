@@ -230,6 +230,15 @@ def render_csi(args, run_dir):
         with open(run_dir / "meta.json", "w") as f:
             json.dump(meta, f, indent=2)
 
+        print("\n" + "=" * 60)
+        print(f"[render.py] SUCCESS: Render complete!")
+        print(f"[render.py] Target:   {args.target} ({camera_name})")
+        print(f"[render.py] Frames:   {len(rendered_files)} frame(s) rendered")
+        print(f"[render.py] Output:   {run_dir}")
+        if len(rendered_files) == 1:
+            print(f"[render.py] Image:    {rendered_files[0]}")
+        print("=" * 60 + "\n", flush=True)
+
     finally:
         kit.close()
 
@@ -309,7 +318,14 @@ def render_fanuc(args, run_dir):
         with open(run_dir / "meta.json", "w") as f:
             json.dump(meta, f, indent=2)
 
-        print(f"[render.py] All FANUC frames saved in {run_dir}")
+        print("\n" + "=" * 60)
+        print(f"[render.py] SUCCESS: Render complete!")
+        print(f"[render.py] Target:   FANUC Robot Cell ({camera_name})")
+        print(f"[render.py] Frames:   {len(rendered_files)} frame(s) rendered")
+        print(f"[render.py] Output:   {run_dir}")
+        if len(rendered_files) == 1:
+            print(f"[render.py] Image:    {rendered_files[0]}")
+        print("=" * 60 + "\n", flush=True)
     finally:
         kit.close()
 
