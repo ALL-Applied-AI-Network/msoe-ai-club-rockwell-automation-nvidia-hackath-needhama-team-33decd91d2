@@ -8,82 +8,66 @@ A four-week physical AI hackathon with Rockwell Automation, NVIDIA, MSOE, and UW
 
 ## 1. Initial Setup (Always Run First)
 
-`data.zip` contains the digital twin and asset models (gitignored due to size).
-
-1. Ensure `data.zip` is in the repository root (or on Rosie, data is pre-populated in `/data/ai_club/team_14_2026/data/`).
-2. Run the repository setup:
+All assets and dependencies are pre-configured. On any platform (Rosie, GB10, or Brev), simply run:
 
 ```bash
-chmod +x setup.sh
 ./setup.sh
 ```
 
-`setup.sh` standardizes data access under `./shared/data/` across all platforms:
+`setup.sh` standardizes data access under `./shared/data/`:
 - **On Rosie:** Symlinks `shared -> /data/ai_club/team_14_2026` so all teammates share storage, assets, and Isaac Sim installations.
-- **On GB10 / Brev / Local:** Extracts `data.zip` into `./shared/data/`.
-- Bootstraps the FANUC robot arm simulation (generates procedural textures and runs unit tests).
+- **On GB10 / Brev / Local:** Links or unpacks existing data assets.
+- Bootstraps the FANUC robot arm simulation (generates procedural textures and prebuilds the persistent scene).
 
 ---
 
-## 2. Running on Rosie (HPC Cluster)
+## 2. Rendering Simulations (`./render.sh`)
 
-On Rosie, jobs run on Tesla T4 compute nodes via Slurm using the team's shared standalone **Isaac Sim 6.1.0** install located at `./shared/isaacsim_6.1`.
+`./render.sh` works identically everywhere:
+- **On Rosie (Slurm login node):** Automatically submits a background GPU batch job via `sbatch`.
+- **On GB10 / Brev / Local:** Automatically executes directly on the GPU.
 
-### Rendering with `./render.sh`
-You can run `./render.sh` directly from the repo root with any arguments.
-- **On Rosie (Slurm login node):** It automatically submits a background batch job via `sbatch`.
-- **On GB10 / Brev (Direct shell):** It automatically runs directly using Isaac Sim.
-
-Outputs are organized cleanly into timestamped folders (`runs/<YYYY-MM-DD_HH-MM-SS>_<target>/`) containing `render.png` (or `frame_*.png`) and `meta.json`.
+Outputs are written to timestamped directories: `runs/<YYYY-MM-DD_HH-MM-SS>_<target>/` (`render.png` or `frame_*.png` and `meta.json`).
 
 ```bash
-# Render filled vial (Frame 686)
-./render.sh --target vial --state filled
+# CSI Digital Twin (Fill Station)
+./render.sh --target vial --state filled                                                # Single frame (filled vial, frame 686)
+./render.sh --target vial --state empty                                                 # Single frame (empty vial, frame 1)
+./render.sh --target vial --state sequence --start-frame 100 --end-frame 500 --step 20  # Multi-frame sequence
 
-# Render empty vial (Frame 1)
-./render.sh --target vial --state empty
-
-# Render a multi-frame animation sequence (e.g. frames 100 to 500 every 20 frames)
-./render.sh --target vial --state sequence --start-frame 100 --end-frame 500 --step 20
-
-# Render CapSeal tray inspection camera
+# CSI Digital Twin (Cap & Seal Station)
 ./render.sh --target cap_seal
 
-# Render FANUC robotic arm views (side, table, or wrist)
-./render.sh --target fanuc --camera side
-./render.sh --target fanuc --camera table
-
-# Build & cache persistent FANUC scene in shared/scenes/fanuc_scene.usd
-./render.sh --target build_fanuc
+# FANUC ER-4iA Robotic Arm Cell
+./render.sh --target fanuc --camera side     # Side camera view
+./render.sh --target fanuc --camera table    # Table overview
+./render.sh --target fanuc --camera wrist    # End-effector camera
 ```
-
-### Monitoring Jobs & Viewing Outputs (Rosie)
-```bash
-# Check queue status
-squeue --me
-
-# Stream job logs
-tail -f logs/slurm-<jobid>.out
-tail -f logs/slurm-<jobid>.err
-```
-Render outputs are organized into `runs/<timestamp>_<target>/`.
 
 ---
 
-## 3. Running on GB10 / Brev / Dedicated Cloud GPU
+## 3. Platform Details
 
-On dedicated GPU instances (e.g., NVIDIA GB10 / Grace Blackwell `aarch64` or Brev `x86_64`), you have direct interactive shell access without Slurm queues.
+### A. Rosie (Slurm HPC Cluster)
+Add the host alias to your SSH config (`notepad $env:USERPROFILE\.ssh\config`):
+```sshconfig
+Host ROSIE
+    HostName dh-mgmt1.hpc.msoe.edu
+    User <your-msoe-username>@ad.msoe.edu
+    ForwardAgent yes
+```
+Connect anytime via `ssh ROSIE`. When running `./render.sh` on Rosie, jobs execute on compute nodes via Slurm. Monitor them with:
+```bash
+squeue --me                       # Check queue status
+tail -f logs/slurm-<jobid>.out    # Stream job logs
+```
 
-### A. Connecting to GB10 via SSH (Windows PowerShell)
-To configure fast passwordless SSH access to the GB10 node from Windows PowerShell:
-
-1. **Copy your SSH public key to the node (in PowerShell):**
+### B. Connecting to GB10 (Grace Blackwell)
+1. In Windows PowerShell:
    ```powershell
    type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh hackathon3@spark3.ai.msoe.edu "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
    ```
-   *(Or if using Git Bash / WSL: `ssh-copy-id -i ~/.ssh/id_ed25519 hackathon3@spark3.ai.msoe.edu`)*
-
-2. **Add the host alias to your local SSH config (`notepad $env:USERPROFILE\.ssh\config`):**
+2. Add to your Windows SSH config (`notepad $env:USERPROFILE\.ssh\config`):
    ```sshconfig
    Host GB10
        HostName spark3.ai.msoe.edu
@@ -91,30 +75,20 @@ To configure fast passwordless SSH access to the GB10 node from Windows PowerShe
        IdentityFile ~/.ssh/id_ed25519
        ForwardAgent yes
    ```
+3. Connect: `ssh GB10`
 
-3. **Connect anytime from PowerShell or Windows Terminal:**
-   ```powershell
-   ssh GB10
-   ```
-
-### B. Connecting to Brev via SSH (Windows)
-Brev generates your SSH key and host details via its CLI in WSL, which can then be bridged to native Windows OpenSSH and VS Code:
-
-1. **Install Brev CLI and log in (in WSL terminal):**
+### C. Connecting to Brev Cloud GPU
+1. In WSL terminal:
    ```bash
    bash -c "$(curl -fsSL https://raw.githubusercontent.com/brevdev/brev-cli/main/bin/install-latest.sh)"
    brev login
    ```
-   *(Brev will generate your private key `~/.brev/brev.pem` and host configs in `~/.brev/ssh_config`)*
-
-2. **Copy the Brev private key to Windows (run in Windows PowerShell):**
+2. Copy key to Windows (PowerShell):
    ```powershell
    mkdir -Force $env:USERPROFILE\.brev
    wsl cp ~/.brev/brev.pem /mnt/c/Users/$env:USERNAME/.brev/brev.pem
    ```
-
-3. **Add the `brev` host entry to your Windows SSH config (`code $env:USERPROFILE\.ssh\config`):**
-   *(Grab the `Hostname` by running `wsl cat ~/.brev/ssh_config`)*
+3. Add to Windows SSH config (`code $env:USERPROFILE\.ssh\config`):
    ```sshconfig
    Host brev
        HostName <hostname-from-cat-brev-ssh_config>
@@ -124,47 +98,35 @@ Brev generates your SSH key and host details via its CLI in WSL, which can then 
        ForwardAgent yes
        StrictHostKeyChecking no
    ```
-
-4. **Connect anytime in PowerShell:**
-   ```powershell
-   ssh brev
-   ```
-
-5. **Open in VS Code Desktop:**
-   Press `Ctrl + Shift + P` $\rightarrow$ type `Remote-SSH: Connect to Host...` $\rightarrow$ select `brev`.
-
-### C. Setup & Installation
-1. **Ensure host system dependencies (Required for headless RTX MaterialX on Ubuntu/Brev):**
+4. Connect: `ssh brev` (or in VS Code: `Remote-SSH: Connect to Host...` $\rightarrow$ `brev`).
+5. Install host library on first run:
    ```bash
    sudo apt-get update && sudo apt-get install -y libxt6
    ```
 
-2. **Run the repository setup script:**
-   Once connected to GB10 or Brev, run `./setup.sh`. It will extract data assets, bootstrap textures, ensure Isaac Sim is available, and automatically prebuild the persistent FANUC scene (`shared/scenes/fanuc_scene.usd`):
-   ```bash
-   ./setup.sh
-   ```
-
-### D. Running Simulations Directly
-On GB10 or Brev, run the exact same `./render.sh` command (it automatically executes directly):
+### D. Transferring Renders to Your Laptop
+Because `GB10` and `brev` are configured as SSH host aliases, you can use standard `scp` for all of them:
 
 ```bash
-# Render filled vial
-./render.sh --target vial --state filled
+# Using SSH host alias (ROSIE, GB10, or brev):
+scp -r brev:~/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
+scp -r GB10:~/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
+scp -r ROSIE:~/Documents/GitHub/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
 
-# Render multi-frame filling sequence
-./render.sh --target vial --state sequence --start-frame 1 --end-frame 686 --step 30
-
-# Render FANUC robotic arm side perspective
-./render.sh --target fanuc --camera side
+# Alternative for Brev via the Brev CLI:
+brev copy <instance-name>:/home/ubuntu/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
 ```
 
-### E. Transferring Rendered Outputs to Your Laptop
-- **From GB10 (SCP using configured host alias):**
-  ```bash
-  scp -r GB10:~/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
-  ```
-- **From Brev:**
-  ```bash
-  brev copy <instance-name>:/home/ubuntu/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
-  ```
+---
+
+## Appendix: Manual Asset Upload (`data.zip`)
+
+*(Backup reference only — data assets have already been seeded on the team instances).*
+
+If bootstrapping a brand new remote instance from scratch:
+```bash
+# Upload data.zip from your laptop to Brev or GB10:
+scp data.zip brev:~/innovation-lab-fall-2026/
+scp data.zip GB10:~/innovation-lab-fall-2026/
+```
+Once uploaded, running `./setup.sh` unpacks the assets into `shared/data/`.
