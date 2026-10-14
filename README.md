@@ -29,24 +29,35 @@ chmod +x setup.sh
 
 On Rosie, jobs run on Tesla T4 compute nodes via Slurm using the team's shared standalone **Isaac Sim 6.1.0** install located at `./shared/isaacsim_6.1`.
 
-### Submitting Batch Jobs
-Submit batch jobs with `sbatch`. Because jobs run in the background on compute nodes, you can safely disconnect or close your session:
+### Rendering with `./render.sh`
+You can run `./render.sh` directly from the repo root with any arguments.
+- **On Rosie (Slurm login node):** It automatically submits a background batch job via `sbatch`.
+- **On GB10 / Brev (Direct shell):** It automatically runs directly using Isaac Sim.
+
+Outputs are organized cleanly into timestamped folders (`runs/<YYYY-MM-DD_HH-MM-SS>_<target>/`) containing `render.png` (or `frame_*.png`) and `meta.json`.
 
 ```bash
-# Default test render (FillStation, FillCam, Frame 686 -> runs/fill_test.png)
-sbatch scripts/submit_isaac_job.slurm
+# Render filled vial (Frame 686)
+./render.sh --target vial --state filled
 
-# Render a specific station camera
-sbatch scripts/submit_isaac_job.slurm shared/data/csi_digital_twin_v1/tools/render_example.py \
-    --camera CapSealCam \
-    --stage stations/tray_inspection/tray_inspection.usdc \
-    --out runs/cap_seal.png
+# Render empty vial (Frame 1)
+./render.sh --target vial --state empty
 
-# Build the FANUC robot arm simulation scene
-sbatch scripts/submit_isaac_job.slurm shared/data/fanuc_er4ia_sim/build_scene.py --headless --save runs/fanuc_scene.usd
+# Render a multi-frame animation sequence (e.g. frames 100 to 500 every 20 frames)
+./render.sh --target vial --state sequence --start-frame 100 --end-frame 500 --step 20
+
+# Render CapSeal tray inspection camera
+./render.sh --target cap_seal
+
+# Render FANUC robotic arm views (side, table, or wrist)
+./render.sh --target fanuc --camera side
+./render.sh --target fanuc --camera table
+
+# Build & cache persistent FANUC scene in shared/scenes/fanuc_scene.usd
+./render.sh --target build_fanuc
 ```
 
-### Monitoring Jobs & Viewing Outputs
+### Monitoring Jobs & Viewing Outputs (Rosie)
 ```bash
 # Check queue status
 squeue --me
@@ -55,7 +66,7 @@ squeue --me
 tail -f logs/slurm-<jobid>.out
 tail -f logs/slurm-<jobid>.err
 ```
-Rendered outputs are written to the `runs/` directory.
+Render outputs are organized into `runs/<timestamp>_<target>/`.
 
 ---
 
@@ -94,27 +105,26 @@ Run `./setup.sh` — it will extract data assets, bootstrap robot textures, and 
 ```
 *(Or install Isaac Sim independently anytime with `./scripts/install_isaac_standalone.sh`)*
 
-### C. Running Headless Simulations Directly
-Run simulations directly via `./scripts/run_isaac.sh` (it automatically discovers `./shared/isaacsim_6.1` or `$ISAAC`):
+### C. Running Simulations Directly
+On GB10 or Brev, run the exact same `./render.sh` command (it automatically executes directly):
 
 ```bash
-# Example: Render the FillStation camera
-./scripts/run_isaac.sh shared/data/csi_digital_twin_v1/tools/render_example.py \
-    --camera FillCam \
-    --stage stations/fill_station/fill_station.usda \
-    --frame 686 \
-    --out runs/fill_test.png
+# Render filled vial
+./render.sh --target vial --state filled
 
-# Example: Build the FANUC robot arm simulation scene
-./scripts/run_isaac.sh shared/data/fanuc_er4ia_sim/build_scene.py --headless --save runs/fanuc_scene.usd
+# Render multi-frame filling sequence
+./render.sh --target vial --state sequence --start-frame 1 --end-frame 686 --step 30
+
+# Render FANUC robotic arm side perspective
+./render.sh --target fanuc --camera side
 ```
 
 ### D. Transferring Rendered Outputs to Your Laptop
 - **From GB10 (SCP using configured host alias):**
   ```bash
-  scp GB10:~/innovation-lab-fall-2026/runs/fill_test.png ~/Downloads/
+  scp -r GB10:~/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
   ```
 - **From Brev:**
   ```bash
-  brev copy <instance-name>:/home/ubuntu/innovation-lab-fall-2026/runs/fill_test.png ~/Downloads/
+  brev copy <instance-name>:/home/ubuntu/innovation-lab-fall-2026/runs/<run_folder> ~/Downloads/
   ```

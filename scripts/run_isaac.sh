@@ -39,5 +39,5 @@ if [ -n "$FOUND_ISAAC" ]; then
 fi
 
 echo "Error: Isaac Sim not found." >&2
-echo "Please set ISAAC=/path/to/isaacsim or install Isaac Sim 6.1 at /data/ai_club/team_14_2026/isaacsim_6.1" >&2
+echo "Please run ./setup.sh or set ISAAC=/path/to/isaacsim" >&2
 exit 1

@@ -20,14 +20,5 @@ mkdir -p logs runs
 echo "Running on $(hostname) with GPU allocation:"
 nvidia-smi
 
-# Execute command passed to sbatch, or default to an example render
-if [ "$#" -gt 0 ]; then
-    ./scripts/run_isaac.sh "$@"
-else
-    echo "Running default CSI digital twin test render..."
-    ./scripts/run_isaac.sh shared/data/csi_digital_twin_v1/tools/render_example.py \
-        --camera FillCam \
-        --stage stations/fill_station/fill_station.usda \
-        --frame 686 \
-        --out runs/fill_test.png
-fi
+# Execute command passed to sbatch, or default to scripts/render.py
+./scripts/run_isaac.sh "${@:-scripts/render.py}"
