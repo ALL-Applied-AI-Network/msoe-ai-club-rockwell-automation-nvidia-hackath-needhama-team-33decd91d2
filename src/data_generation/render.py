@@ -51,6 +51,12 @@ def parse_args():
                         help="Explicit output directory override (skips auto-timestamped naming)")
     parser.add_argument("--renderer", choices=["RayTracedLighting", "PathTracing"], default="RayTracedLighting",
                         help="RTX renderer engine")
+    parser.add_argument("--inspect", action="store_true", default=False,
+                        help="Automatically run In-Context Reasoning & defect detection on the rendered output")
+    parser.add_argument("--local-vlm", default=None,
+                        help="Hugging Face model ID or local path for GPU VLM inference (e.g. Qwen/Qwen2-VL-7B-Instruct)")
+    parser.add_argument("--vlm-api-key", default=None,
+                        help="API key for online VLM inference (NVIDIA NIM / OpenAI)")
     return parser.parse_args()
 
 
@@ -353,7 +359,42 @@ def main():
     elif args.target == "fanuc":
         render_fanuc(args, run_dir)
 
+    if args.inspect:
+        img_target = run_dir / "render.png"
+        if not img_target.exists():
+            frames = sorted(run_dir.glob("frame_*.png"))
+            if frames:
+                img_target = frames[-1]
+
+        if img_target.exists():
+            print("\n" + "=" * 60)
+            print(f"[render.py] Running In-Context Reasoning & Defect Analysis on: {img_target.name}")
+            print("=" * 60)
+            
+            analysis_type = "cap_tray" if args.target == "cap_seal" else "vial_fluid"
+            annotated_out = run_dir / "annotated_defects.png"
+            decision_json = run_dir / "decision.json"
+            
+            vlm_python = REPO_ROOT / ".venv_vlm" / "bin" / "python"
+            python_bin = str(vlm_python) if vlm_python.exists() else sys.executable
+
+            cmd = [
+                python_bin,
+                str(REPO_ROOT / "scripts" / "in_context_defect_analyzer.py"),
+                "--image", str(img_target),
+                "--type", analysis_type,
+                "--out-annotated", str(annotated_out),
+                "--out-json", str(decision_json)
+            ]
+            if args.local_vlm:
+                cmd.extend(["--local-vlm", args.local_vlm])
+            if args.vlm_api_key:
+                cmd.extend(["--vlm-api-key", args.vlm_api_key])
+
+            subprocess.run(cmd, check=False)
+
 
 if __name__ == "__main__":
     main()
+
 
