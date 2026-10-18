@@ -119,21 +119,39 @@ def generate_batch(num_scenes=10, seed=42):
                 if cap.IsValid():
                     UsdGeom.Imageable(cap).MakeInvisible()
 
-            # Assign 3 crooked caps
-            crooked_slots = all_slots[2:5]
-            for s in crooked_slots:
+            # Assign 4 crooked caps with wide spectrum of tilts (subtle cross-thread, steep tilt, and flipped sideways)
+            crooked_slots = all_slots[2:6]
+            for idx_c, s in enumerate(crooked_slots):
                 slot_labels[s] = "crooked_cap"
                 cap = stage.GetPrimAtPath(f"/TrayInspection/G{s:02d}_cap")
                 if cap.IsValid():
                     xf = UsdGeom.Xformable(cap)
                     rot_op = next((op for op in xf.GetOrderedXformOps() if "rotate" in op.GetOpName()), None)
                     if rot_op:
-                        tilt_x = random.choice([-1, 1]) * random.uniform(15.0, 32.0)
-                        tilt_y = random.choice([-1, 1]) * random.uniform(15.0, 32.0)
-                        rot_op.Set(Gf.Vec3f(tilt_x, tilt_y, 0.0))
+                        if idx_c == 0:
+                            # Subtle cross-threaded tilt (8 to 16 deg)
+                            tilt_x = random.choice([-1, 1]) * random.uniform(8.0, 16.0)
+                            tilt_y = random.choice([-1, 1]) * random.uniform(8.0, 16.0)
+                            tilt_z = random.uniform(0.0, 360.0)
+                        elif idx_c == 1:
+                            # Extreme/severe unseated tilt (25 to 45 deg)
+                            tilt_x = random.choice([-1, 1]) * random.uniform(25.0, 45.0)
+                            tilt_y = random.choice([-1, 1]) * random.uniform(25.0, 45.0)
+                            tilt_z = random.uniform(0.0, 360.0)
+                        elif idx_c == 2:
+                            # Turned nearly sideways (65 to 88 deg) - matching real factory capture edge-on caps
+                            tilt_x = random.choice([-1, 1]) * random.uniform(65.0, 88.0)
+                            tilt_y = random.uniform(-15.0, 15.0)
+                            tilt_z = random.uniform(0.0, 360.0)
+                        else:
+                            # Arbitrary diagonal tilt
+                            tilt_x = random.uniform(-35.0, 35.0)
+                            tilt_y = random.uniform(-35.0, 35.0)
+                            tilt_z = random.uniform(0.0, 360.0)
+                        rot_op.Set(Gf.Vec3f(tilt_x, tilt_y, tilt_z))
 
             # Assign 2 empty slots (no_vial)
-            empty_slots = all_slots[5:7]
+            empty_slots = all_slots[6:8]
             for s in empty_slots:
                 slot_labels[s] = "no_vial"
                 cap = stage.GetPrimAtPath(f"/TrayInspection/G{s:02d}_cap")
@@ -143,8 +161,8 @@ def generate_batch(num_scenes=10, seed=42):
                 if tube.IsValid():
                     UsdGeom.Imageable(tube).MakeInvisible()
 
-            # Assign 1 damaged / misaligned vial (damaged_vial)
-            damaged_slots = all_slots[7:8]
+            # Assign 2 damaged / skewed vials (damaged_vial)
+            damaged_slots = all_slots[8:10]
             for s in damaged_slots:
                 slot_labels[s] = "damaged_vial"
                 tube = stage.GetPrimAtPath(f"/TrayInspection/G{s:02d}_tube")
@@ -153,12 +171,12 @@ def generate_batch(num_scenes=10, seed=42):
                     xf_t = UsdGeom.Xformable(tube)
                     rot_op_t = next((op for op in xf_t.GetOrderedXformOps() if "rotate" in op.GetOpName()), None)
                     if rot_op_t:
-                        rot_op_t.Set(Gf.Vec3f(random.uniform(10.0, 20.0), random.uniform(-15.0, 15.0), 0.0))
+                        rot_op_t.Set(Gf.Vec3f(random.uniform(8.0, 22.0), random.uniform(-20.0, 20.0), random.uniform(0.0, 360.0)))
                 if cap.IsValid():
                     xf_c = UsdGeom.Xformable(cap)
                     rot_op_c = next((op for op in xf_c.GetOrderedXformOps() if "rotate" in op.GetOpName()), None)
                     if rot_op_c:
-                        rot_op_c.Set(Gf.Vec3f(random.uniform(20.0, 35.0), 0.0, 0.0))
+                        rot_op_c.Set(Gf.Vec3f(random.uniform(15.0, 40.0), random.uniform(-25.0, 25.0), random.uniform(0.0, 360.0)))
 
             # Render scene
             for _ in range(6):

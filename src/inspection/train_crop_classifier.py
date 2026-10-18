@@ -23,7 +23,17 @@ def train_yolo_classifier(epochs=30, batch=32, imgsz=64, model_type="yolo11n-cls
         name="vial_aperture_cls",
         exist_ok=True,
         device=0,
-        verbose=True
+        verbose=True,
+        # Multi-angle & geometric domain augmentations:
+        degrees=180.0,       # Full 360 degree arbitrary rotational invariant
+        fliplr=0.5,          # Horizontal flips
+        flipud=0.5,          # Vertical flips
+        perspective=0.001,   # Perspective slant/tilt
+        scale=0.2,           # Distance/height variance (+-20%)
+        shear=10.0,          # Skew angles
+        hsv_h=0.02,          # Slight color hue jitter
+        hsv_s=0.3,           # Saturation variations (fluorescent vs daylight)
+        hsv_v=0.3            # Brightness variations
     )
     print("[YOLOv11-cls] Training complete!")
     return results

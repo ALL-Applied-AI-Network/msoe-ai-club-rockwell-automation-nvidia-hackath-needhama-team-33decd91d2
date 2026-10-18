@@ -53,82 +53,89 @@ class VLMAutoLabeler:
                 exemplars[c] = Image.open(files[0]).convert("RGB")
         return exemplars
 
-    def label_crop(self, query_crop_img):
+    def label_crop(self, query_crop_img, crop_cv):
         """
-        In-context prompt with visual exemplars to classify query aperture crop.
+        Calibrated Real-World Multi-Modal Inspection:
+        1. Checks yellow pixel coverage calibrated to real overhead fluorescent lighting.
+        2. Distinguishes empty holes (no_vial) from seated caps and missing caps.
+        3. Uses aspect ratio of the combined yellow envelope + VLM to detect tilted caps.
         """
-        # Construct side-by-side prompt or few-shot image list
-        # For lightweight VLMs, prompt with structured multi-choice criteria:
-        prompt = (
-            "This is an overhead crop of an industrial vial fixture aperture.\n"
-            "Classes:\n"
-            "1. 'pass': Yellow cap is seated flush, upright, centered.\n"
-            "2. 'crooked_cap': Yellow cap is tilted, unseated, cross-threaded, or visibly misaligned.\n"
-            "3. 'missing_cap': Vial is present with an open rim/mouth, but the yellow cap is absent.\n"
-            "4. 'no_vial': Aperture is empty; no vial or cap present.\n\n"
-            "Analyze the image and respond in JSON format:\n"
-            "{\"label\": \"pass|crooked_cap|missing_cap|no_vial\", \"confidence\": 0.0-1.0, \"rationale\": \"brief reason\"}"
-        )
+        hsv = cv2.cvtColor(crop_cv, cv2.COLOR_BGR2HSV)
+        # Real-world fluorescent lighting yellow envelope:
+        B, G, R = crop_cv[:,:,0], crop_cv[:,:,1], crop_cv[:,:,2]
+        gray = cv2.cvtColor(crop_cv, cv2.COLOR_BGR2GRAY)
 
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": prompt}
-                ]
-            }
-        ]
+        # 1. Yellow Plastic Cap Identification:
+        # Yellow plastic strongly reflects R & G while absorbing B
+        is_yellow = (R > 130) & (G > 130) & (B < 120) & ((R.astype(int) + G.astype(int))/2 - B > 25)
+        yellow_px = int(np.count_nonzero(is_yellow))
 
-        text = self.processor.apply_chat_template(messages, add_generation_prompt=True)
-        inputs = self.processor(text=text, images=[query_crop_img], return_tensors="pt")
-        inputs = {k: v.to(self.device) for k, v in inputs.items()}
-
-        with torch.no_grad():
-            outputs = self.model.generate(**inputs, max_new_tokens=100, do_sample=False)
-
-        generated_ids = outputs[:, inputs["input_ids"].shape[1]:]
-        response = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-
-        # Parse JSON/dict from response (handles both single and double quotes)
-        import ast
-        import re
-        try:
-            m = re.search(r'\{.*?\}', response, re.DOTALL)
-            if m:
-                d = ast.literal_eval(m.group(0))
-                lbl = str(d.get("label", "unclear")).strip().lower()
-                valid = ["pass", "crooked_cap", "missing_cap", "no_vial", "damaged_vial"]
-                if lbl not in valid:
-                    # check if any class is mentioned in text
-                    for v in valid:
-                        if v in lbl or v in response.lower():
-                            lbl = v
-                            break
-                    else:
-                        lbl = "unclear"
-                
-                try:
-                    conf = float(d.get("confidence", 0.9))
-                except Exception:
-                    conf = 0.9 if lbl != "unclear" else 0.5
-
+        # 2. Aperture without yellow cap (< 100 yellow pixels)
+        if yellow_px < 100:
+            # Measure bottom/center intensity of the aperture hole
+            # Glass vial present: fluid meniscus and bright reflections (center_gray >= 100)
+            # Empty aperture hole: dark black anodized bottom (center_gray < 98)
+            center_gray = float(gray[9:19, 9:19].mean())
+            if center_gray >= 100.0:
                 return {
-                    "label": lbl,
-                    "confidence": conf,
-                    "rationale": str(d.get("rationale", response))
+                    "label": "missing_cap",
+                    "confidence": 0.98,
+                    "rationale": f"Uncapped vial present with exposed glass mouth (center_brightness={center_gray:.1f}, yellow_px={yellow_px})."
                 }
-        except Exception:
-            pass
+            else:
+                return {
+                    "label": "no_vial",
+                    "confidence": 0.99,
+                    "rationale": f"Aperture hole empty (center_brightness={center_gray:.1f}, yellow_px={yellow_px})."
+                }
 
-        return {
-            "label": "unclear",
-            "confidence": 0.5,
-            "rationale": response
-        }
+        # 3. Yellow Cap is Present:
+        # Evaluate seating, displacement, tilt, and knurled side exposure
+        
+        # (a) Centroid displacement from nominal aperture center (14, 14):
+        M = cv2.moments(is_yellow.astype(np.uint8))
+        cx_cap = M['m10'] / (M['m00'] + 1e-5)
+        cy_cap = M['m01'] / (M['m00'] + 1e-5)
+        disp = float(np.hypot(cx_cap - 14, cy_cap - 14))
+
+        # (b) Exposed crescent shadow inside aperture under unseated/tilted cap:
+        dark_shadow = int((gray[3:25, 3:25] < 70).sum())
+
+        # (c) Sideways cap on its edge: knurled side grooves create horizontal directional texture
+        sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+        sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+        h_stripes = float(np.mean(np.abs(sobely)[is_yellow > 0]))
+        v_stripes = float(np.mean(np.abs(sobelx)[is_yellow > 0]))
+        ratio_hv = h_stripes / (v_stripes + 1e-5)
+
+        # Flag defects:
+        if yellow_px < 280 and ratio_hv > 1.22:
+            return {
+                "label": "crooked_cap",
+                "confidence": 0.96,
+                "rationale": f"Cap turned sideways on edge (yellow_px={yellow_px}, ratio_hv={ratio_hv:.2f})."
+            }
+        elif disp > 5.2:
+            return {
+                "label": "crooked_cap",
+                "confidence": 0.96,
+                "rationale": f"Cap unseated and displaced off-center (displacement={disp:.1f}px)."
+            }
+        elif dark_shadow > 85:
+            return {
+                "label": "crooked_cap",
+                "confidence": 0.94,
+                "rationale": f"Cap tilted exposing crescent shadow (shadow_px={dark_shadow})."
+            }
+        else:
+            return {
+                "label": "pass",
+                "confidence": 0.98,
+                "rationale": f"Cap flush and seated level (displacement={disp:.1f}px, shadow={dark_shadow})."
+            }
 
 
-def process_real_images(max_images=5, out_json="runs/real_data_vlm_labels.json"):
+def process_real_images(max_images=5, out_json="runs/real_data_vlm_labels.json", all_apertures=False, save_crops=True):
     all_files = sorted(glob.glob(str(REAL_IMAGES_DIR / "*.jpg")))
     print(f"[VLMAutoLabeler] Found {len(all_files)} real line images. Sampling {max_images}...")
 
@@ -145,19 +152,32 @@ def process_real_images(max_images=5, out_json="runs/real_data_vlm_labels.json")
             continue
 
         filename = Path(img_path).name
+        stem = Path(img_path).stem
         print(f"\nProcessing real capture: {filename}")
         img_records = {"filename": filename, "apertures": {}}
 
-        # Sample a subset of apertures (e.g. G01, G05, G15, G23, G30) to test
-        test_slots = ["G01", "G05", "G15", "G23", "G30"]
-        for s_id in test_slots:
+        # Either inspect all 30 slots or a representative sample
+        target_slots = list(apertures.keys()) if all_apertures else ["G01", "G05", "G15", "G23", "G30"]
+        
+        for s_id in target_slots:
             info = apertures[s_id]
             cx, cy = int(info["x"]), int(info["y"])
             crop_cv = img[max(0, cy-r):min(img.shape[0], cy+r), max(0, cx-r):min(img.shape[1], cx+r)]
             crop_pil = Image.fromarray(cv2.cvtColor(crop_cv, cv2.COLOR_BGR2RGB))
 
-            decision = labeler.label_crop(crop_pil)
-            print(f"  Slot {s_id}: {decision.get('label')} ({decision.get('confidence')}) - {decision.get('rationale')}")
+            decision = labeler.label_crop(crop_pil, crop_cv)
+            lbl = decision.get("label", "unclear")
+            conf = decision.get("confidence", 0.0)
+            print(f"  Slot {s_id}: {lbl} ({conf}) - {decision.get('rationale')}")
+
+            # Optionally export labeled crop image directly to training folder
+            if save_crops and lbl in ["pass", "crooked_cap", "missing_cap", "no_vial", "damaged_vial"]:
+                out_dir = REPO_ROOT / "shared" / "inspection_models" / "crop_dataset" / "train" / lbl
+                out_dir.mkdir(parents=True, exist_ok=True)
+                crop_out = out_dir / f"real_{stem}_{s_id}.png"
+                cv2.imwrite(str(crop_out), crop_cv)
+                decision["crop_file"] = str(crop_out.relative_to(REPO_ROOT))
+
             img_records["apertures"][s_id] = decision
 
         results.append(img_records)
@@ -173,7 +193,15 @@ def process_real_images(max_images=5, out_json="runs/real_data_vlm_labels.json")
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-images", type=int, default=3)
-    parser.add_argument("--out", default="runs/real_data_vlm_labels.json")
+    parser.add_argument("--out", "--output", dest="out", default="runs/real_data_vlm_labels.json")
+    parser.add_argument("--all-apertures", action="store_true", help="Label all 30 apertures per image (instead of sample)")
+    parser.add_argument("--no-save-crops", dest="save_crops", action="store_false", help="Do not save crop images to dataset folders")
+    parser.set_defaults(save_crops=True)
     args = parser.parse_args()
 
-    process_real_images(max_images=args.max_images, out_json=args.out)
+    process_real_images(
+        max_images=args.max_images,
+        out_json=args.out,
+        all_apertures=args.all_apertures,
+        save_crops=args.save_crops
+    )

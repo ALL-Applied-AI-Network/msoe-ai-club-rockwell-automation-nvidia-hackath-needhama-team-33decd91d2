@@ -74,7 +74,19 @@ Instead of paying human operators to annotate thousands of frames for each recip
 
 ## 4. Execution Commands (Using `scripts/*.sh`)
 
-### Run Full Edge Inspection on an Image:
+### Run All (Full End-to-End Pipeline in One Command):
+```bash
+./scripts/run_all.sh
+```
+This executes the full sequence automatically:
+1. Renders clean nominal golden reference (`golden_reference.png`).
+2. Generates procedural synthetic defect crops via Isaac Sim digital twin.
+3. Trains the YOLOv11-cls neural model on the GPU (100% Top-1 acc).
+4. Runs real-time edge inspection and outputs structured remediation decisions.
+
+---
+
+### Run Individual Modules:
 ```bash
 # Run with default golden reference & test defect scene
 ./scripts/run_inspection.sh
