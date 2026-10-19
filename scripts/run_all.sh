@@ -2,13 +2,12 @@
 set -euo pipefail
 
 # ==============================================================================
-# End-to-End Two-Tier Vial Inspection Pipeline
+# End-to-End YOLO Detection & Slot Assignment Inspection Pipeline
 # 
-# 1. Render clean Golden Reference image
-# 2. Generate synthetic defect dataset (Isaac Sim twin)
-# 3. Train YOLOv11 Edge Crop Classifier
-# 4. Run Real-Time Edge Aperture Inspection on a test scene
-# 5. (Optional) Run Offline In-Context VLM Auto-Labeler on real factory data
+# 1. Render clean Golden Reference frame (baseline)
+# 2. Generate full-frame YOLO bounding box dataset (Isaac Sim twin)
+# 3. Train YOLOv11 Object Detector on full frames
+# 4. Run Real-Time Full-Frame Detection + Hungarian Slot Assignment
 # ==============================================================================
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,24 +20,19 @@ echo "=================================================================="
 
 echo ""
 echo "=================================================================="
-echo " [Step 2/4] Generating Procedural Synthetic Defect Dataset..."
+echo " [Step 2/4] Generating Synthetic YOLO Detection Dataset..."
 echo "=================================================================="
-./scripts/run_data_generation.sh --scenes 10
+./scripts/run_generate_fullframe_data.sh --scenes 30
 
 echo ""
 echo "=================================================================="
-echo " [Step 3/4] Training YOLOv11 Edge Classifier on GPU..."
+echo " [Step 3/4] Training YOLOv11 Detector on GPU..."
 echo "=================================================================="
-./scripts/run_train_classifier.sh --epochs 25 --batch 16
-
-# Copy best weights permanently to shared/inspection_models/
-if [ -f "runs/train_yolo_classifier/vial_aperture_cls/weights/best.pt" ]; then
-    cp runs/train_yolo_classifier/vial_aperture_cls/weights/best.pt shared/inspection_models/vial_aperture_cls_best.pt
-fi
+./scripts/run_train_detector.sh --epochs 35 --batch 16
 
 echo ""
 echo "=================================================================="
-echo " [Step 4/4] Executing Real-Time Edge Aperture Inspection..."
+echo " [Step 4/4] Executing Real-Time Detection & Slot Assignment..."
 echo "=================================================================="
 ./scripts/run_inspection.sh
 
@@ -46,6 +40,6 @@ echo ""
 echo "=================================================================="
 echo " Pipeline Complete!"
 echo " Results:"
-echo "   - Visualization: shared/inspection_models/test_defect_scene/annotated_ensemble.png"
-echo "   - Decision JSON: shared/inspection_models/test_defect_scene/decision_ensemble.json"
+echo "   - Visualization: shared/inspection_models/test_defect_scene/annotated_detection.png"
+echo "   - Decision JSON: shared/inspection_models/test_defect_scene/decision_detection.json"
 echo "=================================================================="

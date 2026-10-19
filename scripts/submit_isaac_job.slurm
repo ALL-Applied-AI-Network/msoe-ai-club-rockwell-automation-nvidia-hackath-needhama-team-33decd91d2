@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=isaac_sim
+#SBATCH --job-name=innovation_lab
 #SBATCH --partition=teaching
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -17,8 +17,21 @@ cd "$REPO_DIR"
 
 mkdir -p logs runs
 
+echo "=========================================================="
 echo "Running on $(hostname) with GPU allocation:"
 nvidia-smi
+echo "=========================================================="
 
-# Execute command passed to sbatch, or default to scripts/render.py
-./scripts/run_isaac.sh "${@:-scripts/render.py}"
+TARGET="${1:-scripts/render.py}"
+shift || true
+
+if [ -x "$TARGET" ] && [[ "$TARGET" == *.sh ]]; then
+    echo "[Slurm] Executing shell script: $TARGET $@"
+    exec "$TARGET" "$@"
+elif [[ "$TARGET" == *.py ]]; then
+    echo "[Slurm] Executing Python with Isaac Sim runner: $TARGET $@"
+    exec ./scripts/run_isaac.sh "$TARGET" "$@"
+else
+    echo "[Slurm] Executing: $TARGET $@"
+    exec "$TARGET" "$@"
+fi
