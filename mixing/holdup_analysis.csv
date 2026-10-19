@@ -1,0 +1,10 @@
+transition,from_recipe,to_recipe,start_time_s,breakthrough_s,flow_rate_ml_s,estimated_v_tube_ml
+Recipe 5 -> Recipe 6 (Vial 4),5,6,138.25,0.0,1.73,0.0
+Recipe 6 -> Recipe 7 (Vial 7),6,7,284.67,0.75,3.0,2.25
+Recipe 7 -> Recipe 8 (Vial 10),7,8,434.76,1.0,1.58,1.58
+Recipe 8 -> Recipe 9 (Vial 13),8,9,609.72,0.0,1.72,0.0
+Recipe 9 -> Recipe 10 (Vial 16),9,10,817.67,0.75,1.96,1.47
+Recipe 10 -> Recipe 11 (Vial 19),10,11,989.48,0.75,1.69,1.27
+Recipe 11 -> Recipe 12 (Vial 22),11,12,1179.57,0.0,1.71,0.0
+Recipe 12 -> Recipe 13 (Vial 25),12,13,1384.46,1.0,1.79,1.79
+Recipe 13 -> Recipe 14 (Vial 28),13,14,1579.51,0.75,3.24,2.43

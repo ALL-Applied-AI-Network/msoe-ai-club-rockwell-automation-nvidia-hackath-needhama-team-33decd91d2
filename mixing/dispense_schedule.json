@@ -1,0 +1,359 @@
+{
+  "metadata": {
+    "title": "PCMC Optimized Dispense Schedule",
+    "team": "Team 14",
+    "hold_up_volume_ml": 8.2,
+    "vial_count": 10,
+    "reagent_saved_ml": 82.0
+  },
+  "schedule": [
+    {
+      "name": "Recipe 5: Low Even",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        10.0,
+        10.0
+      ],
+      "total_volume": 30.0,
+      "dispense_order": [
+        "T100",
+        "T400",
+        "T200"
+      ],
+      "pumped_amounts": {
+        "T100": 1.8,
+        "T400": 10.0,
+        "T200": 10.0
+      },
+      "delivered_amounts": {
+        "T100": 10.0,
+        "T400": 10.0,
+        "T200": 10.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T200",
+      "rgb_color": [
+        0.358,
+        0.42,
+        0.313
+      ]
+    },
+    {
+      "name": "Recipe 6: Pale Orange",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        30.0,
+        10.0,
+        0.0
+      ],
+      "total_volume": 40.0,
+      "dispense_order": [
+        "T200",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 1.8,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T100",
+      "rgb_color": [
+        0.95,
+        0.825,
+        0.747
+      ]
+    },
+    {
+      "name": "Recipe 10: Pale Wash",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        45.0,
+        15.0,
+        15.0
+      ],
+      "total_volume": 75.0,
+      "dispense_order": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T100": 36.8,
+        "T200": 15.0,
+        "T400": 15.0
+      },
+      "delivered_amounts": {
+        "T100": 45.0,
+        "T200": 15.0,
+        "T400": 15.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T400",
+      "rgb_color": [
+        0.424,
+        0.518,
+        0.384
+      ]
+    },
+    {
+      "name": "Recipe 14: Clear+Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        60.0,
+        0.0,
+        10.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 1.8,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "rgb_color": [
+        0.821,
+        0.871,
+        0.961
+      ]
+    },
+    {
+      "name": "Recipe 7: Pale Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        20.0,
+        0.0,
+        50.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T100",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T100": 11.8,
+        "T400": 50.0
+      },
+      "delivered_amounts": {
+        "T100": 20.0,
+        "T400": 50.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T400",
+      "rgb_color": [
+        0.307,
+        0.557,
+        0.887
+      ]
+    },
+    {
+      "name": "Recipe 11: High Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        10.0,
+        50.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T400",
+        "T100",
+        "T200"
+      ],
+      "pumped_amounts": {
+        "T400": 41.8,
+        "T100": 10.0,
+        "T200": 10.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 10.0,
+        "T200": 10.0
+      },
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T200",
+      "rgb_color": [
+        0.169,
+        0.34,
+        0.377
+      ]
+    },
+    {
+      "name": "Recipe 9: Dark Saturate",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        35.0,
+        35.0
+      ],
+      "total_volume": 80.0,
+      "dispense_order": [
+        "T200",
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 26.8,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T100",
+      "rgb_color": [
+        0.306,
+        0.343,
+        0.258
+      ]
+    },
+    {
+      "name": "Recipe 12: High Orange",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        50.0,
+        10.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T100",
+        "T400",
+        "T200"
+      ],
+      "pumped_amounts": {
+        "T100": 1.8,
+        "T400": 10.0,
+        "T200": 50.0
+      },
+      "delivered_amounts": {
+        "T100": 10.0,
+        "T400": 10.0,
+        "T200": 50.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T200",
+      "rgb_color": [
+        0.452,
+        0.36,
+        0.149
+      ]
+    },
+    {
+      "name": "Recipe 13: Orange+Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        0.0,
+        50.0,
+        20.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T200": 41.8,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T400",
+      "rgb_color": [
+        0.381,
+        0.305,
+        0.139
+      ]
+    },
+    {
+      "name": "Recipe 8: Even Triple",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        20.0,
+        20.0,
+        20.0
+      ],
+      "total_volume": 60.0,
+      "dispense_order": [
+        "T400",
+        "T200",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 11.8,
+        "T200": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 20.0,
+        "T200": 20.0,
+        "T100": 20.0
+      },
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "rgb_color": [
+        0.358,
+        0.42,
+        0.313
+      ]
+    }
+  ]
+}

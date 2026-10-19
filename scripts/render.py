@@ -27,7 +27,7 @@ FANUC_DIR = SHARED_DIR / "data" / "fanuc_er4ia_sim"
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Unified render and multi-frame generation runner")
-    parser.add_argument("--target", choices=["vial", "cap_seal", "fanuc", "build_fanuc"], default="vial",
+    parser.add_argument("--target", choices=["vial", "cap_seal", "fanuc", "build_fanuc", "mixing"], default="vial",
                         help="Target scene or action")
     parser.add_argument("--state", choices=["filled", "empty", "sequence"], default="filled",
                         help="Preset state for CSI vial filling (filled=686, empty=1, sequence=start..end)")
@@ -49,6 +49,8 @@ def parse_args():
                         help="Custom label for the output run folder")
     parser.add_argument("--out-dir", default=None,
                         help="Explicit output directory override (skips auto-timestamped naming)")
+    parser.add_argument("--vial-step", type=int, default=None,
+                        help="Specific vial step to render for mixing target (1-indexed)")
     parser.add_argument("--renderer", choices=["RayTracedLighting", "PathTracing"], default="RayTracedLighting",
                         help="RTX renderer engine")
     return parser.parse_args()
@@ -352,6 +354,12 @@ def main():
         render_csi(args, run_dir)
     elif args.target == "fanuc":
         render_fanuc(args, run_dir)
+    elif args.target == "mixing":
+        sim_script = REPO_ROOT / "mixing" / "isaac_dispense_sim.py"
+        cmd = [sys.executable, str(sim_script), "--out-dir", str(run_dir), "--renderer", args.renderer, "--subframes", str(args.subframes)]
+        if args.vial_step is not None:
+            cmd.extend(["--step", str(args.vial_step)])
+        subprocess.run(cmd, check=True)
 
 
 if __name__ == "__main__":

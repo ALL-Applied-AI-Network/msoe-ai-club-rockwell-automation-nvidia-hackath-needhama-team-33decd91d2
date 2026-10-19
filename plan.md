@@ -68,8 +68,12 @@ Modern pharmaceutical and chemical fill lines suffer significant downtime and sc
   3. **Empty / Cleared Slot:** Pick a pre-inspected good vial from a 10-unit replacement buffer and populate the fixture.
 - **Collision Avoidance:** Timing logic to service the fixture either during dwell time at the inspection station or in an off-line staging buffer to avoid interrupting the primary conveyor timing.
 
-### Stage 3: Closed-Loop Pump & Recipe Control
-- If fluid inspection detects recipe drift or cross-batch carryover, trigger a pump purge command to prevent further contaminated vials from entering the line.
+### Stage 3: Station Fluid Control & Recipe Optimization (PCMC)
+- **Predictive Carryover Minimization & Compensation (PCMC):**
+  - **Vision Tube Hold-Up Estimation:** Extract dead volume ($V_{\text{tube}} \approx 8.2\text{ mL}$) and dispersion dynamics from multi-camera CSI video feeds (`vial_fill` and `tank_level`).
+  - **Batch Re-Ordering (ATSP / MILP):** Sequence vial recipes across production batches to chain compatible reagents, eliminating unnecessary purges.
+  - **Intra-Vial Ingredient Chaining & Pump Compensation:** Schedule the ingredient resident in the tube first, and credit $V_{\text{tube}}$ against the commanded pump pulse so exact target volumes are delivered with zero waste and zero cross-contamination.
+  - **Closed-Loop Vision Verification:** Use `FillCam` real-time meniscus tracking and CIE colorimetric distance to verify batch conformity and dynamically update line hold-up parameters. See details in [mixing/plan.md](file:///home/ad.msoe.edu/erdmannap/msoe-ai-club-rockwell-automation-nvidia-hackath-needhama-team-33decd91d2/mixing/plan.md).
 
 ---
 
@@ -98,10 +102,12 @@ Modern pharmaceutical and chemical fill lines suffer significant downtime and sc
 - [ ] Implement decision logic: `Scrap` vs `Re-seat Cap` vs `Backfill Empty Slot`.
 - [ ] Test collision-free motion planning with moving fixtures.
 
-### Phase 3: Closed-Loop Integration & Evaluation (Week 3–4)
+### Phase 3: Closed-Loop Integration & Fluid Optimization (Week 3–4)
 - [ ] Connect vision inference output to robot action trigger.
-- [ ] Prototype pump purge logic for recipe contamination.
-- [ ] Quantify metrics: Fixture yield improvement, defect detection recall, and simulated throughput gain.
+- [ ] Implement video-based tube hold-up parameter estimator (`mixing/video_tube_estimator.py`).
+- [ ] Implement ATSP batch reordering & pump compensation algorithm (`mixing/batch_optimizer.py`).
+- [ ] Validate closed-loop `FillCam` meniscus and color conformity on physical CSI Station 3.
+- [ ] Quantify metrics: Fixture yield improvement, reagent purge waste savings, and simulated throughput gain.
 - [ ] Final demonstration package & mentor presentation.
 
 ---
