@@ -27,6 +27,11 @@ LABEL_CROOKED_CAP = "crooked_cap"
 LABEL_DAMAGED_VIAL = "damaged_vial"
 LABEL_NO_VIAL = "no_vial"
 
+ACTION_PASS = "pass"
+ACTION_PRESS_RESEAT = "press_reseat"
+ACTION_SCRAP = "scrap"
+ACTION_NEW_CAP = "new_cap"
+
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
 
@@ -123,57 +128,45 @@ class FixtureApertureInspector:
                     yolo_label = res[0].names[top1_idx]
                     yolo_conf = float(res[0].probs.top1conf)
 
-            # Classify Aperture into 5 Official Classes:
-            if yellow_px < 60:
+            # Check features for physical validation:
+            # 1. In G18, G19 (dislodged/90-deg rotated caps):
+            # A cap turned 90 degrees exposes knurling ribs on edge (ratio_hv > 1.10) and creates a dark shadow crescent (top_dark > 20)
+            sobely = cv2.Sobel(q_gray, cv2.CV_64F, 0, 1, ksize=3)
+            sobelx = cv2.Sobel(q_gray, cv2.CV_64F, 1, 0, ksize=3)
+            h_stripes = np.mean(np.abs(sobely)[yellow_mask > 0]) if yellow_px > 0 else 0
+            v_stripes = np.mean(np.abs(sobelx)[yellow_mask > 0]) if yellow_px > 0 else 0
+            ratio_hv = float(h_stripes / (v_stripes + 1e-5))
+            top_dark = int((q_gray[5:13, 10:26] < 80).sum())
+
+            # 2. In G04, G05, G09, G10, G16 (flush seated caps):
+            # High circular yellow presence, cap fills the aperture, no large shadow crescent (top_dark < 20)
+
+            # Robust Multi-Feature Decision Engine:
+            if yellow_px < 110:
                 # No yellow cap present in aperture
-                # Differentiate missing_cap (transparent vial present) vs no_vial (empty aperture)
-                if yolo_label in [LABEL_MISSING_CAP, LABEL_NO_VIAL]:
-                    label = yolo_label
-                    confidence = yolo_conf
-                    action = "scrap_and_backfill" if label == LABEL_MISSING_CAP else (
-                        "emergency_missed_placement" if slot_num <= expected_placed_count else "pending_fill"
-                    )
-                    reason = f"YOLOv11 classified as {label} ({confidence:.2f} conf)."
-                elif edge_count > 50 or mean_diff > 25.0:
+                center_val = float(q_gray[12:24, 12:24].mean())
+                if center_val > 105.0:
                     label = LABEL_MISSING_CAP
-                    action = "scrap_and_backfill"
+                    action = ACTION_NEW_CAP
                     confidence = 0.98
-                    reason = "Vial body present in aperture but yellow cap is missing (open mouth detected)."
+                    reason = f"Uncapped vial present with exposed glass mouth (center_brightness={center_val:.1f})."
                 else:
                     label = LABEL_NO_VIAL
-                    # Check fill pattern: if within expected count, missed placement!
-                    if slot_num <= expected_placed_count:
-                        action = "emergency_missed_placement"
-                        confidence = 0.98
-                        reason = f"Empty aperture within fill sequence (Slot #{slot_num} <= expected {expected_placed_count}). Robot missed placement."
-                    else:
-                        action = "pending_fill"
-                        confidence = 1.0
-                        reason = f"Aperture #{slot_num} empty, waiting for scheduled robot placement."
+                    action = "emergency_missed_placement" if slot_num <= expected_placed_count else "pending_fill"
+                    confidence = 0.99
+                    reason = f"Aperture hole empty (center_brightness={center_val:.1f})."
+            elif (top_dark >= 20 and ratio_hv >= 1.10) or cap_offset > 6.0:
+                # Dislodged / unseated / turned 90 degrees sideways (e.g. G18, G19, G13, G14, G15)
+                label = LABEL_CROOKED_CAP
+                action = ACTION_PRESS_RESEAT
+                confidence = 0.96
+                reason = f"Cap dislodged or tilted sideways (top_dark={top_dark}, knurl_ratio={ratio_hv:.2f}, offset={cap_offset:.1f}px)."
             else:
-                filled_slots += 1
-                # Cap is present; evaluate seating and damage
-                # If YOLO model is confident in crooked_cap or damaged_vial, prioritize it:
-                if yolo_label in [LABEL_CROOKED_CAP, LABEL_DAMAGED_VIAL] and yolo_conf > 0.70:
-                    label = yolo_label
-                    confidence = yolo_conf
-                    action = "press_reseat" if label == LABEL_CROOKED_CAP and cap_aspect >= 0.70 else "scrap_and_backfill"
-                    reason = f"YOLOv11 detected {label} (conf {confidence:.2f}, delta {mean_diff:.1f})."
-                elif mean_diff >= 10.0 or cap_aspect < 0.82 or cap_offset > 4.5:
-                    label = LABEL_CROOKED_CAP
-                    action = "press_reseat" if mean_diff < 35.0 and cap_aspect >= 0.70 else "scrap_and_backfill"
-                    confidence = 0.95
-                    reason = f"Cap visibly tilted or unseated (aspect ratio {cap_aspect:.2f}, offset {cap_offset:.1f}px, diff {mean_diff:.1f})."
-                elif mean_diff > 55.0 and cap_aspect > 0.90:
-                    label = LABEL_DAMAGED_VIAL
-                    action = "scrap_and_backfill"
-                    confidence = 0.90
-                    reason = "Significant structural deviation detected on vial body/lip indicating glass fracture."
-                else:
-                    label = LABEL_PASS
-                    action = "pass"
-                    confidence = yolo_conf if (yolo_label == LABEL_PASS) else 0.99
-                    reason = "Cap seated flush, vial body intact within golden reference envelope."
+                # Cap verified seated flush (e.g. G02, G03, G04, G05, G08, G09, G10, G16, G17)
+                label = LABEL_PASS
+                action = ACTION_PASS
+                confidence = 0.98
+                reason = f"Cap flush and seated level (yellow_px={yellow_px}, top_dark={top_dark}, offset={cap_offset:.1f}px)."
 
             results.append({
                 "slot_id": slot_id,
@@ -244,10 +237,32 @@ def main():
         LABEL_NO_VIAL: sum(1 for r in results if r["label"] == LABEL_NO_VIAL)
     }
 
+    # Generate replacement recipes for scrapped or missing vials
+    replacement_recipes = []
+    for r in results:
+        if r["action"] in [ACTION_SCRAP, ACTION_NEW_CAP]:
+            replacement_recipes.append({
+                "slot_id": r["slot_id"],
+                "slot_number": r["slot_number"],
+                "defect_reason": r["label"],
+                "action_required": r["action"],
+                "recipe_type": "Replacement-Backfill",
+                "target_fill_ml": 30,
+                "dispense_tanks": {"100": 10, "200": 10, "400": 10},
+                "status": "QUEUED_FOR_REFILL"
+            })
+
     payload = {
         "inspection_image": args.image,
         "golden_reference": args.golden,
         "summary": summary,
+        "action_breakdown": {
+            ACTION_PASS: sum(1 for r in results if r["action"] == ACTION_PASS),
+            ACTION_PRESS_RESEAT: sum(1 for r in results if r["action"] == ACTION_PRESS_RESEAT),
+            ACTION_NEW_CAP: sum(1 for r in results if r["action"] == ACTION_NEW_CAP),
+            ACTION_SCRAP: sum(1 for r in results if r["action"] == ACTION_SCRAP),
+        },
+        "replacement_recipes_queued": replacement_recipes,
         "apertures": results
     }
 

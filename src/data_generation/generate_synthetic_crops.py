@@ -205,15 +205,54 @@ def generate_batch(num_scenes=10, seed=42):
             if os.path.exists(tmp_distorted):
                 os.remove(tmp_distorted)
 
+            # 5. Apply real-world industrial optical domain randomization (glare, specular hotspots, fluorescent exposure)
+            # Match physical camera characteristics:
+            # - Bright overhead fluorescent lamp reflections (white/cyan glare)
+            # - Radial lighting gradients
+            # - Random exposure & contrast shifts
+            h, w = final_img.shape[:2]
+            
+            # Fluorescent color temperature shift (vivid yellow + fluorescent tube tint)
+            img_augmented = final_img.astype(np.float32)
+            # Boost yellow channel (R + G) to match physical vibrant plastic
+            img_augmented[..., 1] *= random.uniform(1.05, 1.25)  # Green
+            img_augmented[..., 2] *= random.uniform(1.05, 1.25)  # Red
+            
+            # Add specular glare hotspot from overhead fluorescent lamps
+            glare_cx = random.randint(int(w * 0.35), int(w * 0.65))
+            glare_cy = random.randint(int(h * 0.25), int(h * 0.55))
+            glare_radius = random.randint(60, 140)
+            y_grid, x_grid = np.ogrid[:h, :w]
+            dist_sq = (x_grid - glare_cx)**2 + (y_grid - glare_cy)**2
+            glare_mask = np.exp(-dist_sq / (2.0 * (glare_radius**2)))
+            glare_intensity = random.uniform(35.0, 85.0)
+            
+            for c in range(3):
+                img_augmented[..., c] += glare_mask * glare_intensity
+
+            # Add specular reflections on cap tops (localized highlights)
+            for s_id, info in apertures.items():
+                if random.random() < 0.65:
+                    scx, scy = int(info["x"]), int(info["y"])
+                    spot_r = random.randint(3, 7)
+                    sy_g, sx_g = np.ogrid[max(0, scy-spot_r):min(h, scy+spot_r), max(0, scx-spot_r):min(w, scx+spot_r)]
+                    spot_dist = (sx_g - scx)**2 + (sy_g - scy)**2
+                    spot_mask = np.exp(-spot_dist / (2.0 * (spot_r**2)))
+                    spot_boost = random.uniform(40.0, 95.0)
+                    for c in range(3):
+                        img_augmented[max(0, scy-spot_r):min(h, scy+spot_r), max(0, scx-spot_r):min(w, scx+spot_r), c] += spot_mask * spot_boost
+
+            img_augmented = np.clip(img_augmented, 0, 255).astype(np.uint8)
+
             # Cut crops for each aperture
             for s_id, info in apertures.items():
                 slot_num = info["slot"]
                 label = slot_labels[slot_num]
                 cx, cy = int(info["x"]), int(info["y"])
 
-                x1, x2 = max(0, cx - crop_r), min(final_img.shape[1], cx + crop_r)
-                y1, y2 = max(0, cy - crop_r), min(final_img.shape[0], cy + crop_r)
-                crop = final_img[y1:y2, x1:x2]
+                x1, x2 = max(0, cx - crop_r), min(img_augmented.shape[1], cx + crop_r)
+                y1, y2 = max(0, cy - crop_r), min(img_augmented.shape[0], cy + crop_r)
+                crop = img_augmented[y1:y2, x1:x2]
 
                 crop_filename = f"scene{scene_idx:03d}_{s_id}_{label}.png"
                 save_path = DATASET_DIR / split / label / crop_filename

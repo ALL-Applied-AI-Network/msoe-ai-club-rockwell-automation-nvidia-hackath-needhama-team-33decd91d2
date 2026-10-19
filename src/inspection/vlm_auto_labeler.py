@@ -193,7 +193,7 @@ def process_real_images(max_images=5, out_json="runs/real_data_vlm_labels.json",
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-images", type=int, default=3)
-    parser.add_argument("--out", "--output", dest="out", default="runs/real_data_vlm_labels.json")
+    parser.add_argument("--out", "--output", dest="out", default="runs/vlm_labels/real_data_vlm_labels.json")
     parser.add_argument("--all-apertures", action="store_true", help="Label all 30 apertures per image (instead of sample)")
     parser.add_argument("--no-save-crops", dest="save_crops", action="store_false", help="Do not save crop images to dataset folders")
     parser.set_defaults(save_crops=True)
