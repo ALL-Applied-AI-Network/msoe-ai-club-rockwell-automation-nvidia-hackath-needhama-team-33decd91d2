@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
 Generate Full-Frame YOLO Object Detection Dataset (YOLO Format) from Isaac Sim Twin.
-Generates full 640x480 images with bounding boxes [class_id, x_center, y_center, width, height]
-Classes:
+Detects physical objects only:
   0: pass (normal seated vial + cap)
   1: crooked_cap (tilted / cross-threaded / unseated cap)
   2: missing_cap (open vial body without cap)
   3: damaged_vial (fractured or severely damaged vial)
-  4: no_vial (empty aperture hole)
+(Empty holes / no_vial are naturally inferred by the spatial slot assignment matcher).
 """
 
 import argparse
@@ -29,8 +28,7 @@ CLASS_MAP = {
     "pass": 0,
     "crooked_cap": 1,
     "missing_cap": 2,
-    "damaged_vial": 3,
-    "no_vial": 4
+    "damaged_vial": 3
 }
 
 
@@ -48,13 +46,6 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
     apertures_path = REPO_ROOT / "src" / "inspection" / "config" / "fixture_g_apertures.json"
     with open(apertures_path) as f:
         apertures = json.load(f)
-
-    # Load scrap tray apertures (Fixture S) so all empty scrap holes are explicitly labeled no_vial
-    scrap_apertures_path = REPO_ROOT / "src" / "inspection" / "config" / "fixture_s_apertures.json"
-    scrap_apertures = {}
-    if scrap_apertures_path.exists():
-        with open(scrap_apertures_path) as f:
-            scrap_apertures = json.load(f)
 
     stage_file = CSI_DIR / "stations" / "tray_inspection" / "tray_inspection.usdc"
     cam_json_path = CSI_DIR / "cameras" / "CapSealCam.json"
@@ -206,10 +197,15 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
             txt_out = YOLO_DET_DIR / "labels" / split / txt_name
 
             lines = []
-            # 1. Label Good Tray (Fixture G) slots
             for s_id, info in apertures.items():
                 slot_num = info["slot"]
                 cls_name = slot_labels[slot_num]
+
+                # Do NOT generate bounding boxes for empty holes (no_vial).
+                # The spatial Hungarian matcher naturally identifies empty holes when no detection exists.
+                if cls_name == "no_vial":
+                    continue
+
                 cls_id = CLASS_MAP[cls_name]
 
                 # Normalized coordinates
@@ -217,13 +213,6 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
                 cy_norm = info["y"] / float(img_h)
 
                 lines.append(f"{cls_id} {cx_norm:.6f} {cy_norm:.6f} {box_w:.6f} {box_h:.6f}")
-
-            # 2. Label Scrap Tray (Fixture S) slots as no_vial (empty holes)
-            no_vial_cls = CLASS_MAP["no_vial"]
-            for s_id, s_info in scrap_apertures.items():
-                scx_norm = s_info["x"] / float(img_w)
-                scy_norm = s_info["y"] / float(img_h)
-                lines.append(f"{no_vial_cls} {scx_norm:.6f} {scy_norm:.6f} {box_w:.6f} {box_h:.6f}")
 
             with open(txt_out, "w") as f:
                 f.write("\n".join(lines) + "\n")
@@ -241,7 +230,6 @@ names:
   1: crooked_cap
   2: missing_cap
   3: damaged_vial
-  4: no_vial
 """)
         print(f"[YOLO Detection Generator] Wrote {data_yaml}")
 
