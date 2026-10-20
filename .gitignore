@@ -2,8 +2,6 @@
 .venv/
 .venv_*/
 data.zip
-data/
-data
 shared/
 shared
 team_14_2026/
