@@ -20,6 +20,7 @@ True Physical Rigid Bodies & Full 30-Vial Tray:
 """
 
 import argparse
+from datetime import datetime
 import glob
 import math
 import os
@@ -40,8 +41,10 @@ if not FANUC_DIR.exists():
     FANUC_DIR = REPO_ROOT / "shared" / "data" / "fanuc_er4ia_sim"
 sys.path.insert(0, str(FANUC_DIR))
 
-OUT_DIR = REPO_ROOT / "runs" / "remediation_video"
-OUT_VIDEO = REPO_ROOT / "runs" / "fanuc_cap_remediation_demo.mp4"
+# Create a clean timestamped experiment directory under runs/archive/
+TIMESTAMP = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+OUT_DIR = REPO_ROOT / "runs" / "archive" / f"{TIMESTAMP}_remediation_video"
+OUT_VIDEO = OUT_DIR / "fanuc_cap_remediation_demo.mp4"
 
 
 def run_remediation_simulation(headless=True, total_frames=200, camera_choice="table"):
@@ -107,7 +110,9 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
             UsdShade.MaterialBindingAPI.Apply(pad.GetPrim()).Bind(silicone_mat)
 
         # 2. Reference Complete 30-Vial Physical Tray
-        clean_tray_usd = REPO_ROOT / "runs" / "scenes" / "clean_vial_tray.usda"
+        shared_tray_usd = REPO_ROOT / "shared" / "scenes" / "clean_vial_tray.usda"
+        local_tray_usd = REPO_ROOT / "runs" / "scenes" / "clean_vial_tray.usda"
+        clean_tray_usd = shared_tray_usd if shared_tray_usd.exists() else local_tray_usd
         tray_prim = UsdGeom.Xform.Define(stage, "/World/CleanTray")
         tray_prim.GetPrim().GetReferences().AddReference(str(clean_tray_usd))
 
