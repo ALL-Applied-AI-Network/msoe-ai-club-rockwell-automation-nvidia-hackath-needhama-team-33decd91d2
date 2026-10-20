@@ -3,10 +3,10 @@
 Simulate and Render the Complete Fanuc ER-4iA Cap Remediation Sequence.
 
 Execution Pipeline:
-1. Spawns Fanuc ER-4iA cell + table + tray fixture with defects:
-     - G05: Crooked cap (tilted at 25°)
+1. Spawns Fanuc ER-4iA cell + table + isolated clean tray fixture with defects:
+     - G05: Crooked cap (tilted at 26°)
      - G12: Missing cap (uncapped vial)
-     - /World/CapSupply: Spare replacement caps
+     - /World/CapSupply: Spare replacement caps nest on table
 2. Runs Perception / Trajectory Planning:
      - Move 1 (G05 Reseat): Approach above G05 -> descend & plunge press cap flush -> retract
      - Move 2 (G12 Backfill): Transit to /World/CapSupply -> grasp spare cap -> carry to G12 -> seat cap -> return home
@@ -24,7 +24,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-# Parse CLI arguments before SimulationApp imports to avoid kit argument clashes
+# Parse CLI arguments before SimulationApp imports
 parser = argparse.ArgumentParser(description="Fanuc Cap Remediation Simulation")
 parser.add_argument("--frames", type=int, default=180, help="Total frames to render (30fps -> 6 sec)")
 parser.add_argument("--camera", default="side", choices=["side", "table"], help="Camera viewpoint to render")
@@ -68,47 +68,46 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         # Build base scene (Robot + Table + Cameras + Gripper)
         fanuc_cell.build(stage, with_objects=False)
 
-        # Reference Tray inspection stage
-        tray_stage = REPO_ROOT / "shared" / "data" / "csi_digital_twin_v1" / "stations" / "tray_inspection" / "tray_inspection.usdc"
-        if not tray_stage.exists():
-            tray_stage = Path("/data/ai_club/team_14_2026/data/csi_digital_twin_v1/stations/tray_inspection/tray_inspection.usdc")
-
+        # Place the clean isolated tray flush on the table
+        clean_tray_usd = REPO_ROOT / "shared" / "scenes" / "clean_vial_tray.usda"
         cap_usda = FANUC_DIR / "assets" / "usd_assets" / "vial_cap.usda"
 
-        tray_prim = UsdGeom.Xform.Define(stage, "/World/VialTray")
-        if tray_stage.exists():
-            tray_prim.GetPrim().GetReferences().AddReference(str(tray_stage))
-            xf = UsdGeom.Xformable(tray_prim)
-            translate_op = next((op for op in xf.GetOrderedXformOps() if "translate" in op.GetOpName()), None)
-            if translate_op:
-                translate_op.Set(Gf.Vec3d(0.34, -0.02, 0.002))
-            else:
-                xf.AddTranslateOp().Set(Gf.Vec3d(0.34, -0.02, 0.002))
-            print(f"[Remediation Simulation] Tray referenced from {tray_stage}")
+        tray_prim = UsdGeom.Xform.Define(stage, "/World/CleanTray")
+        tray_prim.GetPrim().GetReferences().AddReference(str(clean_tray_usd))
 
-        # Inject crooked cap at G05
-        crooked_cap = stage.GetPrimAtPath("/World/VialTray/G05_cap")
+        # Nominal placement: X=0.38m, Y=0.0m, Z resting flush on table surface
+        tray_x = 0.38
+        tray_y = 0.0
+        tray_z = C.TABLE_TOP_Z + C.SURFACE_DZ
+
+        fanuc_cell.place(tray_prim.GetPrim(), (tray_x, tray_y, tray_z), yaw_deg=0.0)
+        print(f"[Remediation Simulation] Clean isolated tray placed at table surface (Z={tray_z:.4f}m)")
+
+        # Inject crooked cap at G05 (tilt 26 deg)
+        crooked_cap = stage.GetPrimAtPath("/World/CleanTray/G05_cap")
         if crooked_cap.IsValid():
             xf_c = UsdGeom.Xformable(crooked_cap)
             rot_op = next((op for op in xf_c.GetOrderedXformOps() if "rotate" in op.GetOpName()), None)
             if rot_op:
                 rot_op.Set(Gf.Vec3f(26.0, 14.0, 45.0))
-            print("[Remediation Simulation] G05 cap tilted to 26 deg (crooked defect)")
+            else:
+                xf_c.AddRotateXYZOp().Set(Gf.Vec3f(26.0, 14.0, 45.0))
+            print("[Remediation Simulation] Injected crooked cap at G05")
 
-        # Inject missing cap at G12
-        missing_cap = stage.GetPrimAtPath("/World/VialTray/G12_cap")
+        # Inject missing cap at G12 (hidden)
+        missing_cap = stage.GetPrimAtPath("/World/CleanTray/G12_cap")
         if missing_cap.IsValid():
             UsdGeom.Imageable(missing_cap).MakeInvisible()
-            print("[Remediation Simulation] G12 cap hidden (missing cap defect)")
+            print("[Remediation Simulation] Injected missing cap at G12")
 
-        # Add spare replacement cap nest
+        # Add spare replacement cap nest on the table (X=0.22, Y=0.22, Z=table surface)
         supply_prim = UsdGeom.Xform.Define(stage, "/World/CapSupply")
-        supply_prim.AddTranslateOp().Set(Gf.Vec3d(0.22, 0.18, 0.002))
+        fanuc_cell.place(supply_prim.GetPrim(), (0.22, 0.22, tray_z), yaw_deg=0.0)
+
         spare_cap_prim = UsdGeom.Xform.Define(stage, "/World/CapSupply/SpareCap_1")
-        spare_cap_prim.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 0.0))
         if cap_usda.exists():
             spare_cap_prim.GetPrim().GetReferences().AddReference(str(cap_usda))
-            print("[Remediation Simulation] Spare cap nest populated at /World/CapSupply")
+            print("[Remediation Simulation] Spare replacement cap nest populated at /World/CapSupply")
 
         # Camera selection
         cam_paths = {
@@ -140,20 +139,26 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         tool = tuple(np.array(C.TOOL_AXIS) * fanuc_cell.tip_offset())
         down = [0.0, 0.0, -1.0]
 
-        # Key target positions (in robot base frame)
+        # Key coordinates in robot base coordinates (where robot base origin is Z=0.0 relative to its frame)
+        # Note: In cell.py, robot base is placed at Z = TABLE_TOP_Z (0.90m).
+        # IK targets in robot frame:
+        # Home pose: [0.30, 0.0, 0.24]
         home_pos = np.array([0.30, 0.0, 0.24])
         q_home = np.deg2rad([C.HOME_POSE_DEG[f"J{i}"] for i in range(1, 7)])
         q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool)
 
-        # Remediation targets
-        p_above_g05 = np.array([0.34, -0.02, 0.16])
-        p_press_g05 = np.array([0.34, -0.02, 0.082])
+        # Precise target coordinates relative to robot base:
+        # G05: X = 0.242, Y = 0.106. Cap top in robot base coordinates ~ 0.076m
+        p_above_g05 = np.array([0.242, 0.106, 0.160])
+        p_press_g05 = np.array([0.242, 0.106, 0.076])
 
-        p_above_supply = np.array([0.22, 0.18, 0.16])
-        p_pick_supply = np.array([0.22, 0.18, 0.075])
+        # Supply nest: X = 0.220, Y = 0.220
+        p_above_supply = np.array([0.220, 0.220, 0.160])
+        p_pick_supply = np.array([0.220, 0.220, 0.072])
 
-        p_above_g12 = np.array([0.28, -0.04, 0.16])
-        p_place_g12 = np.array([0.28, -0.04, 0.082])
+        # G12: X = 0.344, Y = -0.078
+        p_above_g12 = np.array([0.344, -0.078, 0.160])
+        p_place_g12 = np.array([0.344, -0.078, 0.076])
 
         def apply_joints(q6, jaw):
             full = arm.get_joint_positions().copy()
@@ -171,7 +176,7 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 full_init[idx[joint]] = value
         arm.set_joint_positions(full_init)
 
-        # Settle simulation and warm up camera render pipeline (first few frames return None)
+        # Settle simulation and warm up camera render buffer
         print("[Remediation Simulation] Warming up camera render buffer...")
         for _ in range(35):
             apply_joints(q_home, C.JAW_OPEN)
