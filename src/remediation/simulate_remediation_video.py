@@ -6,12 +6,15 @@ Execution Pipeline:
 1. Spawns Fanuc ER-4iA cell + table + isolated clean tray fixture with defects:
      - G05: Crooked cap (tilted at 26°)
      - G12: Missing cap (uncapped vial)
-     - /World/CapSupply: Spare replacement caps nest on table
-2. Runs Perception / Trajectory Planning:
+     - /World/CapSupply: Spare replacement cap in supply nest
+2. Fixed Assets & Realistic Sizing:
+     - Uses properly scaled CAD visual matching Dataset 3 (CAP_RADIUS, CAP_HEIGHT, yellow polypropylene)
+     - Clean tray material bindings mapped to realistic brushed aluminium, glass, and yellow caps
+     - Carried cap dynamically attaches to gripper between jaw fingertips during transit
+3. Sequence:
      - Move 1 (G05 Reseat): Approach above G05 -> descend & plunge press cap flush -> retract
-     - Move 2 (G12 Backfill): Transit to /World/CapSupply -> grasp spare cap -> carry to G12 -> seat cap -> return home
-3. Uses native Isaac Sim Camera to grab RGBA frames with heads-up telemetry HUD overlay.
-4. Encodes sequence into runs/fanuc_cap_remediation_demo.mp4.
+     - Move 2 (G12 Backfill): Transit to Cap Supply -> grasp spare cap -> carry to G12 -> seat on vial -> return home
+4. Captures 180 frames with heads-up telemetry HUD overlay and encodes to MP4 video.
 """
 
 import argparse
@@ -55,6 +58,7 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         from isaacsim.core.api import World
         from isaacsim.core.prims import SingleArticulation
         from isaacsim.core.utils.types import ArticulationAction
+        from isaacsim.core.utils.stage import add_reference_to_stage
         from isaacsim.sensors.camera import Camera
 
         import cell as fanuc_cell
@@ -92,22 +96,48 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 rot_op.Set(Gf.Vec3f(26.0, 14.0, 45.0))
             else:
                 xf_c.AddRotateXYZOp().Set(Gf.Vec3f(26.0, 14.0, 45.0))
-            print("[Remediation Simulation] Injected crooked cap at G05")
+            print("[Remediation Simulation] Injected crooked cap at G05 (26 deg tilt)")
 
-        # Inject missing cap at G12 (hidden)
+        # Inject missing cap at G12 (hidden initially)
         missing_cap = stage.GetPrimAtPath("/World/CleanTray/G12_cap")
         if missing_cap.IsValid():
             UsdGeom.Imageable(missing_cap).MakeInvisible()
             print("[Remediation Simulation] Injected missing cap at G12")
 
-        # Add spare replacement cap nest on the table (X=0.22, Y=0.22, Z=table surface)
-        supply_prim = UsdGeom.Xform.Define(stage, "/World/CapSupply")
-        fanuc_cell.place(supply_prim.GetPrim(), (0.22, 0.22, tray_z), yaw_deg=0.0)
+        # Spawn accurately scaled spare replacement cap in the supply nest (X=0.22, Y=0.22)
+        supply_x, supply_y = 0.22, 0.22
+        supply_cap_prim = UsdGeom.Xform.Define(stage, "/World/SupplyCap")
+        UsdGeom.Xformable(supply_cap_prim.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(supply_x, supply_y, tray_z))
+        vis_supply = "/World/SupplyCap/Visual"
+        add_reference_to_stage(str(cap_usda), vis_supply)
+        fanuc_cell.scale_cad_visual(stage, vis_supply, (C.CAP_RADIUS / 0.015875, C.CAP_RADIUS / 0.015875, C.CAP_HEIGHT / 0.01570))
+        vis_xf = UsdGeom.Xformable(stage.GetPrimAtPath(vis_supply))
+        tr_op = vis_xf.AddTranslateOp(opSuffix="rimRest")
+        tr_op.Set(Gf.Vec3d(0, 0, C.CAP_FLANGE_THICK))
+        rot_op = vis_xf.AddRotateXOp(opSuffix="domeUp")
+        rot_op.Set(180.0)  # upright, flange resting on table
+        existing_ops = [op for op in vis_xf.GetOrderedXformOps() if op.GetOpName() not in (tr_op.GetOpName(), rot_op.GetOpName())]
+        vis_xf.SetXformOpOrder([tr_op] + existing_ops + [rot_op])
+        print("[Remediation Simulation] Accurately sized spare cap spawned in supply nest")
 
-        spare_cap_prim = UsdGeom.Xform.Define(stage, "/World/CapSupply/SpareCap_1")
-        if cap_usda.exists():
-            spare_cap_prim.GetPrim().GetReferences().AddReference(str(cap_usda))
-            print("[Remediation Simulation] Spare replacement cap nest populated at /World/CapSupply")
+        # Create carried cap attached to gripper (hidden until grasped)
+        tool_flange_path = "/World/ER4iA/J6_link"
+        carried_cap_prim = UsdGeom.Xform.Define(stage, f"{tool_flange_path}/CarriedCap")
+        vis_carried = f"{tool_flange_path}/CarriedCap/Visual"
+        add_reference_to_stage(str(cap_usda), vis_carried)
+        fanuc_cell.scale_cad_visual(stage, vis_carried, (C.CAP_RADIUS / 0.015875, C.CAP_RADIUS / 0.015875, C.CAP_HEIGHT / 0.01570))
+        c_vis_xf = UsdGeom.Xformable(stage.GetPrimAtPath(vis_carried))
+        c_tr_op = c_vis_xf.AddTranslateOp(opSuffix="rimRest")
+        c_tr_op.Set(Gf.Vec3d(0, 0, C.CAP_FLANGE_THICK))
+        c_rot_op = c_vis_xf.AddRotateXOp(opSuffix="domeUp")
+        c_rot_op.Set(180.0)
+        c_existing_ops = [op for op in c_vis_xf.GetOrderedXformOps() if op.GetOpName() not in (c_tr_op.GetOpName(), c_rot_op.GetOpName())]
+        c_vis_xf.SetXformOpOrder([c_tr_op] + c_existing_ops + [c_rot_op])
+
+        # Position right between gripper fingertips (tip offset = 0.223m)
+        tip_offset = fanuc_cell.tip_offset()
+        UsdGeom.Xformable(carried_cap_prim.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, tip_offset - 0.005))
+        UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeInvisible()
 
         # Camera selection
         cam_paths = {
@@ -136,27 +166,21 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
 
         ik.set_tool_axis(C.TOOL_AXIS)
         ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
-        tool = tuple(np.array(C.TOOL_AXIS) * fanuc_cell.tip_offset())
+        tool = tuple(np.array(C.TOOL_AXIS) * tip_offset)
         down = [0.0, 0.0, -1.0]
 
-        # Key coordinates in robot base coordinates (where robot base origin is Z=0.0 relative to its frame)
-        # Note: In cell.py, robot base is placed at Z = TABLE_TOP_Z (0.90m).
-        # IK targets in robot frame:
-        # Home pose: [0.30, 0.0, 0.24]
+        # Key coordinates in robot base coordinates
         home_pos = np.array([0.30, 0.0, 0.24])
         q_home = np.deg2rad([C.HOME_POSE_DEG[f"J{i}"] for i in range(1, 7)])
         q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool)
 
         # Precise target coordinates relative to robot base:
-        # G05: X = 0.242, Y = 0.106. Cap top in robot base coordinates ~ 0.076m
         p_above_g05 = np.array([0.242, 0.106, 0.160])
         p_press_g05 = np.array([0.242, 0.106, 0.076])
 
-        # Supply nest: X = 0.220, Y = 0.220
-        p_above_supply = np.array([0.220, 0.220, 0.160])
-        p_pick_supply = np.array([0.220, 0.220, 0.072])
+        p_above_supply = np.array([supply_x, supply_y, 0.160])
+        p_pick_supply = np.array([supply_x, supply_y, 0.015])
 
-        # G12: X = 0.344, Y = -0.078
         p_above_g12 = np.array([0.344, -0.078, 0.160])
         p_place_g12 = np.array([0.344, -0.078, 0.076])
 
@@ -219,9 +243,13 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 t = (frame_idx - 105) / 15.0
                 target_p = p_above_supply + (p_pick_supply - p_above_supply) * t
                 status_text = "ACTION: Grasping Replacement Cap from Supply Nest"
-                jaw_cur = C.JAW_CLOSED if frame_idx >= 115 else C.JAW_OPEN
-                if frame_idx == 118 and spare_cap_prim.GetPrim().IsValid():
-                    UsdGeom.Imageable(spare_cap_prim.GetPrim()).MakeInvisible()
+                if frame_idx >= 115:
+                    jaw_cur = C.JAW_CLOSED
+                    # Cap is grasped: hide table cap and show carried cap in gripper
+                    UsdGeom.Imageable(supply_cap_prim.GetPrim()).MakeInvisible()
+                    UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeVisible()
+                else:
+                    jaw_cur = C.JAW_OPEN
             elif frame_idx < 140:
                 t = (frame_idx - 120) / 20.0
                 target_p = p_pick_supply + (p_above_g12 - p_pick_supply) * t
@@ -230,9 +258,12 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
             elif frame_idx < 155:
                 t = (frame_idx - 140) / 15.0
                 target_p = p_above_g12 + (p_place_g12 - p_above_g12) * t
-                status_text = "ACTION: Seating Cap on Vial G12 & Releasing Gripper"
-                if frame_idx == 150 and missing_cap.IsValid():
-                    UsdGeom.Imageable(missing_cap).MakeVisible()
+                status_text = "ACTION: Seating Cap on Vial G12 & Opening Gripper"
+                if frame_idx >= 150:
+                    # Release onto vial
+                    UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeInvisible()
+                    if missing_cap.IsValid():
+                        UsdGeom.Imageable(missing_cap).MakeVisible()
                 jaw_cur = C.JAW_OPEN if frame_idx >= 152 else C.JAW_CLOSED
             else:
                 t = (frame_idx - 155) / 25.0
