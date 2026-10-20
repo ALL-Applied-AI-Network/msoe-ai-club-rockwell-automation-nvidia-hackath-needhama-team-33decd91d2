@@ -10,6 +10,12 @@ if [ -d "scripts" ]; then
     chmod +x scripts/*.sh scripts/*.slurm 2>/dev/null || true
 fi
 
+# Initialize and update git submodules
+if [ -f ".gitmodules" ] && command -v git >/dev/null 2>&1; then
+    echo "Initializing and updating git submodules..."
+    git submodule update --init --recursive
+fi
+
 # Detect environment:
 # 1. School Cluster (Rosie): /data/ai_club exists or /data is writable
 # 2. Standalone / Brev: local ./shared directory
