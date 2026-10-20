@@ -8,7 +8,10 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-PYTHON_BIN="${REPO_ROOT}/.venv_vlm/bin/python"
+PYTHON_BIN="${REPO_ROOT}/.conda_env/bin/python"
+if [ ! -x "$PYTHON_BIN" ]; then
+    PYTHON_BIN="${REPO_ROOT}/.venv_vlm/bin/python"
+fi
 if [ ! -x "$PYTHON_BIN" ]; then
     PYTHON_BIN="python3"
 fi
