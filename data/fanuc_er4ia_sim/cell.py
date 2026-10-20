@@ -1438,177 +1438,263 @@ def attach_gripper(stage, jaw=None, articulated=True, finger_type="stock"):
             "steel_dark",
         )
 
-        prof = [(u, sign * v) for u, v in finger_profile()]
-        boundary = C.FINGER_LENGTH - C.SOFT_TIP_LENGTH
-        sections = [
-            (
-                clip_profile(prof, boundary, False),
-                "Finger",
-                "uwm_finger",
-                PHYS_MAT_PATH,
-            ),
-            (
-                clip_profile(prof, boundary, True),
-                "SoftTip",
-                "uwm_finger",
-                SOFT_TIP_MAT_PATH,
-            ),
-        ]
-        for section, name, visual_material, physics_material in sections:
-            fprim = prism(
+        if finger_type == "cap":
+            # Conformal Cap Remediation Gripper with Curved Cradle & Under-Flange Support Claws
+            # Backing bracket connects to SMC carriage
+            bracket_len = 0.056
+            bracket_t = 0.005
+            bracket_w = 0.024
+            bracket = box(
                 stage,
-                jaw_path + "/" + name,
-                section,
-                C.FINGER_THICK,
-                METAL,
-                mat=visual_material,
+                jaw_path + "/CapBracket",
+                (bracket_len, bracket_t, bracket_w),
+                (finger_x - carriage_x + bracket_len / 2, sign * 0.010, 0),
+                (0.18, 0.19, 0.22),
+                mat="steel_dark",
             )
-            UsdGeom.Xformable(fprim).AddTranslateOp().Set(
-                Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0)
-            )
-            uv = UsdGeom.PrimvarsAPI(fprim).CreatePrimvar(
-                "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex
-            )
-            uv.Set(
-                [
-                    Gf.Vec2f(
-                        float(p[0] / C.FINGER_LENGTH),
-                        float(sign * p[1] / C.FINGER_WIDTH),
-                    )
-                    for p in UsdGeom.Mesh(fprim).GetPointsAttr().Get()
-                ]
-            )
-            UsdGeom.Imageable(fprim).CreateVisibilityAttr().Set("invisible")
-        detailed_finger_visual(stage, jaw_path, sign, finger_x - carriage_x)
-        # Separate convex triangle prisms preserve the concave AA socket.
-        # A convex hull of the entire finger bridges and fills that socket.
-        pieces = [
-            (section, tri, material)
-            for section, _, _, material in sections
-            for tri in _ear_clip(section)
-        ]
-        for number, (section, tri, material) in enumerate(pieces):
-            collider = prism(
-                stage,
-                jaw_path + f"/Collision/Part{number:02d}",
-                [section[i] for i in tri],
-                C.FINGER_THICK,
-                METAL,
-            )
-            UsdGeom.Xformable(collider).AddTranslateOp().Set(
-                Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0)
-            )
-            UsdGeom.Imageable(collider).CreateVisibilityAttr().Set("invisible")
-            UsdPhysics.CollisionAPI.Apply(collider)
-            UsdPhysics.MeshCollisionAPI.Apply(collider).CreateApproximationAttr().Set(
-                "convexHull"
-            )
-            from pxr import PhysxSchema
 
-            contact = PhysxSchema.PhysxCollisionAPI.Apply(collider)
-            contact.CreateContactOffsetAttr().Set(0.0002)
-            contact.CreateRestOffsetAttr().Set(0.0)
-            bind_physics_material(collider, material)
-        for number, u in enumerate(C.FINGER_MOUNT_HOLES):
-            for face in (-1, 1):
-                cyl(
-                    stage,
-                    jaw_path + f"/MountScrew{number}_{'front' if face>0 else 'back'}",
-                    0.0022,
-                    0.0008,
-                    (
-                        finger_x - carriage_x + u,
-                        0,
-                        face * (C.FINGER_THICK / 2 - 0.0007),
-                    ),
-                    DARK_METAL,
-                    mat="steel_dark",
-                )
-                # Hex drive inset within the recessed cap screw.
-                h = [
-                    (
-                        finger_x - carriage_x + u + 0.0012 * math.cos(k * math.pi / 3),
-                        0.0012 * math.sin(k * math.pi / 3),
-                    )
-                    for k in range(6)
-                ]
-                inset = prism(
-                    stage,
-                    jaw_path + f"/ScrewSocket{number}_{'front' if face>0 else 'back'}",
-                    h,
-                    0.00004,
-                    (0.035, 0.035, 0.04),
-                    mat="black_oxide",
-                )
-                UsdGeom.Xformable(inset).AddTranslateOp().Set(
-                    Gf.Vec3d(0, 0, face * (C.FINGER_THICK / 2 - 0.00028))
-                )
-        outer_bolt = cyl(
-            stage,
-            jaw_path + "/OuterCrossBolt",
-            0.0022,
-            0.0018,
-            (finger_x - carriage_x + 0.012, sign * (C.FINGER_WIDTH / 2 + 0.0009), 0),
-            DARK_METAL,
-            mat="black_oxide",
-        )
-        UsdGeom.Xformable(outer_bolt).AddRotateXOp().Set(90.0)
-        if tag == "R" and C.SHOW_TOOL_DETAIL:
-            carrier = prism(
+            # Curved cradle blade (center section + 2 angled wings wrapping around cylindrical flange)
+            blade_l = 0.024
+            blade_t = 0.0035
+            blade_x = finger_x - carriage_x + C.FINGER_LENGTH - blade_l / 2
+            
+            # Center blade section:
+            b_center = box(
                 stage,
-                jaw_path + "/SensorCarrier",
-                [
-                    (0.024, 0),
-                    (0.054, 0),
-                    (0.056, 0.0015),
-                    (0.053, 0.0028),
-                    (0.027, 0.0028),
-                ],
-                0.0036,
-                METAL,
+                jaw_path + "/CradleCenter",
+                (blade_l, blade_t, 0.016),
+                (blade_x, sign * 0.0090, 0),
+                (0.25, 0.26, 0.28),
                 mat="alu_machined",
             )
-            UsdGeom.Xformable(carrier).AddTranslateOp().Set(
-                Gf.Vec3d(finger_x - carriage_x, C.FINGER_WIDTH / 2, 0)
-            )
-            box(
+            # Left & Right angled wings (cradling cylinder sides to stop all sideways wiggle)
+            wing_z = 0.012
+            wing_y = sign * 0.0075
+            b_wing1 = box(
                 stage,
-                jaw_path + "/SensorRedNose",
-                (0.006, 0.0025, 0.003),
-                (finger_x - carriage_x + 0.054, C.FINGER_WIDTH / 2 + 0.0008, 0),
-                (0.7, 0.035, 0.025),
-                collision=False,
-                mat="plastic_red",
+                jaw_path + "/CradleWing1",
+                (blade_l, blade_t, 0.010),
+                (blade_x, wing_y, +wing_z),
+                (0.25, 0.26, 0.28),
+                mat="alu_machined",
+            )
+            b_wing2 = box(
+                stage,
+                jaw_path + "/CradleWing2",
+                (blade_l, blade_t, 0.010),
+                (blade_x, wing_y, -wing_z),
+                (0.25, 0.26, 0.28),
+                mat="alu_machined",
             )
 
-        if C.FINGER_TAPE:
-            # duct tape wrapped round the working end: slightly proud of the blade
-            # so it is the surface that actually touches the part, and bound to a
-            # high-friction material. It covers the scallop, which is what the real
-            # wrap does too.
-            pad, u0 = C.TAPE_PAD, C.FINGER_LENGTH - C.TAPE_LEN
-            tape_prof = [
-                (u0, sign * -pad),
-                (C.FINGER_LENGTH, sign * -pad),
-                (C.FINGER_LENGTH, sign * (C.FINGER_WIDTH + pad)),
-                (u0, sign * (C.FINGER_WIDTH + pad)),
-            ]
-            tprim = prism(
+            # Inward under-flange lifting claw shelf:
+            # 2.2mm thick along tool axis, projecting inward under the 4.3mm flange overhang
+            shelf_l = 0.0022
+            shelf_t = 0.0030
+            shelf_x = finger_x - carriage_x + C.FINGER_LENGTH - shelf_l / 2
+            
+            s_center = box(
                 stage,
-                jaw_path + "/Tape",
-                tape_prof,
-                C.FINGER_THICK + 2 * pad,
-                (0.38, 0.39, 0.40),
-                mat="duct_tape",
+                jaw_path + "/ClawShelfCenter",
+                (shelf_l, shelf_t, 0.016),
+                (shelf_x, sign * 0.0060, 0),
+                (0.88, 0.68, 0.08),
+                mat="fanuc_yellow",
             )
-            UsdGeom.Xformable(tprim).AddTranslateOp().Set(
-                Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0.0)
+            s_wing1 = box(
+                stage,
+                jaw_path + "/ClawShelfWing1",
+                (shelf_l, shelf_t, 0.010),
+                (shelf_x, sign * 0.0048, +wing_z),
+                (0.88, 0.68, 0.08),
+                mat="fanuc_yellow",
             )
-            UsdPhysics.CollisionAPI.Apply(tprim)
-            UsdPhysics.MeshCollisionAPI.Apply(tprim).CreateApproximationAttr().Set(
-                "convexHull"
+            s_wing2 = box(
+                stage,
+                jaw_path + "/ClawShelfWing2",
+                (shelf_l, shelf_t, 0.010),
+                (shelf_x, sign * 0.0048, -wing_z),
+                (0.88, 0.68, 0.08),
+                mat="fanuc_yellow",
             )
-            bind_physics_material(tprim, TAPE_MAT_PATH)
+
+            from pxr import PhysxSchema
+            for prim in (b_center, b_wing1, b_wing2, s_center, s_wing1, s_wing2):
+                contact = PhysxSchema.PhysxCollisionAPI.Apply(prim)
+                contact.CreateContactOffsetAttr().Set(0.0002)
+                contact.CreateRestOffsetAttr().Set(0.0)
+        else:
+            prof = [(u, sign * v) for u, v in finger_profile()]
+            boundary = C.FINGER_LENGTH - C.SOFT_TIP_LENGTH
+            sections = [
+                (
+                    clip_profile(prof, boundary, False),
+                    "Finger",
+                    "uwm_finger",
+                    PHYS_MAT_PATH,
+                ),
+                (
+                    clip_profile(prof, boundary, True),
+                    "SoftTip",
+                    "uwm_finger",
+                    SOFT_TIP_MAT_PATH,
+                ),
+            ]
+            for section, name, visual_material, physics_material in sections:
+                fprim = prism(
+                    stage,
+                    jaw_path + "/" + name,
+                    section,
+                    C.FINGER_THICK,
+                    METAL,
+                    mat=visual_material,
+                )
+                UsdGeom.Xformable(fprim).AddTranslateOp().Set(
+                    Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0)
+                )
+                uv = UsdGeom.PrimvarsAPI(fprim).CreatePrimvar(
+                    "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex
+                )
+                uv.Set(
+                    [
+                        Gf.Vec2f(
+                            float(p[0] / C.FINGER_LENGTH),
+                            float(sign * p[1] / C.FINGER_WIDTH),
+                        )
+                        for p in UsdGeom.Mesh(fprim).GetPointsAttr().Get()
+                    ]
+                )
+                UsdGeom.Imageable(fprim).CreateVisibilityAttr().Set("invisible")
+            detailed_finger_visual(stage, jaw_path, sign, finger_x - carriage_x)
+            # Separate convex triangle prisms preserve the concave AA socket.
+            # A convex hull of the entire finger bridges and fills that socket.
+            pieces = [
+                (section, tri, material)
+                for section, _, _, material in sections
+                for tri in _ear_clip(section)
+            ]
+            for number, (section, tri, material) in enumerate(pieces):
+                collider = prism(
+                    stage,
+                    jaw_path + f"/Collision/Part{number:02d}",
+                    [section[i] for i in tri],
+                    C.FINGER_THICK,
+                    METAL,
+                )
+                UsdGeom.Xformable(collider).AddTranslateOp().Set(
+                    Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0)
+                )
+                UsdGeom.Imageable(collider).CreateVisibilityAttr().Set("invisible")
+                UsdPhysics.CollisionAPI.Apply(collider)
+                UsdPhysics.MeshCollisionAPI.Apply(collider).CreateApproximationAttr().Set(
+                    "convexHull"
+                )
+                from pxr import PhysxSchema
+
+                contact = PhysxSchema.PhysxCollisionAPI.Apply(collider)
+                contact.CreateContactOffsetAttr().Set(0.0002)
+                contact.CreateRestOffsetAttr().Set(0.0)
+                bind_physics_material(collider, material)
+            for number, u in enumerate(C.FINGER_MOUNT_HOLES):
+                for face in (-1, 1):
+                    cyl(
+                        stage,
+                        jaw_path + f"/MountScrew{number}_{'front' if face>0 else 'back'}",
+                        0.0022,
+                        0.0008,
+                        (
+                            finger_x - carriage_x + u,
+                            0,
+                            face * (C.FINGER_THICK / 2 - 0.0007),
+                        ),
+                        DARK_METAL,
+                        mat="steel_dark",
+                    )
+                    # Hex drive inset within the recessed cap screw.
+                    h = [
+                        (
+                            finger_x - carriage_x + u + 0.0012 * math.cos(k * math.pi / 3),
+                            0.0012 * math.sin(k * math.pi / 3),
+                        )
+                        for k in range(6)
+                    ]
+                    inset = prism(
+                        stage,
+                        jaw_path + f"/ScrewSocket{number}_{'front' if face>0 else 'back'}",
+                        h,
+                        0.00004,
+                        (0.035, 0.035, 0.04),
+                        mat="black_oxide",
+                    )
+                    UsdGeom.Xformable(inset).AddTranslateOp().Set(
+                        Gf.Vec3d(0, 0, face * (C.FINGER_THICK / 2 - 0.00028))
+                    )
+            outer_bolt = cyl(
+                stage,
+                jaw_path + "/OuterCrossBolt",
+                0.0022,
+                0.0018,
+                (finger_x - carriage_x + 0.012, sign * (C.FINGER_WIDTH / 2 + 0.0009), 0),
+                DARK_METAL,
+                mat="black_oxide",
+            )
+            UsdGeom.Xformable(outer_bolt).AddRotateXOp().Set(90.0)
+            if tag == "R" and C.SHOW_TOOL_DETAIL:
+                carrier = prism(
+                    stage,
+                    jaw_path + "/SensorCarrier",
+                    [
+                        (0.024, 0),
+                        (0.054, 0),
+                        (0.056, 0.0015),
+                        (0.053, 0.0028),
+                        (0.027, 0.0028),
+                    ],
+                    0.0036,
+                    METAL,
+                    mat="alu_machined",
+                )
+                UsdGeom.Xformable(carrier).AddTranslateOp().Set(
+                    Gf.Vec3d(finger_x - carriage_x, C.FINGER_WIDTH / 2, 0)
+                )
+                box(
+                    stage,
+                    jaw_path + "/SensorRedNose",
+                    (0.006, 0.0025, 0.003),
+                    (finger_x - carriage_x + 0.054, C.FINGER_WIDTH / 2 + 0.0008, 0),
+                    (0.7, 0.035, 0.025),
+                    collision=False,
+                    mat="plastic_red",
+                )
+
+            if C.FINGER_TAPE:
+                # duct tape wrapped round the working end: slightly proud of the blade
+                # so it is the surface that actually touches the part, and bound to a
+                # high-friction material. It covers the scallop, which is what the real
+                # wrap does too.
+                pad, u0 = C.TAPE_PAD, C.FINGER_LENGTH - C.TAPE_LEN
+                tape_prof = [
+                    (u0, sign * -pad),
+                    (C.FINGER_LENGTH, sign * -pad),
+                    (C.FINGER_LENGTH, sign * (C.FINGER_WIDTH + pad)),
+                    (u0, sign * (C.FINGER_WIDTH + pad)),
+                ]
+                tprim = prism(
+                    stage,
+                    jaw_path + "/Tape",
+                    tape_prof,
+                    C.FINGER_THICK + 2 * pad,
+                    (0.38, 0.39, 0.40),
+                    mat="duct_tape",
+                )
+                UsdGeom.Xformable(tprim).AddTranslateOp().Set(
+                    Gf.Vec3d(finger_x - carriage_x, -sign * C.FINGER_WIDTH / 2, 0.0)
+                )
+                UsdPhysics.CollisionAPI.Apply(tprim)
+                UsdPhysics.MeshCollisionAPI.Apply(tprim).CreateApproximationAttr().Set(
+                    "convexHull"
+                )
+                bind_physics_material(tprim, TAPE_MAT_PATH)
 
         if articulated:
             rb = UsdPhysics.RigidBodyAPI.Apply(g.GetPrim())
