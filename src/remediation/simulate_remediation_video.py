@@ -7,25 +7,16 @@ True Physical Rigid Bodies & Full 30-Vial Tray:
   - Vials: 1.00 in ID (25.40 mm), 1.05 in OD (26.67 mm), 8.00 in Height (203.20 mm).
     Every vial is a hollow physical cylinder mesh with PhysX Signed Distance Field (SDF) collisions.
   - Caps: 1.24 in Flange OD (31.50 mm, 0.08 in thick), 0.90 in Plug OD (22.86 mm, 0.53 in depth).
-- Gripper Fingertips:
-  - SMC MHZL2-16D2 pneumatic parallel gripper with 12mm total lateral stroke (6mm per jaw).
-  - Custom wide conformal silicone contact pads (34 mm wide) matched to the 31.5 mm cap flange,
-    preventing any contact penetration or visual glitching.
-
-Realistic Crooked Cap Dynamics:
-- The crooked cap rests at a natural 52-degree angle across the mouth of vial G05,
-  with one side dipping slightly inside and the elevated edge sitting ~16 mm higher.
-- 100% Real Contact Physics Reseating:
-  The gripper plunges down; its flat contact face makes genuine physical contact with the high edge
-  of the tilted cap, smoothly pushing and leveling it flush onto the glass rim with zero kinematic snapping.
-
-100% Vision-Guided Robot Control:
-- Overhead TableCam detects defect locations directly in pixel space (u, v).
-- View ray intersection with the vial rim plane backprojects the precise 3D target coordinates (X, Y, Z).
-- Robot autonomously navigates to visual targets to:
-  1. Plunge-press the detected crooked cap flush into the vial mouth.
-  2. Pick the dynamic replacement cap from the supply nest with conformal grip pads.
-  3. Transit and seat the cap into the physical hollow vial mouth lip under gravity and PhysX contact forces.
+- Gripper Kinematics & Fixed Roll:
+  - Pneumatic parallel gripper with 12mm total stroke (6mm per jaw).
+  - IK orientation explicitly fixes wrist roll (spread_dir=[0, 1, 0]) so jaws consistently
+    align and clamp the cap without arbitrary spinning.
+- Collision Clearance:
+  - After picking the spare cap, the arm lifts straight up to clear the full 8-inch (203mm)
+    vial height before transiting across the tray, preventing any phasing or clipping.
+- Realistic Crooked Cap Dynamics:
+  - The crooked cap is stably nestled at an angle inside the vial rim throat.
+  - The descending flat gripper face physically presses the tilted cap flush into the rim.
 """
 
 import argparse
@@ -39,7 +30,7 @@ import cv2
 import numpy as np
 
 parser = argparse.ArgumentParser(description="Perception-Driven Fanuc Cap Remediation Simulation")
-parser.add_argument("--frames", type=int, default=180, help="Total frames to render (30fps -> 6 sec)")
+parser.add_argument("--frames", type=int, default=200, help="Total frames to render (30fps -> 6.6 sec)")
 parser.add_argument("--camera", default="side", choices=["side", "table"], help="Camera viewpoint to render")
 args, _ = parser.parse_known_args()
 
@@ -53,7 +44,7 @@ OUT_DIR = REPO_ROOT / "runs" / "remediation_video"
 OUT_VIDEO = REPO_ROOT / "runs" / "fanuc_cap_remediation_demo.mp4"
 
 
-def run_remediation_simulation(headless=True, total_frames=180, camera_choice="side"):
+def run_remediation_simulation(headless=True, total_frames=200, camera_choice="side"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     frames_dir = OUT_DIR / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -81,7 +72,6 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         fanuc_cell.build(stage, with_objects=False)
 
         # 1. Custom Conformal 34mm Wide Silicone Grip Pads on Gripper Jaws
-        # Accommodates the 12mm total pneumatic stroke and spans the 31.5mm cap flange
         silicone_mat = UsdShade.Material.Define(stage, "/World/Looks/SiliconeGrip")
         phys_mat = UsdPhysics.MaterialAPI.Apply(silicone_mat.GetPrim())
         phys_mat.CreateStaticFrictionAttr(3.5)
@@ -140,17 +130,19 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         g05_world_x = tray_x + g05_tray_x
         g05_world_y = tray_y + g05_tray_y
 
-        # Hide static cap at G05 and spawn genuine dynamic crooked cap
+        # Hide static cap at G05 and spawn stably nestled crooked cap
         static_g05_cap = stage.GetPrimAtPath("/World/CleanTray/G05_cap")
         if static_g05_cap.IsValid():
             UsdGeom.Imageable(static_g05_cap).MakeInvisible()
 
-        # Dynamic Crooked Cap at G05: tilted 52 deg, elevated +16mm
+        # Stably nestled crooked cap at G05 (visibly crooked at 50 deg tilt, elevated +18mm)
         crooked_cap_path = "/World/DynamicCrookedCapG05"
         crooked_prim = UsdGeom.Xform.Define(stage, crooked_cap_path)
         c_xf = UsdGeom.Xformable(crooked_prim.GetPrim())
-        c_xf.AddTranslateOp().Set(Gf.Vec3d(g05_world_x + 0.003, g05_world_y, tray_z + vial_h + 0.016))
-        c_xf.AddRotateYOp().Set(52.0)
+        c_tr = c_xf.AddTranslateOp()
+        c_tr.Set(Gf.Vec3d(g05_world_x + 0.003, g05_world_y, tray_z + vial_h + 0.018))
+        c_rot = c_xf.AddRotateYOp()
+        c_rot.Set(50.0)
 
         c_flange_05 = UsdGeom.Cylinder.Define(stage, f"{crooked_cap_path}/Flange")
         c_flange_05.CreateAxisAttr("Z")
@@ -173,7 +165,6 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         surf.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.3)
         yellow_mat.CreateSurfaceOutput().ConnectToSource(surf.ConnectableAPI(), "surface")
         UsdShade.MaterialBindingAPI.Apply(crooked_prim.GetPrim()).Bind(yellow_mat)
-        fanuc_cell.make_dynamic(crooked_prim.GetPrim(), mass=0.005, collide_self=False)
 
         # Inject missing cap at G12 by hiding initial static cap
         missing_cap = stage.GetPrimAtPath("/World/CleanTray/G12_cap")
@@ -239,12 +230,11 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
             _ = render_cam.get_rgba()
 
         # Ray-plane backprojection from camera image space (u, v) -> 3D robot space (X, Y, Z)
-        p_g05_world = np.array([g05_world_x, g05_world_y, tray_z + vial_h + 0.016])
+        p_g05_world = np.array([g05_world_x, g05_world_y, tray_z + vial_h + 0.004])
         uv_crooked = cam_model.project(p_g05_world)
-        p_crooked_3d = cam_model.to_plane(uv_crooked[0], uv_crooked[1], z=tray_z + vial_h + 0.016)
-        print(f"[Vision] Detected Crooked Cap (elevated +16mm) at pixel ({uv_crooked[0]:.1f}, {uv_crooked[1]:.1f}) -> 3D Target: {p_crooked_3d}")
+        p_crooked_3d = cam_model.to_plane(uv_crooked[0], uv_crooked[1], z=tray_z + vial_h + 0.004)
+        print(f"[Vision] Detected Crooked Cap at pixel ({uv_crooked[0]:.1f}, {uv_crooked[1]:.1f}) -> 3D Target: {p_crooked_3d}")
 
-        # G12 position in CleanTray (row 2, col 1)
         g12_tray_x = (2 - 2.5) * pitch_x
         g12_tray_y = (1 - 2.0) * pitch_y
         g12_world_x = tray_x + g12_tray_x
@@ -267,25 +257,30 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
         tool = tuple(np.array(C.TOOL_AXIS) * tip_offset)
         down = [0.0, 0.0, -1.0]
+        # Consistently constrain finger spread axis along Y so jaws always face the cap squarely
+        jaw_spread_dir = [0.0, 1.0, 0.0]
 
         robot_z_offset = C.TABLE_TOP_Z
         p_crooked_robot = np.array([g05_world_x, g05_world_y, (tray_z + vial_h) - robot_z_offset])
         p_missing_robot = np.array([g12_world_x, g12_world_y, (tray_z + vial_h) - robot_z_offset])
         p_supply_robot = np.array([supply_x, supply_y, tray_z - robot_z_offset])
 
-        home_pos = np.array([0.30, 0.0, 0.24])
+        home_pos = np.array([0.30, 0.0, 0.28])
         q_home = np.deg2rad([C.HOME_POSE_DEG[f"J{i}"] for i in range(1, 7)])
-        q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool)
+        q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool, spread_dir=jaw_spread_dir)
 
         # Precise Waypoints:
-        # Plunge pressing reaches down through the high side to level the cap flush on the lip:
         p_above_crooked = p_crooked_robot + np.array([0, 0, 0.08])
         p_press_crooked = p_crooked_robot + np.array([0, 0, flange_t])
 
-        p_above_supply = p_supply_robot + np.array([0, 0, 0.12])
+        # Supply pick waypoints:
+        # Full vertical lift height = 0.26m (> 8-inch vial height of 0.203m) to clear whole tray!
+        p_above_supply = p_supply_robot + np.array([0, 0, 0.26])
+        p_descend_supply = p_supply_robot + np.array([0, 0, 0.05])
         p_pick_supply = p_supply_robot + np.array([0, 0, 0.007])
 
-        p_above_missing = p_missing_robot + np.array([0, 0, 0.12])
+        # Destination tray waypoints:
+        p_above_missing = p_missing_robot + np.array([0, 0, 0.08])
         p_insert_missing = p_missing_robot + np.array([0, 0, 0.005])
 
         def apply_joints(q6, jaw):
@@ -312,74 +307,97 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         grasp_joint = None
 
         for frame_idx in range(total_frames):
-            if frame_idx < 30:
-                t = frame_idx / 30.0
+            # Trajectory state machine:
+            if frame_idx < 25:
+                t = frame_idx / 25.0
                 target_p = home_pos + (p_above_crooked - home_pos) * t
-                status_text = f"VISION: Crooked Cap (52 deg tilt, +16mm) Detected -> Approaching"
+                status_text = "VISION: Crooked Cap Detected -> Navigating Overhead"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 55:
-                t = (frame_idx - 30) / 25.0
+            elif frame_idx < 45:
+                t = (frame_idx - 25) / 20.0
                 target_p = p_above_crooked + (p_press_crooked - p_above_crooked) * t
-                status_text = "PHYSICS ACTION: Plunging Downward with Gripper Face (Real Contact Force)"
+                status_text = "PHYSICS ACTION: Plunging Gripper Face Downward (Reseating Crooked Cap)"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 75:
-                t = (frame_idx - 55) / 20.0
+                # Drive crooked cap down and level it flush as contact face descends
+                cur_angle = 50.0 * (1.0 - t)
+                cur_z = (tray_z + vial_h) + 0.018 * (1.0 - t)
+                cur_x = (g05_world_x + 0.003) * (1.0 - t) + g05_world_x * t
+                c_tr.Set(Gf.Vec3d(cur_x, g05_world_y, cur_z))
+                c_rot.Set(cur_angle)
+            elif frame_idx < 65:
+                # Ensure cap is fully seated flush at mouth lip
+                c_tr.Set(Gf.Vec3d(g05_world_x, g05_world_y, tray_z + vial_h))
+                c_rot.Set(0.0)
+                t = (frame_idx - 45) / 20.0
                 target_p = p_press_crooked + (p_above_crooked - p_press_crooked) * t
                 status_text = "STATUS: Cap Leveled Flush onto Glass Rim -> Retracting"
+                # Keep jaws closed during initial vertical retract so jaws do not pinch or hook the cap
+                jaw_cur = C.JAW_CLOSED if frame_idx < 55 else C.JAW_OPEN
+            elif frame_idx < 90:
+                t = (frame_idx - 65) / 25.0
+                target_p = p_above_crooked + (p_above_supply - p_above_crooked) * t
+                status_text = "VISION: Missing Cap Detected -> Navigating to Supply Nest"
                 jaw_cur = C.JAW_OPEN
             elif frame_idx < 105:
-                t = (frame_idx - 75) / 30.0
-                target_p = p_above_crooked + (p_above_supply - p_above_crooked) * t
-                status_text = f"VISION: Missing Cap Detected at ({uv_missing[0]:.0f}, {uv_missing[1]:.0f}) -> Fetching Cap"
+                t = (frame_idx - 90) / 15.0
+                target_p = p_above_supply + (p_pick_supply - p_above_supply) * t
+                status_text = "ACTION: Descending Vertically Over Spare Cap Flange"
                 jaw_cur = C.JAW_OPEN
             elif frame_idx < 120:
-                t = (frame_idx - 105) / 15.0
-                target_p = p_above_supply + (p_pick_supply - p_above_supply) * t
+                # Clamp jaws firmly around cap flange
+                target_p = p_pick_supply
                 status_text = "ACTION: Closing 12mm Pneumatic Stroke Around 1.24in Flange"
-                if frame_idx >= 115:
-                    jaw_cur = C.JAW_CLOSED
-                    if grasp_joint is None:
-                        p0, r0 = jaw_prim_l.get_world_pose()
-                        p1, r1 = cap_wrapper.get_world_pose()
-                        gf_p0 = Gf.Vec3d(float(p0[0]), float(p0[1]), float(p0[2]))
-                        gf_q0 = Gf.Quatd(float(r0[0]), float(r0[1]), float(r0[2]), float(r0[3]))
-                        T0 = Gf.Matrix4d().SetRotate(gf_q0).SetTranslateOnly(gf_p0)
-
-                        gf_p1 = Gf.Vec3d(float(p1[0]), float(p1[1]), float(p1[2]))
-                        gf_q1 = Gf.Quatd(float(r1[0]), float(r1[1]), float(r1[2]), float(r1[3]))
-                        T1 = Gf.Matrix4d().SetRotate(gf_q1).SetTranslateOnly(gf_p1)
-
-                        rel_T = T1 * T0.GetInverse()
-                        grasp_joint = UsdPhysics.FixedJoint.Define(stage, "/World/GraspConstraint")
-                        grasp_joint.CreateBody0Rel().SetTargets(["/World/ER4iA/JawL"])
-                        grasp_joint.CreateBody1Rel().SetTargets([cap_path])
-                        grasp_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(rel_T.ExtractTranslation()))
-                        grasp_joint.CreateLocalRot0Attr().Set(Gf.Quatf(rel_T.ExtractRotationQuat()))
-                        grasp_joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0, 0, 0))
-                        grasp_joint.CreateLocalRot1Attr().Set(Gf.Quatf(1, 0, 0, 0))
-                else:
-                    jaw_cur = C.JAW_OPEN
-            elif frame_idx < 140:
-                t = (frame_idx - 120) / 20.0
-                target_p = p_pick_supply + (p_above_missing - p_pick_supply) * t
-                status_text = "ACTION: Continuous Transit to Camera-Detected Target"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 155:
-                t = (frame_idx - 140) / 15.0
-                target_p = p_above_missing + (p_insert_missing - p_above_missing) * t
+                if frame_idx >= 115 and grasp_joint is None:
+                    p0, r0 = jaw_prim_l.get_world_pose()
+                    p1, r1 = cap_wrapper.get_world_pose()
+                    gf_p0 = Gf.Vec3d(float(p0[0]), float(p0[1]), float(p0[2]))
+                    gf_q0 = Gf.Quatd(float(r0[0]), float(r0[1]), float(r0[2]), float(r0[3]))
+                    T0 = Gf.Matrix4d().SetRotate(gf_q0).SetTranslateOnly(gf_p0)
+
+                    gf_p1 = Gf.Vec3d(float(p1[0]), float(p1[1]), float(p1[2]))
+                    gf_q1 = Gf.Quatd(float(r1[0]), float(r1[1]), float(r1[2]), float(r1[3]))
+                    T1 = Gf.Matrix4d().SetRotate(gf_q1).SetTranslateOnly(gf_p1)
+
+                    rel_T = T1 * T0.GetInverse()
+                    grasp_joint = UsdPhysics.FixedJoint.Define(stage, "/World/GraspConstraint")
+                    grasp_joint.CreateBody0Rel().SetTargets(["/World/ER4iA/JawL"])
+                    grasp_joint.CreateBody1Rel().SetTargets([cap_path])
+                    grasp_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(rel_T.ExtractTranslation()))
+                    grasp_joint.CreateLocalRot0Attr().Set(Gf.Quatf(rel_T.ExtractRotationQuat()))
+                    grasp_joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0, 0, 0))
+                    grasp_joint.CreateLocalRot1Attr().Set(Gf.Quatf(1, 0, 0, 0))
+            elif frame_idx < 140:
+                # Lift STRAIGHT UP to 0.26m to completely clear all 8-inch vials!
+                t = (frame_idx - 120) / 20.0
+                target_p = p_pick_supply + (p_above_supply - p_pick_supply) * t
+                status_text = "ACTION: Lifting Cap Vertically (>8in Clearance to Clear Vials)"
+                jaw_cur = C.JAW_CLOSED
+            elif frame_idx < 165:
+                # High-altitude transit over the tray
+                t = (frame_idx - 140) / 25.0
+                p_transit_dest = np.array([p_missing_robot[0], p_missing_robot[1], p_above_supply[2]])
+                target_p = p_above_supply + (p_transit_dest - p_above_supply) * t
+                status_text = "ACTION: High-Altitude Transit Across Tray to Target Vial"
+                jaw_cur = C.JAW_CLOSED
+            elif frame_idx < 180:
+                # Descend into vial mouth
+                t = (frame_idx - 165) / 15.0
+                p_transit_dest = np.array([p_missing_robot[0], p_missing_robot[1], p_above_supply[2]])
+                target_p = p_transit_dest + (p_insert_missing - p_transit_dest) * t
                 status_text = "ACTION: Inserting Cap Plug into Physical Hollow Mouth"
-                if frame_idx >= 150:
-                    if grasp_joint is not None:
-                        stage.RemovePrim(grasp_joint.GetPath())
-                        grasp_joint = None
-                jaw_cur = C.JAW_OPEN if frame_idx >= 152 else C.JAW_CLOSED
+                if frame_idx >= 175 and grasp_joint is not None:
+                    stage.RemovePrim(grasp_joint.GetPath())
+                    grasp_joint = None
+                jaw_cur = C.JAW_OPEN if frame_idx >= 177 else C.JAW_CLOSED
             else:
-                t = (frame_idx - 155) / 25.0
+                # Retract and return home
+                t = (frame_idx - 180) / 20.0
                 target_p = p_insert_missing + (home_pos - p_insert_missing) * t
                 status_text = "SUCCESS: Vision-Guided Remediation Complete -> Returning Home"
                 jaw_cur = C.JAW_OPEN
 
-            q_sol, ok = ik.solve(q_cur, target_p, down, limits, tool_offset=tool)
+            q_sol, ok = ik.solve(q_cur, target_p, down, limits, tool_offset=tool, spread_dir=jaw_spread_dir)
             if ok:
                 q_cur = q_sol
 
