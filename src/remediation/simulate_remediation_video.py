@@ -121,15 +121,16 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         remove_or_disable("/World/CleanTray/G12_cap")
 
         # 1. 100% True Physics Dynamic Crooked Cap at G05
-        # Stably wedged at 20 deg tilt in the vial mouth
-        # (plug inside throat without wall interpenetration; high flange edge elevated ~6mm)
+        # Set to exact physical static equilibrium:
+        # Tilt = 16.5 deg, low side resting on rim at -r_tube, plug corner against opposite wall at +r_tube
+        # 100% dynamic rigid body with gravity ACTIVE THE WHOLE TIME (no kinematic hold)
         crooked_cap_path = "/World/DynamicCrookedCapG05"
         crooked_prim = UsdGeom.Xform.Define(stage, crooked_cap_path)
         c_xf = UsdGeom.Xformable(crooked_prim.GetPrim())
         c_tr = c_xf.AddTranslateOp()
-        c_tr.Set(Gf.Vec3d(g05_world_x + 0.0015, g05_world_y, tray_z + vial_h + 0.005))
+        c_tr.Set(Gf.Vec3d(g05_world_x - 0.0020, g05_world_y, tray_z + vial_h + 0.0031))
         c_rot = c_xf.AddRotateYOp()
-        c_rot.Set(22.0)
+        c_rot.Set(16.5)
 
         c_flange_05 = UsdGeom.Cylinder.Define(stage, f"{crooked_cap_path}/Flange")
         c_flange_05.CreateAxisAttr("Z")
@@ -152,18 +153,9 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         surf.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.3)
         yellow_mat.CreateSurfaceOutput().ConnectToSource(surf.ConnectableAPI(), "surface")
         UsdShade.MaterialBindingAPI.Apply(crooked_prim.GetPrim()).Bind(yellow_mat)
+        
+        # Pure dynamic rigid body from frame 0 - physics and gravity active the entire time!
         fanuc_cell.make_dynamic(crooked_prim.GetPrim(), mass=0.005, collide_self=False)
-        # Stably hold wedged orientation until gripper makes contact
-        UsdPhysics.RigidBodyAPI(crooked_prim.GetPrim()).CreateKinematicEnabledAttr().Set(True)
-
-        # Physical rim stop ring on tube G05 so flange CANNOT pass below the glass lip
-        rim_stop = UsdGeom.Cylinder.Define(stage, "/World/CleanTray/G05_RimStop")
-        rim_stop.CreateAxisAttr("Z")
-        rim_stop.CreateRadiusAttr(flange_r)
-        rim_stop.CreateHeightAttr(0.002)
-        UsdGeom.Xformable(rim_stop.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(g05_world_x, g05_world_y, tray_z + vial_h - 0.001))
-        UsdPhysics.CollisionAPI.Apply(rim_stop.GetPrim())
-        UsdGeom.Imageable(rim_stop.GetPrim()).CreateVisibilityAttr().Set("invisible")
 
         # 2. Spawn Machined Supply Nest Fixture & Dynamic Replacement Cap
         supply_x, supply_y = 0.22, 0.22
@@ -332,10 +324,8 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         q_cur = q_home.copy()
         jaw_cur = C.JAW_OPEN
 
-        crooked_rb = UsdPhysics.RigidBodyAPI(crooked_prim.GetPrim())
-
         for frame_idx in range(total_frames):
-            # Trajectory state machine (100% True PhysX rigid body contact & gravity):
+            # Trajectory state machine (100% True PhysX rigid body contact & gravity active the whole time):
             if frame_idx < 22:
                 t = frame_idx / 22.0
                 target_p = home_pos + (p_above_crooked - home_pos) * t
@@ -347,22 +337,23 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
                 target_p = p_above_crooked + (p_contact_crooked - p_above_crooked) * t
                 status_text = "ACTION: Descending Toward Crooked Cap (Approaching Contact Face)"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 52:
-                # Plunge press: Upon contact, release wedged kinematic hold to 100% dynamic rigid body
-                if frame_idx == 35:
-                    crooked_rb.CreateKinematicEnabledAttr().Set(False)
-                t = (frame_idx - 35) / 17.0
-                target_p = p_contact_crooked + (p_press_crooked - p_contact_crooked) * t
+            elif frame_idx < 58:
+                # Continuous physical plunge press with smooth S-curve easing:
+                # Flat bottom face of gripper makes gentle contact and steadily presses high rim edge down
+                raw_t = (frame_idx - 35) / 23.0
+                smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
+                target_p = p_contact_crooked + (p_press_crooked - p_contact_crooked) * smooth_t
                 status_text = "PHYSICS ACTION: Gripper Contact Face Depressing Tilted Cap Flush"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 68:
+            elif frame_idx < 72:
                 # Retract back up after pure contact seating
-                t = (frame_idx - 52) / 16.0
-                target_p = p_press_crooked + (p_above_crooked - p_press_crooked) * t
+                raw_t = (frame_idx - 58) / 14.0
+                smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
+                target_p = p_press_crooked + (p_above_crooked - p_press_crooked) * smooth_t
                 status_text = "STATUS: Cap Leveled Flush onto Glass Rim -> Retracting"
-                jaw_cur = C.JAW_CLOSED if frame_idx < 58 else C.JAW_OPEN
-            elif frame_idx < 90:
-                t = (frame_idx - 68) / 22.0
+                jaw_cur = C.JAW_CLOSED if frame_idx < 64 else C.JAW_OPEN
+            elif frame_idx < 92:
+                t = (frame_idx - 72) / 20.0
                 target_p = p_above_crooked + (p_above_supply - p_above_crooked) * t
                 status_text = "VISION: Missing Cap Detected -> Navigating to Supply Nest"
                 jaw_cur = C.JAW_OPEN
