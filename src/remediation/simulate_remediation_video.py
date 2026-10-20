@@ -2,19 +2,19 @@
 """
 Simulate and Render the Complete Fanuc ER-4iA Cap Remediation Sequence.
 
-Execution Pipeline:
-1. Spawns Fanuc ER-4iA cell + table + isolated clean tray fixture with defects:
-     - G05: Crooked cap (tilted at 26°)
-     - G12: Missing cap (uncapped vial)
-     - /World/CapSupply: Spare replacement cap in supply nest
-2. Fixed Assets & Realistic Sizing:
-     - Uses properly scaled CAD visual matching Dataset 3 (CAP_RADIUS, CAP_HEIGHT, yellow polypropylene)
-     - Clean tray material bindings mapped to realistic brushed aluminium, glass, and yellow caps
-     - Carried cap dynamically attaches to gripper between jaw fingertips during transit
-3. Sequence:
-     - Move 1 (G05 Reseat): Approach above G05 -> descend & plunge press cap flush -> retract
-     - Move 2 (G12 Backfill): Transit to Cap Supply -> grasp spare cap -> carry to G12 -> seat on vial -> return home
-4. Captures 180 frames with heads-up telemetry HUD overlay and encodes to MP4 video.
+Physical & Geometric Specifications (docs/PHYSICAL_SPECIFICATIONS.md):
+- Vials: 1.00 in ID, 1.05 in OD, 8.00 in height, flat bottom.
+- Caps: 1.24 in OD top flange (0.08 in thick), 0.90 in bottom outer diameter, 0.80 in inner hollow diameter.
+- Tray: 1.25 in aperture holes.
+
+100% Continuous Physical Grasping & PhysX Dynamic Simulation:
+- NO faked teleportation or visibility toggling of carried caps.
+- Cap is spawned as a true PhysX dynamic rigid body at the supply nest.
+- Parallel gripper descends, closes jaws, and engages a dynamic PhysX FixedJoint
+  attachment constraint between JawL and the cap with mathematically exact relative transform.
+- Arm physically lifts the cap from the nest, transports it smoothly across the workspace,
+  and seats it onto vial G12.
+- Upon seating, the constraint is released and gripper jaws open cleanly.
 """
 
 import argparse
@@ -34,7 +34,7 @@ parser.add_argument("--camera", default="side", choices=["side", "table"], help=
 args, _ = parser.parse_known_args()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-FANUC_DIR = Path("/data/ai_club/team_14_2026/data/fanuc_er4ia_sim")
+FANUC_DIR = REPO_ROOT / "data" / "fanuc_er4ia_sim"
 if not FANUC_DIR.exists():
     FANUC_DIR = REPO_ROOT / "shared" / "data" / "fanuc_er4ia_sim"
 sys.path.insert(0, str(FANUC_DIR))
@@ -54,11 +54,10 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
 
     try:
         import omni.usd
-        from pxr import UsdGeom, Gf, UsdPhysics
+        from pxr import Usd, UsdGeom, Gf, UsdPhysics, PhysxSchema, UsdShade, Sdf
         from isaacsim.core.api import World
-        from isaacsim.core.prims import SingleArticulation
+        from isaacsim.core.prims import SingleArticulation, SingleXFormPrim
         from isaacsim.core.utils.types import ArticulationAction
-        from isaacsim.core.utils.stage import add_reference_to_stage
         from isaacsim.sensors.camera import Camera
 
         import cell as fanuc_cell
@@ -74,8 +73,6 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
 
         # Place the clean isolated tray flush on the table
         clean_tray_usd = REPO_ROOT / "shared" / "scenes" / "clean_vial_tray.usda"
-        cap_usda = FANUC_DIR / "assets" / "usd_assets" / "vial_cap.usda"
-
         tray_prim = UsdGeom.Xform.Define(stage, "/World/CleanTray")
         tray_prim.GetPrim().GetReferences().AddReference(str(clean_tray_usd))
 
@@ -83,7 +80,6 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         tray_x = 0.38
         tray_y = 0.0
         tray_z = C.TABLE_TOP_Z + C.SURFACE_DZ
-
         fanuc_cell.place(tray_prim.GetPrim(), (tray_x, tray_y, tray_z), yaw_deg=0.0)
         print(f"[Remediation Simulation] Clean isolated tray placed at table surface (Z={tray_z:.4f}m)")
 
@@ -98,46 +94,50 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 xf_c.AddRotateXYZOp().Set(Gf.Vec3f(26.0, 14.0, 45.0))
             print("[Remediation Simulation] Injected crooked cap at G05 (26 deg tilt)")
 
-        # Inject missing cap at G12 (hidden initially)
+        # Inject missing cap at G12 by hiding the static placeholder cap
         missing_cap = stage.GetPrimAtPath("/World/CleanTray/G12_cap")
         if missing_cap.IsValid():
             UsdGeom.Imageable(missing_cap).MakeInvisible()
-            print("[Remediation Simulation] Injected missing cap at G12")
+            print("[Remediation Simulation] Injected missing cap at G12 (hidden)")
 
-        # Spawn accurately scaled spare replacement cap in the supply nest (X=0.22, Y=0.22)
+        # Setup True Physical Dynamic Replacement Cap in the supply nest
+        # Physical specifications:
+        # Flange OD = 1.24 in (31.50 mm, R = 15.75 mm), Thickness = 0.08 in (2.032 mm)
+        # Plug OD = 0.90 in (22.86 mm, R = 11.43 mm), Height = 0.53 in (13.46 mm)
         supply_x, supply_y = 0.22, 0.22
-        supply_cap_prim = UsdGeom.Xform.Define(stage, "/World/SupplyCap")
-        UsdGeom.Xformable(supply_cap_prim.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(supply_x, supply_y, tray_z))
-        vis_supply = "/World/SupplyCap/Visual"
-        add_reference_to_stage(str(cap_usda), vis_supply)
-        fanuc_cell.scale_cad_visual(stage, vis_supply, (C.CAP_RADIUS / 0.015875, C.CAP_RADIUS / 0.015875, C.CAP_HEIGHT / 0.01570))
-        vis_xf = UsdGeom.Xformable(stage.GetPrimAtPath(vis_supply))
-        tr_op = vis_xf.AddTranslateOp(opSuffix="rimRest")
-        tr_op.Set(Gf.Vec3d(0, 0, C.CAP_FLANGE_THICK))
-        rot_op = vis_xf.AddRotateXOp(opSuffix="domeUp")
-        rot_op.Set(180.0)  # upright, flange resting on table
-        existing_ops = [op for op in vis_xf.GetOrderedXformOps() if op.GetOpName() not in (tr_op.GetOpName(), rot_op.GetOpName())]
-        vis_xf.SetXformOpOrder([tr_op] + existing_ops + [rot_op])
-        print("[Remediation Simulation] Accurately sized spare cap spawned in supply nest")
+        cap_path = "/World/PhysicalSpareCap"
+        cap_prim = UsdGeom.Xform.Define(stage, cap_path)
+        UsdGeom.Xformable(cap_prim.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(supply_x, supply_y, tray_z))
 
-        # Create carried cap attached to gripper (hidden until grasped)
-        tool_flange_path = "/World/ER4iA/J6_link"
-        carried_cap_prim = UsdGeom.Xform.Define(stage, f"{tool_flange_path}/CarriedCap")
-        vis_carried = f"{tool_flange_path}/CarriedCap/Visual"
-        add_reference_to_stage(str(cap_usda), vis_carried)
-        fanuc_cell.scale_cad_visual(stage, vis_carried, (C.CAP_RADIUS / 0.015875, C.CAP_RADIUS / 0.015875, C.CAP_HEIGHT / 0.01570))
-        c_vis_xf = UsdGeom.Xformable(stage.GetPrimAtPath(vis_carried))
-        c_tr_op = c_vis_xf.AddTranslateOp(opSuffix="rimRest")
-        c_tr_op.Set(Gf.Vec3d(0, 0, C.CAP_FLANGE_THICK))
-        c_rot_op = c_vis_xf.AddRotateXOp(opSuffix="domeUp")
-        c_rot_op.Set(180.0)
-        c_existing_ops = [op for op in c_vis_xf.GetOrderedXformOps() if op.GetOpName() not in (c_tr_op.GetOpName(), c_rot_op.GetOpName())]
-        c_vis_xf.SetXformOpOrder([c_tr_op] + c_existing_ops + [c_rot_op])
+        flange_r = (1.24 * 0.0254) / 2.0
+        flange_t = 0.08 * 0.0254
+        c_flange = UsdGeom.Cylinder.Define(stage, f"{cap_path}/Flange")
+        c_flange.CreateAxisAttr("Z")
+        c_flange.CreateRadiusAttr(flange_r)
+        c_flange.CreateHeightAttr(flange_t)
+        UsdGeom.Xformable(c_flange.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
+        UsdPhysics.CollisionAPI.Apply(c_flange.GetPrim())
 
-        # Position right between gripper fingertips (tip offset = 0.223m)
-        tip_offset = fanuc_cell.tip_offset()
-        UsdGeom.Xformable(carried_cap_prim.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, tip_offset - 0.005))
-        UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeInvisible()
+        plug_r = (0.90 * 0.0254) / 2.0
+        plug_h = 0.53 * 0.0254
+        c_plug = UsdGeom.Cylinder.Define(stage, f"{cap_path}/Plug")
+        c_plug.CreateAxisAttr("Z")
+        c_plug.CreateRadiusAttr(plug_r)
+        c_plug.CreateHeightAttr(plug_h)
+        UsdGeom.Xformable(c_plug.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t + plug_h / 2))
+        UsdPhysics.CollisionAPI.Apply(c_plug.GetPrim())
+
+        # Cap Material: High-visibility vibrant yellow molded plastic
+        yellow_mat = UsdShade.Material.Define(stage, "/World/Looks/CapYellow")
+        surf = UsdShade.Shader.Define(stage, "/World/Looks/CapYellow/Surface")
+        surf.CreateIdAttr("UsdPreviewSurface")
+        surf.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.96, 0.76, 0.04))
+        surf.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.3)
+        yellow_mat.CreateSurfaceOutput().ConnectToSource(surf.ConnectableAPI(), "surface")
+        UsdShade.MaterialBindingAPI.Apply(cap_prim.GetPrim()).Bind(yellow_mat)
+
+        # Dynamic rigid body with accurate 5-gram mass
+        fanuc_cell.make_dynamic(cap_prim.GetPrim(), mass=0.005, collide_self=False)
 
         # Camera selection
         cam_paths = {
@@ -164,6 +164,7 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         idx = {name: i for i, name in enumerate(names)}
         limits = np.deg2rad([C.JOINT_LIMITS_DEG[f"J{i}"] for i in range(1, 7)])
 
+        tip_offset = fanuc_cell.tip_offset()
         ik.set_tool_axis(C.TOOL_AXIS)
         ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
         tool = tuple(np.array(C.TOOL_AXIS) * tip_offset)
@@ -174,15 +175,17 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         q_home = np.deg2rad([C.HOME_POSE_DEG[f"J{i}"] for i in range(1, 7)])
         q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool)
 
-        # Precise target coordinates relative to robot base:
-        p_above_g05 = np.array([0.242, 0.106, 0.160])
-        p_press_g05 = np.array([0.242, 0.106, 0.076])
+        # Highly precise target coordinates relative to robot base:
+        p_above_g05 = np.array([0.2516, 0.1226, 0.160])
+        p_press_g05 = np.array([0.2516, 0.1226, 0.052])
 
+        # Supply pick target: align gripper fingertips flush against the cap flange
         p_above_supply = np.array([supply_x, supply_y, 0.160])
-        p_pick_supply = np.array([supply_x, supply_y, 0.015])
+        p_pick_supply = np.array([supply_x, supply_y, 0.007])
 
-        p_above_g12 = np.array([0.344, -0.078, 0.160])
-        p_place_g12 = np.array([0.344, -0.078, 0.076])
+        # Vial G12 target:
+        p_above_g12 = np.array([0.3538, -0.0612, 0.160])
+        p_place_g12 = np.array([0.3538, -0.0612, 0.052])
 
         def apply_joints(q6, jaw):
             full = arm.get_joint_positions().copy()
@@ -210,6 +213,10 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
         print(f"[Remediation Simulation] Starting motion trajectory rendering ({total_frames} frames)...")
         q_cur = q_home.copy()
         jaw_cur = C.JAW_OPEN
+
+        cap_wrapper = SingleXFormPrim(cap_path)
+        jaw_prim_l = SingleXFormPrim("/World/ER4iA/JawL")
+        grasp_joint = None
 
         for frame_idx in range(total_frames):
             # Trajectory state machine
@@ -245,9 +252,29 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 status_text = "ACTION: Grasping Replacement Cap from Supply Nest"
                 if frame_idx >= 115:
                     jaw_cur = C.JAW_CLOSED
-                    # Cap is grasped: hide table cap and show carried cap in gripper
-                    UsdGeom.Imageable(supply_cap_prim.GetPrim()).MakeInvisible()
-                    UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeVisible()
+                    if grasp_joint is None:
+                        # Establish mathematically exact physical fixed joint constraint
+                        p0, r0 = jaw_prim_l.get_world_pose()
+                        p1, r1 = cap_wrapper.get_world_pose()
+                        gf_p0 = Gf.Vec3d(float(p0[0]), float(p0[1]), float(p0[2]))
+                        gf_q0 = Gf.Quatd(float(r0[0]), float(r0[1]), float(r0[2]), float(r0[3]))
+                        T0 = Gf.Matrix4d().SetRotate(gf_q0).SetTranslateOnly(gf_p0)
+
+                        gf_p1 = Gf.Vec3d(float(p1[0]), float(p1[1]), float(p1[2]))
+                        gf_q1 = Gf.Quatd(float(r1[0]), float(r1[1]), float(r1[2]), float(r1[3]))
+                        T1 = Gf.Matrix4d().SetRotate(gf_q1).SetTranslateOnly(gf_p1)
+
+                        rel_T = T1 * T0.GetInverse()
+                        rel_p = rel_T.ExtractTranslation()
+                        rel_q = rel_T.ExtractRotationQuat()
+
+                        grasp_joint = UsdPhysics.FixedJoint.Define(stage, "/World/GraspConstraint")
+                        grasp_joint.CreateBody0Rel().SetTargets(["/World/ER4iA/JawL"])
+                        grasp_joint.CreateBody1Rel().SetTargets([cap_path])
+                        grasp_joint.CreateLocalPos0Attr().Set(Gf.Vec3f(rel_p))
+                        grasp_joint.CreateLocalRot0Attr().Set(Gf.Quatf(rel_q))
+                        grasp_joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0, 0, 0))
+                        grasp_joint.CreateLocalRot1Attr().Set(Gf.Quatf(1, 0, 0, 0))
                 else:
                     jaw_cur = C.JAW_OPEN
             elif frame_idx < 140:
@@ -260,10 +287,9 @@ def run_remediation_simulation(headless=True, total_frames=180, camera_choice="s
                 target_p = p_above_g12 + (p_place_g12 - p_above_g12) * t
                 status_text = "ACTION: Seating Cap on Vial G12 & Opening Gripper"
                 if frame_idx >= 150:
-                    # Release onto vial
-                    UsdGeom.Imageable(carried_cap_prim.GetPrim()).MakeInvisible()
-                    if missing_cap.IsValid():
-                        UsdGeom.Imageable(missing_cap).MakeVisible()
+                    if grasp_joint is not None:
+                        stage.RemovePrim(grasp_joint.GetPath())
+                        grasp_joint = None
                 jaw_cur = C.JAW_OPEN if frame_idx >= 152 else C.JAW_CLOSED
             else:
                 t = (frame_idx - 155) / 25.0
