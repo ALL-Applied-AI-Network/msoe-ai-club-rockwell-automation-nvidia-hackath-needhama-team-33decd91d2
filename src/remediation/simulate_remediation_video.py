@@ -31,7 +31,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description="Perception-Driven Fanuc Cap Remediation Simulation")
 parser.add_argument("--frames", type=int, default=200, help="Total frames to render (30fps -> 6.6 sec)")
-parser.add_argument("--camera", default="side", choices=["side", "table"], help="Camera viewpoint to render")
+parser.add_argument("--camera", default="table", choices=["side", "table"], help="Camera viewpoint to render (default: table / top-down)")
 args, _ = parser.parse_known_args()
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -44,7 +44,7 @@ OUT_DIR = REPO_ROOT / "runs" / "remediation_video"
 OUT_VIDEO = REPO_ROOT / "runs" / "fanuc_cap_remediation_demo.mp4"
 
 
-def run_remediation_simulation(headless=True, total_frames=200, camera_choice="side"):
+def run_remediation_simulation(headless=True, total_frames=200, camera_choice="table"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     frames_dir = OUT_DIR / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -271,6 +271,8 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="s
 
         # Precise Waypoints:
         p_above_crooked = p_crooked_robot + np.array([0, 0, 0.08])
+        # Exact physical contact height: cap elevated by 18mm + 2mm flange thickness = 20mm
+        p_contact_crooked = p_crooked_robot + np.array([0, 0, 0.020])
         p_press_crooked = p_crooked_robot + np.array([0, 0, flange_t])
 
         # Supply pick waypoints:
@@ -308,33 +310,43 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="s
 
         for frame_idx in range(total_frames):
             # Trajectory state machine:
-            if frame_idx < 25:
-                t = frame_idx / 25.0
+            if frame_idx < 22:
+                t = frame_idx / 22.0
                 target_p = home_pos + (p_above_crooked - home_pos) * t
                 status_text = "VISION: Crooked Cap Detected -> Navigating Overhead"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 45:
-                t = (frame_idx - 25) / 20.0
-                target_p = p_above_crooked + (p_press_crooked - p_above_crooked) * t
-                status_text = "PHYSICS ACTION: Plunging Gripper Face Downward (Reseating Crooked Cap)"
+                # Cap stays 100% stationary before contact
+                c_tr.Set(Gf.Vec3d(g05_world_x + 0.003, g05_world_y, tray_z + vial_h + 0.018))
+                c_rot.Set(50.0)
+            elif frame_idx < 35:
+                # Descend straight toward cap contact face - cap DOES NOT MOVE until touched
+                t = (frame_idx - 22) / 13.0
+                target_p = p_above_crooked + (p_contact_crooked - p_above_crooked) * t
+                status_text = "ACTION: Descending Toward Crooked Cap (Approaching Contact Face)"
                 jaw_cur = C.JAW_CLOSED
-                # Drive crooked cap down and level it flush as contact face descends
+                c_tr.Set(Gf.Vec3d(g05_world_x + 0.003, g05_world_y, tray_z + vial_h + 0.018))
+                c_rot.Set(50.0)
+            elif frame_idx < 50:
+                # Plunge press: Jaw makes contact and pushes high edge down
+                t = (frame_idx - 35) / 15.0
+                target_p = p_contact_crooked + (p_press_crooked - p_contact_crooked) * t
+                status_text = "PHYSICS ACTION: Gripper Contact Face Depressing Tilted Cap Flush"
+                jaw_cur = C.JAW_CLOSED
                 cur_angle = 50.0 * (1.0 - t)
                 cur_z = (tray_z + vial_h) + 0.018 * (1.0 - t)
                 cur_x = (g05_world_x + 0.003) * (1.0 - t) + g05_world_x * t
                 c_tr.Set(Gf.Vec3d(cur_x, g05_world_y, cur_z))
                 c_rot.Set(cur_angle)
-            elif frame_idx < 65:
+            elif frame_idx < 68:
                 # Ensure cap is fully seated flush at mouth lip
                 c_tr.Set(Gf.Vec3d(g05_world_x, g05_world_y, tray_z + vial_h))
                 c_rot.Set(0.0)
-                t = (frame_idx - 45) / 20.0
+                t = (frame_idx - 50) / 18.0
                 target_p = p_press_crooked + (p_above_crooked - p_press_crooked) * t
                 status_text = "STATUS: Cap Leveled Flush onto Glass Rim -> Retracting"
-                # Keep jaws closed during initial vertical retract so jaws do not pinch or hook the cap
-                jaw_cur = C.JAW_CLOSED if frame_idx < 55 else C.JAW_OPEN
+                jaw_cur = C.JAW_CLOSED if frame_idx < 58 else C.JAW_OPEN
             elif frame_idx < 90:
-                t = (frame_idx - 65) / 25.0
+                t = (frame_idx - 68) / 22.0
                 target_p = p_above_crooked + (p_above_supply - p_above_crooked) * t
                 status_text = "VISION: Missing Cap Detected -> Navigating to Supply Nest"
                 jaw_cur = C.JAW_OPEN
