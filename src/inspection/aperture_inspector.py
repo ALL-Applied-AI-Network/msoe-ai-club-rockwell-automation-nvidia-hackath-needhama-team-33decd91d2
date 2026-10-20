@@ -256,11 +256,11 @@ def annotate_inspection_frame(img, inspection_results, raw_detections=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Full-Frame YOLO Vial Detector & Slot Inspector")
-    parser.add_argument("--image", default="shared/inspection_models/test_defect_scene/render.png", help="Input tray image")
+    parser.add_argument("--image", default="shared/inspection_models/yolo_detection_dataset/images/val/scene_000.jpg", help="Input tray image")
     parser.add_argument("--weights", default="shared/inspection_models/vial_fullframe_det_best.pt", help="Path to trained YOLOv11 detector weights")
     parser.add_argument("--expected-count", type=int, default=30, help="Expected filled vial count")
-    parser.add_argument("--out-annotated", default="shared/inspection_models/test_defect_scene/annotated_detection.png", help="Path to save annotated inspection image")
-    parser.add_argument("--out-json", default="shared/inspection_models/test_defect_scene/decision_detection.json", help="Path to save inspection decision JSON")
+    parser.add_argument("--out-annotated", default="runs/annotated_detection.png", help="Path to save annotated inspection image")
+    parser.add_argument("--out-json", default="runs/decision_detection.json", help="Path to save inspection decision JSON")
     args = parser.parse_args()
 
     inspector = FixtureDetectorInspector(model_weights=args.weights)

@@ -49,6 +49,13 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
     with open(apertures_path) as f:
         apertures = json.load(f)
 
+    # Load scrap tray apertures (Fixture S) so all empty scrap holes are explicitly labeled no_vial
+    scrap_apertures_path = REPO_ROOT / "src" / "inspection" / "config" / "fixture_s_apertures.json"
+    scrap_apertures = {}
+    if scrap_apertures_path.exists():
+        with open(scrap_apertures_path) as f:
+            scrap_apertures = json.load(f)
+
     stage_file = CSI_DIR / "stations" / "tray_inspection" / "tray_inspection.usdc"
     cam_json_path = CSI_DIR / "cameras" / "CapSealCam.json"
     with open(cam_json_path) as f:
@@ -199,6 +206,7 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
             txt_out = YOLO_DET_DIR / "labels" / split / txt_name
 
             lines = []
+            # 1. Label Good Tray (Fixture G) slots
             for s_id, info in apertures.items():
                 slot_num = info["slot"]
                 cls_name = slot_labels[slot_num]
@@ -209,6 +217,13 @@ def generate_fullframe_dataset(num_scenes=30, seed=42):
                 cy_norm = info["y"] / float(img_h)
 
                 lines.append(f"{cls_id} {cx_norm:.6f} {cy_norm:.6f} {box_w:.6f} {box_h:.6f}")
+
+            # 2. Label Scrap Tray (Fixture S) slots as no_vial (empty holes)
+            no_vial_cls = CLASS_MAP["no_vial"]
+            for s_id, s_info in scrap_apertures.items():
+                scx_norm = s_info["x"] / float(img_w)
+                scy_norm = s_info["y"] / float(img_h)
+                lines.append(f"{no_vial_cls} {scx_norm:.6f} {scy_norm:.6f} {box_w:.6f} {box_h:.6f}")
 
             with open(txt_out, "w") as f:
                 f.write("\n".join(lines) + "\n")

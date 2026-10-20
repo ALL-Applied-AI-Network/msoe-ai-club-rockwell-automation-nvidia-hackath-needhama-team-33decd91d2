@@ -20,15 +20,15 @@ echo "=================================================================="
 
 echo ""
 echo "=================================================================="
-echo " [Step 2/4] Generating Synthetic YOLO Detection Dataset..."
+echo " [Step 2/4] Generating Synthetic YOLO Detection Dataset (80 scenes)..."
 echo "=================================================================="
-./scripts/run_generate_fullframe_data.sh --scenes 30
+./scripts/run_generate_fullframe_data.sh --scenes 80
 
 echo ""
 echo "=================================================================="
-echo " [Step 3/4] Training YOLOv11 Detector on GPU..."
+echo " [Step 3/4] Training YOLOv11 Detector on GPU (50 epochs)..."
 echo "=================================================================="
-./scripts/run_train_detector.sh --epochs 35 --batch 16
+./scripts/run_train_detector.sh --epochs 50 --batch 16
 
 echo ""
 echo "=================================================================="
@@ -40,6 +40,6 @@ echo ""
 echo "=================================================================="
 echo " Pipeline Complete!"
 echo " Results:"
-echo "   - Visualization: shared/inspection_models/test_defect_scene/annotated_detection.png"
-echo "   - Decision JSON: shared/inspection_models/test_defect_scene/decision_detection.json"
+echo "   - Visualization: runs/annotated_detection.png"
+echo "   - Decision JSON: runs/decision_detection.json"
 echo "=================================================================="
