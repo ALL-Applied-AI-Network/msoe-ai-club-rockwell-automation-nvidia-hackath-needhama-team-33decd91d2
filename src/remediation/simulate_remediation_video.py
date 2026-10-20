@@ -31,7 +31,7 @@ import cv2
 import numpy as np
 
 parser = argparse.ArgumentParser(description="Perception-Driven Fanuc Cap Remediation Simulation")
-parser.add_argument("--frames", type=int, default=200, help="Total frames to render (30fps -> 6.6 sec)")
+parser.add_argument("--frames", type=int, default=240, help="Total frames to render (30fps -> 8.0 sec)")
 parser.add_argument("--camera", default="side", choices=["side", "table"], help="Camera viewpoint to render (side or table)")
 args, _ = parser.parse_known_args()
 
@@ -121,16 +121,16 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         remove_or_disable("/World/CleanTray/G12_cap")
 
         # 1. 100% True Physics Dynamic Crooked Cap at G05
-        # Set to exact physical static equilibrium:
-        # Tilt = 16.5 deg, low side resting on rim at -r_tube, plug corner against opposite wall at +r_tube
-        # 100% dynamic rigid body with gravity ACTIVE THE WHOLE TIME (no kinematic hold)
+        # Set to the exact physical release pose observed when a cap is placed askew on the vial:
+        # Initialized slightly above the rim (+0.0055m) and cocked at ~20 degrees.
+        # Under true gravity and PhysX contacts, it balances and rests naturally askew in the tube mouth.
         crooked_cap_path = "/World/DynamicCrookedCapG05"
         crooked_prim = UsdGeom.Xform.Define(stage, crooked_cap_path)
         c_xf = UsdGeom.Xformable(crooked_prim.GetPrim())
         c_tr = c_xf.AddTranslateOp()
-        c_tr.Set(Gf.Vec3d(g05_world_x - 0.0020, g05_world_y, tray_z + vial_h + 0.0031))
+        c_tr.Set(Gf.Vec3d(g05_world_x - 0.0055, g05_world_y, tray_z + vial_h + 0.0055))
         c_rot = c_xf.AddRotateYOp()
-        c_rot.Set(16.5)
+        c_rot.Set(21.0)
 
         c_flange_05 = UsdGeom.Cylinder.Define(stage, f"{crooked_cap_path}/Flange")
         c_flange_05.CreateAxisAttr("Z")
@@ -296,9 +296,10 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         p_pick_supply = p_supply_robot + np.array([0, 0, nest_h - claw_shelf_dz])
 
         # Destination tray waypoints:
-        # Insert depth: descend until the flange bottom meets the glass rim lip.
+        # Insert depth: descend deep enough (-0.0035m) so the flange bottom is securely pressed
+        # flush against the glass rim lip before releasing.
         p_above_missing = p_missing_robot + np.array([0, 0, 0.08])
-        p_insert_missing = p_missing_robot + np.array([0, 0, -claw_shelf_dz])
+        p_insert_missing = p_missing_robot + np.array([0, 0, -0.0035])
 
         # Gripper Jaw Targets:
         # Open: 33mm inner clearance (+1.5mm wider than 31.5mm flange)
@@ -387,18 +388,33 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
                 target_p = p_above_supply + (p_transit_dest - p_above_supply) * t
                 status_text = "ACTION: High-Altitude Transit Across Tray to Target Vial"
                 jaw_cur = JAW_CLAMPED
-            elif frame_idx < 184:
-                # Descend into vial mouth until flange is seated flush on the glass lip
-                t = (frame_idx - 168) / 16.0
+            elif frame_idx < 192:
+                # Descend fully into vial mouth until flange is firmly seated flush on the glass lip
+                t = (frame_idx - 168) / 24.0
                 p_transit_dest = np.array([p_missing_robot[0], p_missing_robot[1], p_above_supply[2]])
                 target_p = p_transit_dest + (p_insert_missing - p_transit_dest) * t
-                status_text = "ACTION: Inserting Cap Plug into Physical Hollow Mouth (Seated Flush)"
-                # Open jaws when fully seated so cap releases under pure gravity
-                jaw_cur = C.JAW_OPEN if frame_idx >= 180 else JAW_CLAMPED
+                status_text = "ACTION: Inserting Cap Plug Deep into Vial Mouth (Flush Seating)"
+                jaw_cur = JAW_CLAMPED
+            elif frame_idx < 202:
+                # Hold stationary at full insert depth while pneumatic jaws fully open/release
+                target_p = p_insert_missing
+                status_text = "ACTION: Releasing Pneumatic Grip -> Jaws Opening Fully"
+                jaw_cur = C.JAW_OPEN
+            elif frame_idx < 222:
+                # Dwell stationary for ~1 second with jaws completely open: cap settles stably under gravity
+                target_p = p_insert_missing
+                status_text = "ACTION: Settling Pause (1s Dwell Under Gravity -> Cap Perfectly Flush)"
+                jaw_cur = C.JAW_OPEN
+            elif frame_idx < 232:
+                # Lift STRAIGHT UP vertically to clear the seated cap before any lateral motion
+                t = (frame_idx - 222) / 10.0
+                target_p = p_insert_missing + (p_above_missing - p_insert_missing) * t
+                status_text = "ACTION: Lifting Straight Up Vertically Over Seated Cap"
+                jaw_cur = C.JAW_OPEN
             else:
-                # Retract and return home
-                t = (frame_idx - 184) / 16.0
-                target_p = p_insert_missing + (home_pos - p_insert_missing) * t
+                # Retract smoothly back to home position
+                t = (frame_idx - 232) / 8.0
+                target_p = p_above_missing + (home_pos - p_above_missing) * t
                 status_text = "SUCCESS: Vision-Guided Remediation Complete -> Returning Home"
                 jaw_cur = C.JAW_OPEN
 
