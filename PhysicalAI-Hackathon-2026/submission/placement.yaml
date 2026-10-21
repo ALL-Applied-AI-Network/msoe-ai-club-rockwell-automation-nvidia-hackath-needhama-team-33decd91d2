@@ -1,0 +1,17 @@
+# Placement layout across rollouts
+# Each rollout scatters 10 loose caps on the table and randomizes tray defects
+
+rollouts:
+  - objects:
+      table_cap:
+        - [380, -200, 0]
+        - [420, -180, 45]
+        - [340, -220, 90]
+        - [400, -250, 120]
+        - [360, -160, 30]
+        - [430, -210, 15]
+        - [350, -190, 75]
+        - [410, -170, 60]
+        - [370, -230, 105]
+        - [390, -240, 135]
+    prompt: Inspect vial tray, reseat crooked caps, and replace missing caps from loose caps on the table.

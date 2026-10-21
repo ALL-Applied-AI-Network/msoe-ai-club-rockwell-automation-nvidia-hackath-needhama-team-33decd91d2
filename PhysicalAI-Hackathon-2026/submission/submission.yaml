@@ -1,0 +1,37 @@
+# Your submission. Run: uv run run.py --submit
+
+team: Team 14
+contact: aneedham0577@gmail.com
+policy: AutonomousTrayRemediationPolicy
+
+# Choose the closest model type. This does not affect scoring.
+model_type: Hybrid
+# VA          Images -> actions (ACT, Diffusion Policy)
+# VLA         Images + instructions -> actions (NVIDIA GR00T)
+# WAM         Predicts future states to guide robot actions
+# VLM + BM    A VLM decides what to do; a behavior model executes actions
+# TAMP + FMs  Foundation models assist task and motion planning
+# Hybrid      Combines multiple approaches, or choose this if unsure
+
+# --- Task ---
+task_id: tray-remediation-14
+task: Inspect vial tray, reseat crooked caps, and replace missing caps from loose caps on the table.
+
+# --- Test Setup ---
+# Tell us how to prepare the workspace for each rollout.
+# Objects and layout can stay the same or change between rollouts.
+
+objects: different
+# same: Use the same set of objects for every rollout.
+# different: May use different objects across rollouts.
+
+layout: different
+# same: Place objects in the same positions for every rollout.
+# different: May change object positions across rollouts.
+
+# --- Evaluation ---
+rollouts: 10                      # Number of attempts in this test
+                                  # Each attempt is scored success or failure
+
+# --- Hardware ---
+custom_hardware: none            # Describe any hardware changes (e.g., 3D-printed fingers)
