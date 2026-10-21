@@ -75,6 +75,11 @@ To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$
   * Column 4 (Tray Edge): $\Delta x = -0.0005\text{ m}$ with $\theta = 28.0^\circ$.
 
 ### Contact Physics & Settling Damping
+* **Sub-Millimeter Contact Offsets**:
+  * Gripper jaws: `contactOffset = 0.0002m` ($0.2\text{ mm}$), `restOffset = 0.0`.
+  * Dynamic Caps (`CapCrooked_*` and `PhysicalCap`): `contactOffset = 0.0005m` ($0.5\text{ mm}$), `restOffset = 0.0`.
+  * Tube Colliders (`clean_vial_tray.usda`): Native collision offset.
+  * *Ghost Wiggling Prevention*: Applying `contactOffset = 0.0005m` to the cap geometries eliminates PhysX's $20\text{ mm}$ default collision bubble, preventing mid-air repulsive chatter before physical contact.
 * **Viscoelastic Material**:
   * Damping: `linear_damping = 1.2`, `angular_damping = 2.0`.
   * Friction: $\mu_s = 1.2, \mu_k = 1.0$.
@@ -85,7 +90,10 @@ To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$
 
 ## 6. Physics Simulation Implementation
 * **Robot Table Surface**: Static rigid body with high-friction physics material ($\mu_s = 0.8, \mu_k = 0.7$).
-* **Tray & Vials**: Mesh and cylinder physics colliders (`UsdPhysics.CollisionAPI`).
+* **Tray & Vials**: Mesh and cylinder physics colliders (`UsdPhysics.CollisionAPI`):
+  * Vials 01–10: 10 dynamic crooked caps wedged at $32^\circ$ equilibrium.
+  * Vials 11–20: 10 empty vial apertures (Target: Slot 15 / `G15` at Row 2, Col 4).
+  * Vials 21–30: Native static seated caps from `clean_vial_tray.usda` (zero solver chatter).
 * **Caps**: Compound multi-body colliders with PhysX convex decomposition:
   * Cylinder top flange ($D = 1.24\text{ in}, T = 0.08\text{ in}$).
   * Tapered insert plug ($D_{bot} = 0.90\text{ in}, D_{top} = 0.99\text{ in}$).

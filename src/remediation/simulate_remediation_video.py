@@ -31,7 +31,7 @@ import cv2
 import numpy as np
 
 parser = argparse.ArgumentParser(description="Perception-Driven Fanuc Cap Remediation Simulation")
-parser.add_argument("--frames", type=int, default=240, help="Total frames to render (30fps -> 8.0 sec)")
+parser.add_argument("--frames", type=int, default=248, help="Total frames to render (30fps -> ~8.3 sec)")
 parser.add_argument("--camera", default="side", choices=["side", "table"], help="Camera viewpoint to render (side or table)")
 args, _ = parser.parse_known_args()
 
@@ -47,7 +47,7 @@ OUT_DIR = REPO_ROOT / "runs" / f"{TIMESTAMP}_remediation_{args.camera}"
 OUT_VIDEO = OUT_DIR / "fanuc_cap_remediation_demo.mp4"
 
 
-def run_remediation_simulation(headless=True, total_frames=200, camera_choice="table"):
+def run_remediation_simulation(headless=True, total_frames=248, camera_choice="table"):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     frames_dir = OUT_DIR / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
@@ -163,7 +163,7 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
             UsdGeom.Xformable(flange_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
             UsdPhysics.CollisionAPI.Apply(flange_geom.GetPrim())
             small_f = PhysxSchema.PhysxCollisionAPI.Apply(flange_geom.GetPrim())
-            small_f.CreateContactOffsetAttr().Set(0.0002)
+            small_f.CreateContactOffsetAttr().Set(0.0005)
             small_f.CreateRestOffsetAttr().Set(0.0)
 
             plug_geom = UsdGeom.Cylinder.Define(stage, f"{c_path}/Plug")
@@ -173,7 +173,7 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
             UsdGeom.Xformable(plug_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
             UsdPhysics.CollisionAPI.Apply(plug_geom.GetPrim())
             small_p = PhysxSchema.PhysxCollisionAPI.Apply(plug_geom.GetPrim())
-            small_p.CreateContactOffsetAttr().Set(0.0002)
+            small_p.CreateContactOffsetAttr().Set(0.0005)
             small_p.CreateRestOffsetAttr().Set(0.0)
 
             UsdShade.MaterialBindingAPI.Apply(c_prim.GetPrim()).Bind(yellow_mat)
@@ -181,16 +181,6 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
 
         # Vials 11-20: Left completely EMPTY (caps removed from tray)
         # Vials 21-30: Retain native seated flush caps (G21_cap to G30_cap) from clean_vial_tray.usda
-
-        # Sub-millimetre contact offsets on all vial tubes and fixture parts to eliminate the 20mm air cushion
-        for prim in stage.Traverse():
-            path = str(prim.GetPath())
-            if prim.HasAPI(UsdPhysics.CollisionAPI) and (
-                path.startswith("/World/CleanTray/") or path.startswith("/World/SupplyNest")
-            ):
-                contact = PhysxSchema.PhysxCollisionAPI.Apply(prim)
-                contact.CreateContactOffsetAttr().Set(0.0002)
-                contact.CreateRestOffsetAttr().Set(0.0)
 
         # Viscoelastic Polymer Physics Material: 0 restitution and high friction to prevent bouncing
         polymer_mat = UsdPhysics.MaterialAPI.Apply(
@@ -230,6 +220,9 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         nest_body.CreateHeightAttr(nest_h)
         UsdGeom.Xformable(nest_body.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, nest_h / 2))
         UsdPhysics.CollisionAPI.Apply(nest_body.GetPrim())
+        nest_px = PhysxSchema.PhysxCollisionAPI.Apply(nest_body.GetPrim())
+        nest_px.CreateContactOffsetAttr().Set(0.0005)
+        nest_px.CreateRestOffsetAttr().Set(0.0)
         
         dark_mat = UsdShade.Material.Define(stage, "/World/Looks/DarkNest")
         d_surf = UsdShade.Shader.Define(stage, "/World/Looks/DarkNest/Surface")
@@ -251,6 +244,9 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         c_flange.CreateHeightAttr(flange_t)
         UsdGeom.Xformable(c_flange.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
         UsdPhysics.CollisionAPI.Apply(c_flange.GetPrim())
+        cf_px = PhysxSchema.PhysxCollisionAPI.Apply(c_flange.GetPrim())
+        cf_px.CreateContactOffsetAttr().Set(0.0005)
+        cf_px.CreateRestOffsetAttr().Set(0.0)
 
         c_plug = UsdGeom.Cylinder.Define(stage, f"{cap_path}/Plug")
         c_plug.CreateAxisAttr("Z")
@@ -258,6 +254,9 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         c_plug.CreateHeightAttr(plug_h)
         UsdGeom.Xformable(c_plug.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
         UsdPhysics.CollisionAPI.Apply(c_plug.GetPrim())
+        cp_px = PhysxSchema.PhysxCollisionAPI.Apply(c_plug.GetPrim())
+        cp_px.CreateContactOffsetAttr().Set(0.0005)
+        cp_px.CreateRestOffsetAttr().Set(0.0)
         UsdShade.MaterialBindingAPI.Apply(cap_prim.GetPrim()).Bind(yellow_mat)
         apply_damped_polymer_physics(cap_prim.GetPrim(), mass=0.005)
 
@@ -303,14 +302,15 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         p_crooked_3d = cam_model.to_plane(uv_crooked[0], uv_crooked[1], z=tray_z + vial_h + 0.004)
         print(f"[Vision] Detected Crooked Cap at pixel ({uv_crooked[0]:.1f}, {uv_crooked[1]:.1f}) -> 3D Target: {p_crooked_3d}")
 
-        g12_tray_x = (2 - 2.5) * pitch_x
-        g12_tray_y = (1 - 2.0) * pitch_y
-        g12_world_x = tray_x + g12_tray_x
-        g12_world_y = tray_y + g12_tray_y
-        p_g12_world = np.array([g12_world_x, g12_world_y, tray_z + vial_h])
-        uv_missing = cam_model.project(p_g12_world)
+        # Target Missing Cap Aperture is now Slot 15 (Row 2, Col 4):
+        g15_tray_x = (2 - 2.5) * pitch_x
+        g15_tray_y = (4 - 2.0) * pitch_y
+        g15_world_x = tray_x + g15_tray_x
+        g15_world_y = tray_y + g15_tray_y
+        p_g15_world = np.array([g15_world_x, g15_world_y, tray_z + vial_h])
+        uv_missing = cam_model.project(p_g15_world)
         p_missing_3d = cam_model.to_plane(uv_missing[0], uv_missing[1], z=tray_z + vial_h)
-        print(f"[Vision] Detected Missing Cap Aperture at pixel ({uv_missing[0]:.1f}, {uv_missing[1]:.1f}) -> 3D Target: {p_missing_3d}")
+        print(f"[Vision] Detected Missing Cap Aperture at G15 pixel ({uv_missing[0]:.1f}, {uv_missing[1]:.1f}) -> 3D Target: {p_missing_3d}")
 
         # Robot Articulation & IK
         arm = SingleArticulation(prim_path=C.ROBOT_PRIM, name="er4ia")
@@ -330,7 +330,7 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
 
         robot_z_offset = C.TABLE_TOP_Z
         p_crooked_robot = np.array([g05_world_x, g05_world_y, (tray_z + vial_h) - robot_z_offset])
-        p_missing_robot = np.array([g12_world_x, g12_world_y, (tray_z + vial_h) - robot_z_offset])
+        p_missing_robot = np.array([g15_world_x, g15_world_y, (tray_z + vial_h) - robot_z_offset])
         p_supply_robot = np.array([supply_x, supply_y, tray_z - robot_z_offset])
 
         home_pos = np.array([0.30, 0.0, 0.28])
@@ -338,7 +338,8 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         q_home, _ = ik.solve(q_home, home_pos, down, limits, tool_offset=tool, spread_dir=jaw_spread_dir)
 
         # Precise Waypoints:
-        p_above_crooked = p_crooked_robot + np.array([0, 0, 0.08])
+        # High vertical clearance (150mm straight up over vial rim) before any lateral transit:
+        p_above_crooked = p_crooked_robot + np.array([0, 0, 0.15])
         # High edge of the tilted cap is elevated by ~5.5mm + flange thickness (~2.0mm) = ~7.5-10mm
         p_contact_crooked = p_crooked_robot + np.array([0, 0, 0.012])
         # Soft-landing press stroke: stop cleanly at Z_rim + flange_thickness + 1.5mm
@@ -360,7 +361,8 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         # Insert depth: descend until the flange is resting gently on the rim (+0.0005m clearance)
         # Releasing here allows the cap to drop 0.5mm cleanly under gravity into full seating
         # without over-compressing or storing spring energy against the glass lip!
-        p_above_missing = p_missing_robot + np.array([0, 0, 0.08])
+        # High vertical lift clearance (160mm straight up over vial rim) to clear cap before any lateral motion:
+        p_above_missing = p_missing_robot + np.array([0, 0, 0.16])
         p_insert_missing = p_missing_robot + np.array([0, 0, 0.0005])
 
         # Gripper Jaw Targets:
@@ -400,29 +402,34 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
                 target_p = p_above_crooked + (p_contact_crooked - p_above_crooked) * t
                 status_text = "ACTION: Descending Toward Crooked Cap (Approaching Contact Face)"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 58:
+            elif frame_idx < 54:
                 # Continuous physical plunge press with smooth S-curve easing:
                 # Flat bottom face of gripper makes gentle contact and steadily presses high rim edge down
-                raw_t = (frame_idx - 35) / 23.0
+                raw_t = (frame_idx - 35) / 19.0
                 smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
                 target_p = p_contact_crooked + (p_press_crooked - p_contact_crooked) * smooth_t
                 status_text = "PHYSICS ACTION: Gripper Contact Face Depressing Tilted Cap Flush"
                 jaw_cur = C.JAW_CLOSED
-            elif frame_idx < 72:
-                # Retract back up after pure contact seating
-                raw_t = (frame_idx - 58) / 14.0
+            elif frame_idx < 62:
+                # Hold stationary at seated depth: expand jaws fully BEFORE lifting up
+                target_p = p_press_crooked
+                status_text = "ACTION: Cap Seated -> Jaws Fully Expanding Before Vertical Lift"
+                jaw_cur = C.JAW_OPEN
+            elif frame_idx < 76:
+                # Lift STRAIGHT UP vertically (150mm) with jaws fully open/expanded
+                raw_t = (frame_idx - 62) / 14.0
                 smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
                 target_p = p_press_crooked + (p_above_crooked - p_press_crooked) * smooth_t
-                status_text = "STATUS: Cap Leveled Flush onto Glass Rim -> Retracting"
-                jaw_cur = C.JAW_CLOSED if frame_idx < 64 else C.JAW_OPEN
-            elif frame_idx < 92:
-                t = (frame_idx - 72) / 20.0
+                status_text = "STATUS: Retracting Vertically Over Cap (Jaws Fully Expanded)"
+                jaw_cur = C.JAW_OPEN
+            elif frame_idx < 94:
+                t = (frame_idx - 76) / 18.0
                 target_p = p_above_crooked + (p_above_supply - p_above_crooked) * t
                 status_text = "VISION: Missing Cap Detected -> Navigating to Supply Nest"
                 jaw_cur = C.JAW_OPEN
             elif frame_idx < 108:
                 # Descend completely down with jaws 100% wide OPEN
-                t = (frame_idx - 90) / 18.0
+                t = (frame_idx - 94) / 14.0
                 target_p = p_above_supply + (p_pick_supply - p_above_supply) * t
                 status_text = "ACTION: Descending Vertically Over Spare Cap Flange (Jaws Open)"
                 jaw_cur = C.JAW_OPEN
@@ -467,16 +474,18 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
                 target_p = p_insert_missing
                 status_text = "ACTION: Settling Pause (1s Dwell Under Gravity -> Cap Perfectly Flush)"
                 jaw_cur = C.JAW_OPEN
-            elif frame_idx < 232:
-                # Lift STRAIGHT UP vertically to clear the seated cap before any lateral motion
-                t = (frame_idx - 222) / 10.0
-                target_p = p_insert_missing + (p_above_missing - p_insert_missing) * t
-                status_text = "ACTION: Lifting Straight Up Vertically Over Seated Cap"
+            elif frame_idx < 234:
+                # Lift STRAIGHT UP vertically (160mm) to completely clear the seated cap before any lateral motion
+                raw_t = (frame_idx - 222) / 12.0
+                smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
+                target_p = p_insert_missing + (p_above_missing - p_insert_missing) * smooth_t
+                status_text = "ACTION: Lifting Straight Up Vertically (Clearing Cap)"
                 jaw_cur = C.JAW_OPEN
             else:
-                # Retract smoothly back to home position
-                t = (frame_idx - 232) / 8.0
-                target_p = p_above_missing + (home_pos - p_above_missing) * t
+                # Only move laterally towards home position AFTER reaching full vertical clearance height
+                raw_t = (frame_idx - 234) / 14.0
+                smooth_t = (1.0 - math.cos(math.pi * raw_t)) / 2.0
+                target_p = p_above_missing + (home_pos - p_above_missing) * smooth_t
                 status_text = "SUCCESS: Vision-Guided Remediation Complete -> Returning Home"
                 jaw_cur = C.JAW_OPEN
 
