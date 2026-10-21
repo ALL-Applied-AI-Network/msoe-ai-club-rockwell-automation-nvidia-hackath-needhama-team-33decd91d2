@@ -53,10 +53,33 @@ This document records the exact physical, geometric, and dimensional specificati
 
 ---
 
-## 5. Crooked Cap Resting Geometry
-* **Resting Angle**: $45^\circ - 60^\circ$ tilt across the vial rim mouth.
-* **Mechanism**: One edge of the $0.90\text{ in}$ plug dips slightly inside the $1.00\text{ in}$ vial mouth resting against the inner glass wall, while the opposing edge of the $1.24\text{ in}$ flange catches on the top glass rim.
-* **Physical Elevation**: The elevated edge sits approximately $+15\text{ mm}$ to $+24\text{ mm}$ higher than the flush seated height ($Z \approx Z_{\text{vial\_mouth}} + 0.018\text{ m}$).
+## 5. Crooked Cap Physics & Deterministic Setup
+
+### Mechanical Wedging Equilibrium
+* **Equilibrium Tilt Angle**: $31.5^\circ - 34.0^\circ$ (natural attractor state).
+* **Two-Point Contact Geometry**:
+  * One edge of the $0.90\text{ in}$ ($22.86\text{ mm}$) plug enters the $1.00\text{ in}$ ($25.40\text{ mm}$) tube mouth and catches against the inner glass wall.
+  * The opposing edge of the $1.24\text{ in}$ ($31.50\text{ mm}$) flange overhang ($2.415\text{ mm}$ per side) rests on the outer rim lip ($26.67\text{ mm}$ OD).
+* **Resting Elevation**: The cap center sits at $+5.0\text{ mm}$ to $+5.8\text{ mm}$ above the rim ($Z_{\text{settled}} \approx Z_{\text{rim}} + 0.0053\text{ m}$), with the high flange edge elevated $\approx +14\text{ mm}$ above the rim.
+
+### Clean-Air Zero-Phasing Spawn Formula
+To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$ glass vial walls at initialization, caps must be spawned in free air:
+* **Spawn Tilt**: Initial pitch $\theta \in [25.0^\circ, 28.0^\circ]$ around local $Y$.
+* **Center Elevation**:
+  $$Z_{\text{spawn}} = Z_{\text{rim}} + \text{lowest\_point}(\theta) + \delta_z$$
+  where:
+  $$\text{lowest\_point}(\theta) = H_{\text{plug}} \cos(\theta) + R_{\text{flange}} \sin(\theta)$$
+  and $\delta_z = +0.003\text{ m}$ ($+3\text{ mm}$ strictly above the glass rim in completely free air).
+* **Lateral Offset**:
+  * Columns 0–3: $\Delta x = -0.0015\text{ m}$ (bias toward the trailing rim edge).
+  * Column 4 (Tray Edge): $\Delta x = -0.0005\text{ m}$ with $\theta = 28.0^\circ$.
+
+### Contact Physics & Settling Damping
+* **Viscoelastic Material**:
+  * Damping: `linear_damping = 1.2`, `angular_damping = 2.0`.
+  * Friction: $\mu_s = 1.2, \mu_k = 1.0$.
+  * Restitution: $0.0$ (`min` combine mode).
+* **Warmup**: $60-90$ frames under gravity to allow the cap to contact the rim and settle into the $32^\circ$ static cradle prior to perception or manipulation.
 
 ---
 
