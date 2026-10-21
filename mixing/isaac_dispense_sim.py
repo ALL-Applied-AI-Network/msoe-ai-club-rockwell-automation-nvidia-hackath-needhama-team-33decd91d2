@@ -103,28 +103,67 @@ def render_with_isaac_sim(schedule_data: dict, args, out_dir: Path):
         kit.update()
 
         liquid_prim = stage.GetPrimAtPath("/FillStation/FillStation_LocalRoot/Fill_liquid")
+        liquid_shader = stage.GetPrimAtPath("/FillStation/_materials/USD_blue_liquid_approximation/Principled_BSDF")
+        stream_shader = stage.GetPrimAtPath("/FillStation/_materials/USD_jet_approximation/Principled_BSDF")
 
         steps = schedule_data["schedule"]
         if args.step is not None:
             steps = [steps[args.step - 1]]
 
         tl = omni.timeline.get_timeline_interface()
-        tl.set_current_time(686 / 30.0)  # filled vial timecode
-        kit.update()
 
         for idx, sol in enumerate(steps):
             step_num = idx + 1 if args.step is None else args.step
-            print(f"[IsaacSim Connector] Rendering Step #{step_num}: {sol['name']} (Volume: {sol['total_volume']}mL)...")
+            vol = sol["total_volume"]
+            print(f"[IsaacSim Connector] Rendering Step #{step_num}: {sol['name']} (Volume: {vol}mL)...")
 
-            # Apply solution color to liquid mesh
+            # 1. Map target recipe volume to authored fill animation timecode
+            # 30 mL -> tc ~ 220, 40 mL -> tc ~ 301, 60 mL -> tc ~ 550, >= 70 mL -> tc = 686
+            if vol <= 32.0:
+                tc = 220.0
+                vol_scale = vol / 30.0
+            elif vol <= 45.0:
+                tc = 301.0
+                vol_scale = vol / 40.0
+            elif vol <= 65.0:
+                tc = 550.0
+                vol_scale = vol / 60.0
+            else:
+                tc = 686.0
+                vol_scale = vol / 70.0
+
+            tl.set_current_time(tc / 30.0)
+            kit.update()
+
+            # 2. Apply solution recipe color to the liquid material shader
             rgb = sol["rgb_color"]
-            if liquid_prim.IsValid():
-                gprim = UsdGeom.Gprim(liquid_prim)
-                color_attr = gprim.GetDisplayColorAttr()
-                if color_attr:
-                    color_attr.Set([Gf.Vec3f(*rgb)])
+            if liquid_shader.IsValid():
+                diff_attr = liquid_shader.GetAttribute("inputs:diffuseColor")
+                if diff_attr:
+                    diff_attr.Set(Gf.Vec3f(*rgb))
 
-            for _ in range(6):
+                opac_attr = liquid_shader.GetAttribute("inputs:opacity")
+                if opac_attr:
+                    # Solid translucent liquid appearance
+                    opac_attr.Set(0.68)
+
+            if stream_shader.IsValid():
+                s_diff_attr = stream_shader.GetAttribute("inputs:diffuseColor")
+                if s_diff_attr:
+                    s_diff_attr.Set(Gf.Vec3f(*rgb))
+
+            # 3. Adjust liquid scale and translation to pin the bottom to the glass floor
+            if liquid_prim.IsValid():
+                scale_attr = liquid_prim.GetAttribute("xformOp:scale")
+                trans_attr = liquid_prim.GetAttribute("xformOp:translate")
+                if scale_attr:
+                    scale_attr.Set(Gf.Vec3f(1.0, 1.0, vol_scale))
+                if trans_attr:
+                    # Translation offset to keep bottom vertex pinned at vial base
+                    tz = (1.0 - vol_scale) * 0.00295
+                    trans_attr.Set(Gf.Vec3d(-0.000015, 0.0, tz))
+
+            for _ in range(8):
                 kit.update()
                 rep.orchestrator.step(rt_subframes=args.subframes, delta_time=0.0)
 

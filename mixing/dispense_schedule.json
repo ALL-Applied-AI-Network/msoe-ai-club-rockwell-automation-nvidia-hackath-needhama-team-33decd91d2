@@ -38,9 +38,9 @@
       "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T200",
       "rgb_color": [
-        0.358,
-        0.42,
-        0.313
+        0.275,
+        0.5,
+        0.365
       ]
     },
     {
@@ -72,8 +72,8 @@
       "resident_fluid_passed": "T100",
       "rgb_color": [
         0.95,
-        0.825,
-        0.747
+        0.45,
+        0.05
       ]
     },
     {
@@ -107,9 +107,9 @@
       "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T400",
       "rgb_color": [
-        0.424,
-        0.518,
-        0.384
+        0.275,
+        0.5,
+        0.365
       ]
     },
     {
@@ -140,9 +140,9 @@
       "resident_fluid_inherited": "T400",
       "resident_fluid_passed": "T100",
       "rgb_color": [
-        0.821,
-        0.871,
-        0.961
+        0.05,
+        0.35,
+        0.88
       ]
     },
     {
@@ -173,9 +173,9 @@
       "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T400",
       "rgb_color": [
-        0.307,
-        0.557,
-        0.887
+        0.05,
+        0.35,
+        0.88
       ]
     },
     {
@@ -193,25 +193,25 @@
       "total_volume": 70.0,
       "dispense_order": [
         "T400",
-        "T100",
-        "T200"
+        "T200",
+        "T100"
       ],
       "pumped_amounts": {
         "T400": 41.8,
-        "T100": 10.0,
-        "T200": 10.0
+        "T200": 10.0,
+        "T100": 10.0
       },
       "delivered_amounts": {
         "T400": 50.0,
-        "T100": 10.0,
-        "T200": 10.0
+        "T200": 10.0,
+        "T100": 10.0
       },
       "resident_fluid_inherited": "T400",
-      "resident_fluid_passed": "T200",
+      "resident_fluid_passed": "T100",
       "rgb_color": [
-        0.169,
-        0.34,
-        0.377
+        0.125,
+        0.467,
+        0.555
       ]
     },
     {
@@ -228,26 +228,26 @@
       ],
       "total_volume": 80.0,
       "dispense_order": [
-        "T200",
+        "T100",
         "T400",
-        "T100"
+        "T200"
       ],
       "pumped_amounts": {
-        "T200": 26.8,
+        "T100": 1.8,
         "T400": 35.0,
-        "T100": 10.0
+        "T200": 35.0
       },
       "delivered_amounts": {
-        "T200": 35.0,
+        "T100": 10.0,
         "T400": 35.0,
-        "T100": 10.0
+        "T200": 35.0
       },
-      "resident_fluid_inherited": "T200",
-      "resident_fluid_passed": "T100",
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T200",
       "rgb_color": [
-        0.306,
-        0.343,
-        0.258
+        0.275,
+        0.5,
+        0.365
       ]
     },
     {
@@ -264,26 +264,26 @@
       ],
       "total_volume": 70.0,
       "dispense_order": [
+        "T200",
         "T100",
-        "T400",
-        "T200"
+        "T400"
       ],
       "pumped_amounts": {
-        "T100": 1.8,
-        "T400": 10.0,
-        "T200": 50.0
+        "T200": 41.8,
+        "T100": 10.0,
+        "T400": 10.0
       },
       "delivered_amounts": {
+        "T200": 50.0,
         "T100": 10.0,
-        "T400": 10.0,
-        "T200": 50.0
+        "T400": 10.0
       },
-      "resident_fluid_inherited": "T100",
-      "resident_fluid_passed": "T200",
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T400",
       "rgb_color": [
-        0.452,
-        0.36,
-        0.149
+        0.425,
+        0.533,
+        0.175
       ]
     },
     {
@@ -300,23 +300,23 @@
       ],
       "total_volume": 70.0,
       "dispense_order": [
-        "T200",
-        "T400"
+        "T400",
+        "T200"
       ],
       "pumped_amounts": {
-        "T200": 41.8,
-        "T400": 20.0
+        "T400": 11.8,
+        "T200": 50.0
       },
       "delivered_amounts": {
-        "T200": 50.0,
-        "T400": 20.0
+        "T400": 20.0,
+        "T200": 50.0
       },
-      "resident_fluid_inherited": "T200",
-      "resident_fluid_passed": "T400",
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T200",
       "rgb_color": [
-        0.381,
-        0.305,
-        0.139
+        0.371,
+        0.521,
+        0.243
       ]
     },
     {
@@ -333,26 +333,26 @@
       ],
       "total_volume": 60.0,
       "dispense_order": [
-        "T400",
         "T200",
+        "T400",
         "T100"
       ],
       "pumped_amounts": {
-        "T400": 11.8,
-        "T200": 20.0,
+        "T200": 11.8,
+        "T400": 20.0,
         "T100": 20.0
       },
       "delivered_amounts": {
-        "T400": 20.0,
         "T200": 20.0,
+        "T400": 20.0,
         "T100": 20.0
       },
-      "resident_fluid_inherited": "T400",
+      "resident_fluid_inherited": "T200",
       "resident_fluid_passed": "T100",
       "rgb_color": [
-        0.358,
-        0.42,
-        0.313
+        0.275,
+        0.5,
+        0.365
       ]
     }
   ]

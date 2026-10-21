@@ -60,19 +60,16 @@ class BatchReorderer:
         best_path: Optional[List[int]] = None
         best_path_cost = float("inf")
 
-        def dfs(curr_idx: int, visited_mask: int, path: List[int], current_cost: float):
+        def dfs(curr_idx: int, visited_mask: int, path: List[int], current_cost: float) -> bool:
             nonlocal best_path, best_path_cost
             if len(path) == n:
-                if current_cost < best_path_cost:
-                    best_path = list(path)
-                    best_path_cost = current_cost
+                best_path = list(path)
+                best_path_cost = current_cost
                 return True
 
             for next_idx, weight in adj[curr_idx]:
                 if not (visited_mask & (1 << next_idx)):
-                    dfs(next_idx, visited_mask | (1 << next_idx), path + [next_idx], current_cost + weight)
-                    # If we found a path and it's sufficiently good, we can exit early or continue
-                    if best_path is not None and best_path_cost < 50.0:
+                    if dfs(next_idx, visited_mask | (1 << next_idx), path + [next_idx], current_cost + weight):
                         return True
             return False
 

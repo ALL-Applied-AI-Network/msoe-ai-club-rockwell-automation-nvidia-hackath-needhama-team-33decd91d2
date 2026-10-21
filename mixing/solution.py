@@ -38,6 +38,33 @@ class Solution:
         self.resident_fluid_inherited: Optional[str] = None
         self.resident_fluid_passed: Optional[str] = None
 
+        # Validate operating constraints from CSI / MAIC specification
+        violations = self.validate_operating_constraints()
+        if violations:
+            raise ValueError(f"Solution '{name}' violates operating constraints: {'; '.join(violations)}")
+
+    def validate_operating_constraints(self) -> List[str]:
+        """
+        Validates against the CSI Fluid Mixing Operating Constraints:
+        - A vial should contain no more than 80 mL to avoid spilling.
+        - A component may be set from 0 to 80 mL, but station should not use less than 10 mL in practice.
+        - Do not put more than 50 mL from T-200 in a recipe (causes system fault / reset).
+        - Do not use T-300 in a recipe (configuration issue / requires reset).
+        """
+        violations = []
+        if self.total_volume > 80.0:
+            violations.append(f"Total volume ({self.total_volume:.1f} mL) > 80 mL maximum")
+        for mat, amt in self._material_dict.items():
+            if 0.0 < amt < 10.0:
+                violations.append(f"Component {mat} ({amt:.1f} mL) < 10 mL minimum practical limit")
+            if amt > 80.0:
+                violations.append(f"Component {mat} ({amt:.1f} mL) > 80 mL maximum")
+        if self.get_amount("T200") > 50.0:
+            violations.append(f"T-200 ({self.get_amount('T200'):.1f} mL) > 50 mL limit")
+        if self.get_amount("T300") > 0.0:
+            violations.append(f"T-300 ({self.get_amount('T300'):.1f} mL) is out of service")
+        return violations
+
     @property
     def total_volume(self) -> float:
         """Total solution volume in mL."""
@@ -78,31 +105,36 @@ class Solution:
 
     def compute_rgb_color(self) -> tuple:
         """
-        Computes the theoretical RGB color tuple (0.0 to 1.0) of this solution
-        based on the dye mixing ratio of CSI reagents:
-          T100: Clear / diluent (0.95, 0.95, 0.98)
-          T200: Orange dye       (0.95, 0.45, 0.05)
-          T400: Blue dye         (0.05, 0.40, 0.85)
+        Computes the theoretical RGB color tuple (0.0 to 1.0) of this solution.
+        Reagents:
+          T100: Clear diluent (adds volume, dilutes dye concentration)
+          T200: Orange dye (0.95, 0.45, 0.05)
+          T400: Blue dye   (0.05, 0.35, 0.88)
         """
-        ratios = self.get_material_ratios()
-        c_100 = ratios.get("T100", 0.0)
-        c_200 = ratios.get("T200", 0.0)
-        c_400 = ratios.get("T400", 0.0)
+        amt_200 = self.get_amount("T200")
+        amt_400 = self.get_amount("T400")
+        dye_vol = amt_200 + amt_400
 
-        # Baseline color weighting
-        r = c_100 * 0.95 + c_200 * 0.95 + c_400 * 0.05
-        g = c_100 * 0.95 + c_200 * 0.45 + c_400 * 0.40
-        b = c_100 * 0.98 + c_200 * 0.05 + c_400 * 0.85
+        if dye_vol <= 0.0:
+            # Pure water / clear
+            return (0.85, 0.92, 0.95)
 
-        # Subtractive darkening effect when dyes are combined
-        dye_fraction = c_200 + c_400
-        if c_200 > 0.05 and c_400 > 0.05:
-            # Orange + Blue produce dark greenish brown
-            r *= 0.55
-            g *= 0.70
-            b *= 0.50
+        # Dye relative ratio
+        f_orange = amt_200 / dye_vol
+        f_blue = amt_400 / dye_vol
 
-        return (min(1.0, max(0.0, r)), min(1.0, max(0.0, g)), min(1.0, max(0.0, b)))
+        if f_blue == 0.0:
+            # Pure orange dye (diluted with water)
+            return (0.95, 0.45, 0.05)
+        elif f_orange == 0.0:
+            # Pure blue dye (diluted with water)
+            return (0.05, 0.35, 0.88)
+        else:
+            # Mixed orange + blue (subtractive mixing produces olive green / dark teal)
+            r = f_orange * 0.50 + f_blue * 0.05
+            g = f_orange * 0.55 + f_blue * 0.45
+            b = f_orange * 0.08 + f_blue * 0.65
+            return (min(1.0, max(0.0, r)), min(1.0, max(0.0, g)), min(1.0, max(0.0, b)))
 
     def to_dict(self) -> dict:
         """Returns a serializable dictionary representation."""
