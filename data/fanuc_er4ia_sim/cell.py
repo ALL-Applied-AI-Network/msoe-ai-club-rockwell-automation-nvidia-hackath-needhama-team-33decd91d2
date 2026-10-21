@@ -1440,8 +1440,8 @@ def attach_gripper(stage, jaw=None, articulated=True, finger_type="stock"):
 
         if finger_type == "cap":
             # Conformal Cap Remediation Gripper with Curved Cradle & Under-Flange Support Claws
-            # Backing bracket connects to SMC carriage
-            bracket_len = 0.056
+            # Backing bracket connects to SMC carriage (full C.FINGER_LENGTH = 0.076m reach)
+            bracket_len = C.FINGER_LENGTH
             bracket_t = 0.005
             bracket_w = 0.024
             bracket = box(

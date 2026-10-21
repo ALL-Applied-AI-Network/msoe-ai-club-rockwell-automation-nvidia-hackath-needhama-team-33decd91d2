@@ -107,44 +107,17 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         g05_world_x = tray_x + g05_tray_x
         g05_world_y = tray_y + g05_tray_y
 
-        # Remove static cap and disable any colliders at G05 and G12
-        def remove_or_disable(prim_path):
-            p = stage.GetPrimAtPath(prim_path)
+        # Remove all default static caps from the clean tray so we can programmatically configure:
+        # - Vials 1 to 10: 10 Crooked caps (spawned elevated with 20.0 deg tilt, naturally settling askew)
+        # - Vials 11 to 20: 10 Empty vials (including G12 for remediation insertion)
+        # - Vials 21 to 30: 10 Correct caps (seated flush onto the glass rim lip)
+        for i in range(1, 31):
+            p = stage.GetPrimAtPath(f"/World/CleanTray/G{i:02d}_cap")
             if p.IsValid():
                 UsdGeom.Imageable(p).MakeInvisible()
                 for desc in Usd.PrimRange(p):
                     if desc.HasAPI(UsdPhysics.CollisionAPI):
                         UsdPhysics.CollisionAPI(desc).GetCollisionEnabledAttr().Set(False)
-
-        # Remove default static caps at G05 and G12
-        remove_or_disable("/World/CleanTray/G05_cap")
-        remove_or_disable("/World/CleanTray/G12_cap")
-
-        # 1. 100% True Physics Dynamic Crooked Cap at G05
-        # Set to the exact physical release pose observed when a cap is placed askew on the vial:
-        # Initialized slightly above the rim (+0.0055m) and cocked at ~20 degrees.
-        # Under true gravity and PhysX contacts, it balances and rests naturally askew in the tube mouth.
-        crooked_cap_path = "/World/DynamicCrookedCapG05"
-        crooked_prim = UsdGeom.Xform.Define(stage, crooked_cap_path)
-        c_xf = UsdGeom.Xformable(crooked_prim.GetPrim())
-        c_tr = c_xf.AddTranslateOp()
-        c_tr.Set(Gf.Vec3d(g05_world_x - 0.0055, g05_world_y, tray_z + vial_h + 0.0055))
-        c_rot = c_xf.AddRotateYOp()
-        c_rot.Set(21.0)
-
-        c_flange_05 = UsdGeom.Cylinder.Define(stage, f"{crooked_cap_path}/Flange")
-        c_flange_05.CreateAxisAttr("Z")
-        c_flange_05.CreateRadiusAttr(flange_r)
-        c_flange_05.CreateHeightAttr(flange_t)
-        UsdGeom.Xformable(c_flange_05.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
-        UsdPhysics.CollisionAPI.Apply(c_flange_05.GetPrim())
-
-        c_plug_05 = UsdGeom.Cylinder.Define(stage, f"{crooked_cap_path}/Plug")
-        c_plug_05.CreateAxisAttr("Z")
-        c_plug_05.CreateRadiusAttr(plug_r)
-        c_plug_05.CreateHeightAttr(plug_h)
-        UsdGeom.Xformable(c_plug_05.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
-        UsdPhysics.CollisionAPI.Apply(c_plug_05.GetPrim())
 
         yellow_mat = UsdShade.Material.Define(stage, "/World/Looks/CapYellow")
         surf = UsdShade.Shader.Define(stage, "/World/Looks/CapYellow/Surface")
@@ -152,10 +125,107 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         surf.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.96, 0.76, 0.04))
         surf.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.3)
         yellow_mat.CreateSurfaceOutput().ConnectToSource(surf.ConnectableAPI(), "surface")
-        UsdShade.MaterialBindingAPI.Apply(crooked_prim.GetPrim()).Bind(yellow_mat)
-        
-        # Pure dynamic rigid body from frame 0 - physics and gravity active the entire time!
-        fanuc_cell.make_dynamic(crooked_prim.GetPrim(), mass=0.005, collide_self=False)
+
+        # Spawn 10 Crooked Caps (Vials 1-10) with verified deterministic free-air drop:
+        # Spawned in 100% clean air (+3.0mm strictly above the glass rim with ZERO initial mesh overlap/penetration).
+        # Viscoelastic damping (linear=1.2, angular=2.0) prevents elastic bouncing over the rim throat,
+        # ensuring all 10 caps deterministically settle into the stable 32-34 deg crooked equilibrium.
+        for vial_num in range(1, 11):
+            r_idx = (vial_num - 1) // 5
+            c_idx = (vial_num - 1) % 5
+            v_x = tray_x + (r_idx - 2.5) * pitch_x
+            v_y = tray_y + (c_idx - 2.0) * pitch_y
+
+            if vial_num == 5:
+                deg_c = 28.0
+                dx_c = -0.0005
+            elif vial_num == 10:
+                deg_c = 28.0
+                dx_c = -0.0015
+            else:
+                deg_c = 25.0
+                dx_c = -0.0015
+
+            theta_c = math.radians(deg_c)
+            lowest_c = plug_h * math.cos(theta_c) + flange_r * math.sin(theta_c)
+            z_c = tray_z + vial_h + lowest_c + 0.003
+
+            c_path = f"/World/CapCrooked_{vial_num:02d}"
+            c_prim = UsdGeom.Xform.Define(stage, c_path)
+            c_xf_cap = UsdGeom.Xformable(c_prim.GetPrim())
+            c_xf_cap.AddTranslateOp().Set(Gf.Vec3d(v_x + dx_c, v_y, z_c))
+            c_xf_cap.AddRotateYOp().Set(deg_c)
+
+            flange_geom = UsdGeom.Cylinder.Define(stage, f"{c_path}/Flange")
+            flange_geom.CreateAxisAttr("Z")
+            flange_geom.CreateRadiusAttr(flange_r)
+            flange_geom.CreateHeightAttr(flange_t)
+            UsdGeom.Xformable(flange_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
+            UsdPhysics.CollisionAPI.Apply(flange_geom.GetPrim())
+
+            plug_geom = UsdGeom.Cylinder.Define(stage, f"{c_path}/Plug")
+            plug_geom.CreateAxisAttr("Z")
+            plug_geom.CreateRadiusAttr(plug_r)
+            plug_geom.CreateHeightAttr(plug_h)
+            UsdGeom.Xformable(plug_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
+            UsdPhysics.CollisionAPI.Apply(plug_geom.GetPrim())
+
+            UsdShade.MaterialBindingAPI.Apply(c_prim.GetPrim()).Bind(yellow_mat)
+            fanuc_cell.make_dynamic(c_prim.GetPrim(), mass=0.005, linear_damping=1.2, angular_damping=2.0, collide_self=False)
+
+        # Vials 11-20: Left completely EMPTY (no caps spawned)
+
+        # Spawn 10 Correct Caps (Vials 21-30):
+        # Resting perfectly flush on the vial rim lip (0.0 deg rotation)
+        for vial_num in range(21, 31):
+            r_idx = (vial_num - 1) // 5
+            c_idx = (vial_num - 1) % 5
+            v_x = tray_x + (r_idx - 2.5) * pitch_x
+            v_y = tray_y + (c_idx - 2.0) * pitch_y
+
+            z_c = tray_z + vial_h
+
+            c_path = f"/World/CapCorrect_{vial_num:02d}"
+            c_prim = UsdGeom.Xform.Define(stage, c_path)
+            c_xf_cap = UsdGeom.Xformable(c_prim.GetPrim())
+            c_xf_cap.AddTranslateOp().Set(Gf.Vec3d(v_x, v_y, z_c))
+
+            flange_geom = UsdGeom.Cylinder.Define(stage, f"{c_path}/Flange")
+            flange_geom.CreateAxisAttr("Z")
+            flange_geom.CreateRadiusAttr(flange_r)
+            flange_geom.CreateHeightAttr(flange_t)
+            UsdGeom.Xformable(flange_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, flange_t / 2))
+            UsdPhysics.CollisionAPI.Apply(flange_geom.GetPrim())
+
+            plug_geom = UsdGeom.Cylinder.Define(stage, f"{c_path}/Plug")
+            plug_geom.CreateAxisAttr("Z")
+            plug_geom.CreateRadiusAttr(plug_r)
+            plug_geom.CreateHeightAttr(plug_h)
+            UsdGeom.Xformable(plug_geom.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
+            UsdPhysics.CollisionAPI.Apply(plug_geom.GetPrim())
+
+            UsdShade.MaterialBindingAPI.Apply(c_prim.GetPrim()).Bind(yellow_mat)
+            fanuc_cell.make_dynamic(c_prim.GetPrim(), mass=0.005, collide_self=False)
+
+        # Viscoelastic Polymer Physics Material: 0 restitution and high friction to prevent bouncing
+        polymer_mat = UsdPhysics.MaterialAPI.Apply(
+            UsdShade.Material.Define(stage, "/World/Physics/PolymerCapMaterial").GetPrim()
+        )
+        polymer_mat.CreateStaticFrictionAttr(1.2)
+        polymer_mat.CreateDynamicFrictionAttr(1.0)
+        polymer_mat.CreateRestitutionAttr(0.0)
+        from pxr import PhysxSchema
+        px_mat = PhysxSchema.PhysxMaterialAPI.Apply(polymer_mat.GetPrim())
+        px_mat.CreateRestitutionCombineModeAttr().Set("min")
+        px_mat.CreateFrictionCombineModeAttr().Set("max")
+
+        def apply_damped_polymer_physics(prim, mass=0.005):
+            fanuc_cell.make_dynamic(prim, mass=mass, linear_damping=1.2, angular_damping=2.0, collide_self=False)
+            UsdShade.MaterialBindingAPI.Apply(prim).Bind(
+                UsdShade.Material.Get(stage, "/World/Physics/PolymerCapMaterial"),
+                UsdShade.Tokens.weakerThanDescendants,
+                "physics"
+            )
 
         # 2. Spawn Machined Supply Nest Fixture & Dynamic Replacement Cap
         supply_x, supply_y = 0.22, 0.22
@@ -200,7 +270,7 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         UsdGeom.Xformable(c_plug.GetPrim()).AddTranslateOp().Set(Gf.Vec3d(0, 0, -plug_h / 2))
         UsdPhysics.CollisionAPI.Apply(c_plug.GetPrim())
         UsdShade.MaterialBindingAPI.Apply(cap_prim.GetPrim()).Bind(yellow_mat)
-        fanuc_cell.make_dynamic(cap_prim.GetPrim(), mass=0.005, collide_self=False)
+        apply_damped_polymer_physics(cap_prim.GetPrim(), mass=0.005)
 
         # Setup Cameras
         cam_paths = {"table": fanuc_cell.TABLE_CAM_PATH, "side": fanuc_cell.SIDE_CAM_PATH}
@@ -233,8 +303,8 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
         }
         cam_model = CameraModel(cam_dict)
 
-        # Warm up camera
-        for _ in range(35):
+        # Warm up camera and let the dropped cap settle naturally into the vial mouth (90 frames matching test_30_angles.py)
+        for _ in range(90):
             world.step(render=True)
             _ = render_cam.get_rgba()
 
@@ -280,9 +350,10 @@ def run_remediation_simulation(headless=True, total_frames=200, camera_choice="t
 
         # Precise Waypoints:
         p_above_crooked = p_crooked_robot + np.array([0, 0, 0.08])
-        # Exact physical contact height: cap elevated by 18mm + 2mm flange thickness = 20mm
-        p_contact_crooked = p_crooked_robot + np.array([0, 0, 0.020])
-        p_press_crooked = p_crooked_robot + np.array([0, 0, flange_t])
+        # High edge of the 14 deg flange is elevated by ~7.6mm + flange thickness = ~10mm
+        p_contact_crooked = p_crooked_robot + np.array([0, 0, 0.010])
+        # Descend gently to flange thickness (+0.0015m) so flat contact face seats cap flush without overdriving into tube
+        p_press_crooked = p_crooked_robot + np.array([0, 0, flange_t + 0.0015])
 
         # Supply pick waypoints:
         # Full vertical lift height = 0.26m (> 8-inch vial height of 0.203m) to clear whole tray!
