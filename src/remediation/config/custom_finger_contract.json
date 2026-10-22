@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "status": "blocked_pending_contact_and_tcp_validation",
+  "purpose": "Grooved fingers intended to retain one loose cap, one vial, or one capped vial.",
+  "cad": {
+    "path": "data/gripper.step",
+    "sha256": "17fdd9512526b908beaef644c31d20b782a424c86139d2312cec1ebdd58ceccc",
+    "units": "m",
+    "source": "User-supplied AP242 STEP on 2026-10-21",
+    "raw_cartesian_envelope_m": {
+      "x": [0.0, 0.0356293480873969],
+      "y": [-0.0205384609807311, 0.00175355771760241],
+      "z": [-0.0477762395223592, 0.0437506223631226]
+    },
+    "interpretation": "One STEP BREP solid. Raw bounds do not establish mounting pose, jaw motion, or contact surfaces."
+  },
+  "required_measurements_m": {
+    "cap_pick_offset": null,
+    "cap_place_offset": null,
+    "cap_press_offset": null,
+    "vial_pick_offset": null,
+    "capped_vial_pick_offset": null,
+    "finger_opening_min": null,
+    "finger_opening_max": null,
+    "neighbor_clearance": null
+  },
+  "isaac_visual_mount": {
+    "status": "visual_pose_reviewed",
+    "asset_orientation": "local -Z points toward the grasped object; local +Y inset mounting face mates inward to each pneumatic jaw",
+    "forward_extension_from_initial_mount_m": 0.020,
+    "vertical_offset_from_initial_mount_m": -0.006,
+    "starting_jaw_state": "fully_extended",
+    "jaw_extension_per_side_m": 0.006,
+    "minimum_mesh_gap_closed_m": 0.003,
+    "minimum_mesh_gap_open_m": 0.015,
+    "retained_moving_visual": "SMCJaw",
+    "hidden_stock_visuals": ["Finger", "SoftTip", "Detail", "SensorCarrier", "SensorRedNose", "OuterCrossBolt"],
+    "hidden_wrist_details": ["LaserBody", "PhotoBlackSensorLead"],
+    "collision_proxy_paths": ["/World/ER4iA/JawL/CustomFingerCollisionProxy", "/World/ER4iA/JawR/CustomFingerCollisionProxy"],
+    "preview_views": "runs/archive/2026-10-21_remediation/mounted_custom_gripper_views_open15"
+  },
+  "validation": {
+    "cad_collision_checked": false,
+    "cad_import_checked": true,
+    "isaac_contact_checked": false,
+    "physical_grasp_checked": false,
+    "tablecam_tcp_checked": false,
+    "approved_for_contact": false
+  },
+  "release_rule": "No contact action may be enabled unless every required measurement is finite and all validation fields are true."
+}

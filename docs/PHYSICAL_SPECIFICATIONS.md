@@ -2,6 +2,36 @@
 
 This document records the exact physical, geometric, and dimensional specifications for the vials, caps, and tray fixtures used in the CSI Inspection & Fanuc Remediation Workcell.
 
+**Implementation validation note (October 21, 2026):** The canonical remediation
+implementation in `src/remediation/geometry.py` uses the vial/cap dimensions below.
+Its tray slot locations and support heights come from a read-only measurement of
+the supplied Dataset 1 USD, recorded in `src/remediation/config/dataset1_layout.json`.
+Those source-asset dimensions are not an independent physical survey. The source
+tray places the vial bases about 69.6 mm above the tabletop; with 203.2 mm vials,
+the rims are about 272.8 mm above it. Transit clearance must account for this
+fixture height as well as the carried cap.
+
+The team confirmed custom fingers with recessed profiles for a loose cap, an
+uncapped vial, or a capped vial. The supplied `data/gripper.step` is an AP242
+metre-based CAD model, but its mounting frame, TCP, grasp surfaces, and collision
+proxies have not been validated. The 34 mm pad width and 6 mm/jaw actuator travel
+do not establish the groove depths, usable opening, contact offsets, or final TCP.
+Qualification renders currently show the stock starter fingers; they are not a
+validated model of the planned custom tool.
+
+The original equilibrium/contact claims below are retained as reference targets.
+New gravity-settling trials with a hollow 0.99-inch-top tapered plug produced
+stable crooked angles around 40–44°, rather than 31.5–34°. The report records the
+measured angles and whether they fall in the documented band. The difference
+remains unresolved; no real cap/contact calibration has been performed. Friction
+1.2/1.0 is a simulation assumption, not a measured silicone/glass property.
+
+**Cap-wall update (October 21, 2026):** The plug is modeled as a hollow taper
+with a 2.0 mm wall, per the team update. The inner wall follows the outer taper
+instead of using the prior constant 0.80-inch inner-diameter approximation. This
+changes the physical configuration hash, so the synthetic dataset and checkpoint
+must be regenerated before a later release decision.
+
 ---
 
 ## 1. Vial Dimensions (Glass Cylinder, Flat Bottom)
@@ -24,8 +54,13 @@ This document records the exact physical, geometric, and dimensional specificati
   * Bottom Plug Outer Radius: $0.45\text{ in} = 0.01143\text{ m} = 11.43\text{ mm}$
   * Fits inside the vial mouth ($0.90\text{ in} < 1.00\text{ in}$ vial ID).
 * **Insert Plug Top Outer Diameter (under flange)**: $\approx 0.98\text{ in} - 1.00\text{ in}$ (tapered wedge fit into vial inner diameter).
-* **Inner Hollow Diameter**: $0.80\text{ in} = 0.02032\text{ m} = 20.32\text{ mm}$
-  * Inner Hollow Radius: $0.40\text{ in} = 0.01016\text{ m} = 10.16\text{ mm}$
+* **Plug Wall Thickness**: $2.00\text{ mm}$ around the tapered plug and through
+  the flange. The cap is an open-through sleeve, not a solid-topped stopper. Its
+  top opening is approximately $0.832\text{ in}$ ($21.15\text{ mm}$); the
+  inner diameter immediately above the closed base is approximately $0.742\text{ in}$
+  ($18.86\text{ mm}$).
+* **Plug Bottom Face**: A flat $2.00\text{ mm}$ thick base closes the bottom of
+  the plug. The cavity is open at the flange/top and terminates at this base.
 * **Plug Depth**: $\approx 0.53\text{ in} = 0.01346\text{ m} = 13.46\text{ mm}$
 
 ---

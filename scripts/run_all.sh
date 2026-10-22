@@ -13,33 +13,6 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "=================================================================="
-echo " [Step 1/4] Rendering Clean Golden Reference Frame..."
-echo "=================================================================="
-./scripts/render_golden.sh
-
-echo ""
-echo "=================================================================="
-echo " [Step 2/4] Generating Synthetic YOLO Detection Dataset (80 scenes)..."
-echo "=================================================================="
-./scripts/run_generate_fullframe_data.sh --scenes 80
-
-echo ""
-echo "=================================================================="
-echo " [Step 3/4] Training YOLOv11 Detector on GPU (50 epochs)..."
-echo "=================================================================="
-./scripts/run_train_detector.sh --epochs 50 --batch 16
-
-echo ""
-echo "=================================================================="
-echo " [Step 4/4] Executing Real-Time Detection & Slot Assignment..."
-echo "=================================================================="
-./scripts/run_inspection.sh
-
-echo ""
-echo "=================================================================="
-echo " Pipeline Complete!"
-echo " Results:"
-echo "   - Visualization: runs/annotated_detection.png"
-echo "   - Decision JSON: runs/decision_detection.json"
-echo "=================================================================="
+OUT_DIR="${1:?Usage: scripts/run_all.sh runs/archive/YYYY-MM-DD_remediation [scenes]}"
+SCENES="${2:-100}"
+exec ./scripts/run_remediation_pipeline.sh "$OUT_DIR" "$SCENES"

@@ -1,152 +1,170 @@
-#!/usr/bin/env python3
-"""
-Vision Perception & Localization Pipeline for Tray Remediation.
+"""Four-class YOLO detection and calibrated TableCam localization.
 
-Features:
-1. Detects vial apertures in TableCam RGB/Depth images.
-2. Uses camera ray-plane backprojection (geometry.py) to compute 3D base coordinates (X, Y, Z).
-3. Classifies aperture status based on Z-height elevation:
-   - Crooked Cap: Flange elevation > +3.0mm above nominal rim plane.
-   - Missing Cap: Aperture open, elevation is at vial throat/tube interior.
-   - Good / Flush: Elevation matches nominal rim within [-1.0mm, +1.5mm].
-4. Detects loose replacement caps on the table surface (Z = -0.0051m).
-5. Returns targets formatted for robot TCP motion planning (UF0 frame).
+Images enter as RGB. Bounding boxes returned by Ultralytics are already in the
+original image coordinates; only the camera-resolution mapping is applied here.
+A coarse target is not a contact-qualified grasp or press location.
 """
-
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CALIBRATION_DIR = REPO_ROOT / "PhysicalAI-Hackathon-2026" / "calibration"
+from src.remediation.geometry import CLASS_NAMES, SPEC, base_to_uf0, rim_base_z
 
-# Physics ground truth geometry
-SURFACE_Z = -0.0051  # Table surface in robot base frame (m)
-TRAY_RIM_Z = 0.2052   # Nominal seated cap rim height in robot base frame (m)
-UF0_OFFSET_Z = -0.330 # Base to UF0 frame offset: z_uf0 = z_base - 0.330m (in m) or -330mm
+ROOT = Path(__file__).resolve().parents[2]
+CALIBRATION_DIR = ROOT / 'PhysicalAI-Hackathon-2026/calibration'
 
 
-def load_cameras(calib_dir: Path = CALIBRATION_DIR) -> dict:
-    """Loads camera calibration matrices compatible with Python 3.8+."""
-    with open(calib_dir / "cameras.json", "r") as f:
-        raw = json.load(f)
-    cams = {}
-    for k, v in raw.items():
-        if not isinstance(v, dict):
-            continue
-        cam = {
-            "T": np.array(v.get("T_base_cam", v.get("T_flange_cam"))),
-            "fx": v["fx"],
-            "size": tuple(v["size"]),
-            "frame": "base" if "T_base_cam" in v else "flange"
-        }
-        if "cx" in v:
-            cam.update({"fy": v["fy"], "cx": v["cx"], "cy": v["cy"], "depth": True})
-        else:
-            cam.update({"k1": v["k1"], "depth": False})
-        cams[k] = cam
-    return cams
+def _kmeans_1d(values, groups, iterations=30):
+    """Small deterministic 1-D clustering helper; no learned tray coordinates."""
+    values=np.asarray(values,dtype=float)
+    centers=np.linspace(values.min(),values.max(),groups)
+    for _ in range(iterations):
+        labels=np.argmin(abs(values[:,None]-centers[None,:]),axis=1)
+        updated=np.array([values[labels==i].mean() if np.any(labels==i) else centers[i] for i in range(groups)])
+        if np.allclose(updated,centers): break
+        centers=updated
+    return np.sort(centers)
 
 
-def pixel_to_base(cam: dict, uv: Tuple[float, float], z: float = SURFACE_Z) -> np.ndarray:
-    """Backproject a pixel coordinate to a 3D point on the horizontal plane at height z (metres)."""
-    w, h = cam["size"]
-    xd = (uv[0] - w / 2.0) / cam["fx"]
-    yd = (uv[1] - h / 2.0) / cam["fx"]
+def refine_crooked_to_observed_grid(targets):
+    """Replace a tilted cap centroid with its nearest grid intersection.
+
+    The grid is fitted from current good/missing observations only. It is a
+    perception-derived consistency prior, not a stored aperture coordinate map.
+    """
+    anchors=[t for t in targets if t['class_name'] in ('good_cap','missing_cap') and t['confidence']>=.9]
+    if len(anchors)<18: return targets
+    points=np.array([t['base_pos_m'][:2] for t in anchors],dtype=float)
+    center=points.mean(axis=0)
+    _,_,vt=np.linalg.svd(points-center,full_matrices=False)
+    axes=vt[:2]
+    uv=(points-center)@axes.T
+    candidates=[]
+    for rows,cols in ((6,5),(5,6)):
+        u=_kmeans_1d(uv[:,0],rows); v=_kmeans_1d(uv[:,1],cols)
+        grid=np.array([center+x*axes[0]+y*axes[1] for x in u for y in v])
+        residual=np.mean([np.min(np.linalg.norm(grid-p,axis=1)) for p in points])
+        candidates.append((residual,grid))
+    _,grid=min(candidates,key=lambda item:item[0])
+    refined=[]
+    for target in targets:
+        item=dict(target)
+        if item['class_name']=='crooked_cap':
+            old=np.asarray(item['base_pos_m'],dtype=float)
+            nearest=grid[np.argmin(np.linalg.norm(grid-old[:2],axis=1))]
+            correction=float(np.linalg.norm(nearest-old[:2]))
+            # A poor lattice fit must never turn a detector estimate into a
+            # distant command target. Expected tilted-cap correction is mm-scale.
+            if correction<=.012:
+                item['box_center_base_pos_m']=old.tolist()
+                item['base_pos_m']=[float(nearest[0]),float(nearest[1]),float(old[2])]
+                item['localization_note']='Tilted-cap box center refined to nearest TableCam-observed tray grid intersection; validation pending'
+                item['feature']='observed_grid_slot'
+            else:
+                item['localization_note']='Observed grid fit disagreed with tilted-cap box center; retained coarse RGB estimate'
+                item['grid_refinement_rejected_m']=correction
+        refined.append(item)
+    return refined
+
+
+def load_cameras(calib_dir=CALIBRATION_DIR):
+    raw = json.loads((Path(calib_dir) / 'cameras.json').read_text())
+    return {name: {'T': np.array(c.get('T_base_cam', c.get('T_flange_cam'))),
+                   'fx': c['fx'], 'k1': c.get('k1', 0.), 'size': tuple(c['size']),
+                   'frame': 'base' if 'T_base_cam' in c else 'flange'}
+            for name, c in raw.items() if isinstance(c, dict)}
+
+
+def pixel_to_base(cam, uv, z=SPEC.surface_base_z, image_size=None):
+    if cam.get('frame', 'base') != 'base':
+        raise ValueError('Fixed camera in robot-base frame required')
+    w, h = cam['size']
+    pixel = np.asarray(uv, dtype=float)
+    if image_size is not None:
+        iw, ih = image_size
+        if min(iw, ih) <= 0 or abs(iw / ih - w / h) > 1e-6:
+            raise ValueError('Image aspect ratio changed: supply a calibrated crop transform')
+        pixel = pixel * np.array([w / iw, h / ih])
+    xd, yd = (pixel - np.array([w / 2, h / 2])) / cam['fx']
     x, y = xd, yd
     for _ in range(10):
-        d = 1.0 + cam["k1"] * (x * x + y * y)
-        x, y = xd / d, yd / d
-    ray = cam["T"][:3, :3] @ np.array([x, y, 1.0])
-    origin = cam["T"][:3, 3]
-    return origin + ray * (z - origin[2]) / ray[2]
+        d = 1 + cam.get('k1', 0.) * (x*x + y*y)
+        x, y = xd/d, yd/d
+    ray = cam['T'][:3, :3] @ np.array([x, y, 1.])
+    origin = cam['T'][:3, 3]
+    if abs(ray[2]) < 1e-9:
+        raise ValueError('Ray parallel to support plane')
+    t = (z-origin[2])/ray[2]
+    if t <= 0 or not np.isfinite(t):
+        raise ValueError('Support plane behind camera')
+    return origin + ray*t
 
 
-def base_to_uf0(p_base_m: np.ndarray) -> np.ndarray:
-    """Converts 3D position from base frame (m) to UF0 frame (mm) for Fanuc ER-4iA TCP."""
-    x_mm = p_base_m[0] * 1000.0
-    y_mm = p_base_m[1] * 1000.0
-    z_mm = (p_base_m[2] + UF0_OFFSET_Z) * 1000.0
-    return np.array([x_mm, y_mm, z_mm])
+def camera_from_usd_capture(metadata):
+    """Convert a captured USD camera to the fixed-camera convention, in base metres."""
+    m = np.asarray(metadata['camera_to_world'], dtype=float)
+    T = np.eye(4)
+    T[:3, :3] = m[:3, :3].T @ np.diag([1., -1., -1.])
+    T[:3, 3] = m[3, :3] - [0, 0, SPEC.world_base_z]
+    w, h = metadata['resolution']
+    return {'T': T, 'fx': w*metadata['focal_length_mm']/metadata['horizontal_aperture_mm'],
+            'k1': 0., 'size': (w, h), 'frame': 'base'}
 
 
 class RemediationVisionDetector:
-    def __init__(self, calib_dir: Path = CALIBRATION_DIR):
-        self.cams = load_cameras(calib_dir)
-        self.table_cam = self.cams["table"]
+    def __init__(self, checkpoint, calib_dir=CALIBRATION_DIR, *, camera=None, model=None,
+                 confidence=.6, device='cpu', rim_z=None):
+        if model is None:
+            if not checkpoint or not Path(checkpoint).is_file():
+                raise FileNotFoundError('A validated remediation detector checkpoint is required')
+            from ultralytics import YOLO
+            model = YOLO(str(checkpoint))
+        self.model = model
+        names = model.names
+        actual = tuple(names[i] for i in range(len(names))) if isinstance(names, dict) else tuple(names)
+        if actual != CLASS_NAMES:
+            raise ValueError(f'Wrong detector class mapping: {actual}; expected {CLASS_NAMES}')
+        self.table_cam = camera if camera is not None else load_cameras(calib_dir)['table']
+        self.confidence, self.device = confidence, device
+        self.rim_z = rim_base_z() if rim_z is None else float(rim_z)
 
-    def detect_table_caps(self, rgb_img: np.ndarray) -> List[dict]:
-        """Detects loose yellow caps lying on the table surface."""
-        # Convert RGB to HSV
-        hsv = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HSV)
-        # Yellow cap mask
-        lower_yellow = np.array([18, 100, 100])
-        upper_yellow = np.array([35, 255, 255])
-        mask = cv2.inRange(hsv, lower_yellow, upper_yellow)
-
-        # Exclude the tray region (mask out tray area in pixel space)
-        # Tray generally occupies rows above pixel y = 650 or specific bounding box
-        # Table supply area is typically lower-left in camera view
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        table_caps = []
-
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if 150 < area < 2500:  # Cap size filter
-                M = cv2.moments(cnt)
-                if M["m00"] > 0:
-                    u = M["m10"] / M["m00"]
-                    v = M["m01"] / M["m00"]
-                    # Intersect ray with table surface Z = SURFACE_Z
-                    p_base = pixel_to_base(self.table_cam, (u, v), z=SURFACE_Z)
-                    # Only accept caps on the table (X in [0.25, 0.50], Y < -0.10)
-                    if 0.25 <= p_base[0] <= 0.50 and p_base[1] < -0.10:
-                        p_uf0 = base_to_uf0(p_base)
-                        table_caps.append({
-                            "pixel": (u, v),
-                            "base_pos_m": p_base,
-                            "tcp_pos_mm": p_uf0
-                        })
-        return table_caps
-
-    def classify_tray_apertures(
-        self,
-        rgb_img: np.ndarray,
-        depth_img: np.ndarray | None = None,
-        aperture_grid_centers: List[Tuple[float, float]] | None = None
-    ) -> Dict[str, List[dict]]:
-        """
-        Classifies each of the 30 apertures into 'crooked', 'missing', or 'good'.
-        Uses ray intersection and depth elevation relative to nominal rim TRAY_RIM_Z.
-        """
-        results = {"crooked": [], "missing": [], "good": []}
-
-        # If aperture centers are not provided, estimate from standard grid projection
-        if aperture_grid_centers is None:
-            # Generate nominal aperture centers
-            tray_center = np.array([0.35, -0.02, TRAY_RIM_Z])
-            pitch_x, pitch_y = 0.040, 0.038
-            aperture_grid_centers = []
-            for r in range(6):
-                for c in range(5):
-                    slot = r * 5 + c + 1
-                    vx = tray_center[0] + (r - 2.5) * pitch_x
-                    vy = tray_center[1] + (c - 2.0) * pitch_y
-                    aperture_grid_centers.append((slot, vx, vy, TRAY_RIM_Z))
-
-        for item in aperture_grid_centers:
-            slot, vx, vy, vz = item
-            # Find pixel projection
-            # Determine Z elevation from depth if available, or appearance/contours
-            # Here we test classification logic based on elevation
-            # In simulation / depth stream:
-            #   delta_z = z_measured - TRAY_RIM_Z
-            # For demonstration / mock testing:
-            pass
-
-        return results
+    def detect(self, rgb, timestamp=None, depth_m=None):
+        if not isinstance(rgb, np.ndarray) or rgb.ndim != 3 or rgb.shape[2] != 3:
+            raise ValueError('Expected an RGB image with three channels')
+        h, w = rgb.shape[:2]
+        if depth_m is not None:
+            depth_m=np.asarray(depth_m,dtype=float)
+            if depth_m.shape[:2] != (h,w):
+                raise ValueError('Depth and RGB must share the calibrated native pixel grid')
+        results = self.model.predict(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), conf=self.confidence,
+                                     imgsz=1280, device=self.device, verbose=False)
+        targets = []
+        for result in results:
+            for xyxy, confidence, cls_id in zip(result.boxes.xyxy.cpu().numpy(),
+                                                result.boxes.conf.cpu().numpy(),
+                                                result.boxes.cls.cpu().numpy()):
+                name = CLASS_NAMES[int(cls_id)]
+                center = (xyxy[:2]+xyxy[2:])/2
+                # Object origins differ: spare caps rest on the plug, seated caps on the rim.
+                plane = (SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness
+                         if name == 'table_cap' else self.rim_z + (0 if name == 'missing_cap' else SPEC.flange_thickness))
+                position = pixel_to_base(self.table_cam, center, plane, (w, h))
+                depth_value=None
+                if depth_m is not None:
+                    x0,y0,x1,y1=np.round(xyxy).astype(int)
+                    crop=depth_m[max(y0,0):min(y1,h),max(x0,0):min(x1,w)]
+                    valid=crop[np.isfinite(crop) & (crop>0)]
+                    if len(valid): depth_value=float(np.median(valid))
+                targets.append({'class_name': name, 'confidence': float(confidence),
+                                'bbox_xyxy': xyxy.tolist(), 'pixel': center.tolist(),
+                                'base_pos_m': position.tolist(), 'tcp_pos_mm': base_to_uf0(position).tolist(),
+                                'timestamp': timestamp, 'plane_base_z_m': plane,
+                                'depth_median_m':depth_value,
+                                'depth_available':depth_value is not None,
+                                'contact_qualified': False,
+                                'localization_note': 'RGB box-center and optional aligned depth observation; feature refinement and contact error budget remain unvalidated'})
+        return refine_crooked_to_observed_grid(targets)

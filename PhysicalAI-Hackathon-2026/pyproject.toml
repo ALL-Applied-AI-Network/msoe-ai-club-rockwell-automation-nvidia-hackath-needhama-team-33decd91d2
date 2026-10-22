@@ -8,6 +8,7 @@ dependencies = [
     "opencv-python-headless",
     "pyyaml>=6.0.3",
     "requests",
+    "ultralytics==8.4.182",
 ]
 
 [tool.uv]

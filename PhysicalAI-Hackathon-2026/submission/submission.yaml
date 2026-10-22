@@ -34,4 +34,8 @@ rollouts: 10                      # Number of attempts in this test
                                   # Each attempt is scored success or failure
 
 # --- Hardware ---
-custom_hardware: none            # Describe any hardware changes (e.g., 3D-printed fingers)
+custom_hardware: >-
+  Custom modeled fingers with recessed profiles for gripping a loose cap,
+  an uncapped vial, or a capped vial. Planned hardware confirmed by the team;
+  CAD geometry, groove dimensions, mounting offsets and physical validation
+  are pending. This is a preparation draft, not a hardware-ready submission.

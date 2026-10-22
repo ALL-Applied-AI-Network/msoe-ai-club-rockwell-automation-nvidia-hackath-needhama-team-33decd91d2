@@ -69,43 +69,15 @@ fi
 # Clean up any legacy team_14_2026 or data symlinks
 rm -f team_14_2026 data 2>/dev/null || true
 
-# Bootstrap FANUC Robot Arm Digital Twin (Twin 2)
-FANUC_DIR="${SCRIPT_DIR}/shared/data/fanuc_er4ia_sim"
-if [ -d "$FANUC_DIR" ] && [ -f "$FANUC_DIR/bootstrap.sh" ]; then
-    # Create functional .venv using Conda with Python 3.10 if .venv is missing or python is older than 3.9
-    NEED_CONDA_VENV=false
-    if [ ! -x "$FANUC_DIR/.venv/bin/python" ]; then
-        NEED_CONDA_VENV=true
-    elif ! "$FANUC_DIR/.venv/bin/python" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
-        NEED_CONDA_VENV=true
-    fi
-
-    if [ "$NEED_CONDA_VENV" = true ]; then
-        CONDA_BIN=""
-        if command -v conda >/dev/null 2>&1; then
-            CONDA_BIN="$(command -v conda)"
-        elif [ -x "/usr/local/anaconda3/bin/conda" ]; then
-            CONDA_BIN="/usr/local/anaconda3/bin/conda"
-        fi
-
-        if [ -n "$CONDA_BIN" ]; then
-            echo "Creating Python 3.10 virtual environment in $FANUC_DIR/.venv via Conda..."
-            rm -rf "$FANUC_DIR/.venv"
-            "$CONDA_BIN" create -y -p "$FANUC_DIR/.venv" python=3.10 pip
-        fi
-    fi
-
-    echo "Bootstrapping FANUC robot arm simulation (generating textures & running unit tests)..."
-    (
-        cd "$FANUC_DIR"
-        chmod +x bootstrap.sh *.sh 2>/dev/null || true
-        ./bootstrap.sh
-    )
-    if [ "$IS_CLUSTER" = true ]; then
-        chgrp ai_club "$FANUC_DIR" 2>/dev/null || true
-        chmod g+rwxs "$FANUC_DIR" 2>/dev/null || true
-    fi
-    echo "FANUC robot arm simulation initialized."
+# Bootstrap a writable cache copy; organizer data must remain immutable.
+FANUC_SOURCE="${SCRIPT_DIR}/shared/data/fanuc_er4ia_sim"
+FANUC_DIR="${SCRIPT_DIR}/shared/cache/fanuc_runtime"
+if [ -d "$FANUC_SOURCE" ] && [ -f "$FANUC_SOURCE/bootstrap.sh" ]; then
+    mkdir -p "$FANUC_DIR"
+    rsync -a --chmod=u+rwX --exclude='.venv' --exclude='__pycache__' \
+        --exclude='runs' --exclude='textures' "$FANUC_SOURCE/" "$FANUC_DIR/"
+    echo "Preparing FANUC host tools in writable cache: $FANUC_DIR"
+    (cd "$FANUC_DIR" && bash bootstrap.sh)
 fi
 
 # Ensure Isaac Sim 6.1 standalone is available
@@ -118,14 +90,7 @@ if [ -f "scripts/install_isaac_standalone.sh" ]; then
     fi
 fi
 
-# Ensure persistent FANUC scene USD is built in shared/scenes/
-if [ ! -f "shared/scenes/fanuc_scene.usd" ]; then
-    # Only build automatically if we have a direct GPU (GB10, Brev, or compute node)
-    if [ -n "${CUDA_VISIBLE_DEVICES:-}" ] || nvidia-smi >/dev/null 2>&1; then
-        echo "Building initial persistent FANUC scene at shared/scenes/fanuc_scene.usd..."
-        mkdir -p shared/scenes
-        ./scripts/run_isaac.sh scripts/render.py --target build_fanuc 2>/dev/null || true
-    fi
-fi
+# Scene construction is an explicit Slurm job, never a login-node side effect.
+echo "Build/qualify remediation scenes with scripts/submit_isaac_job.slurm."
 
 echo "Setup finished successfully. All data and assets accessible at ./shared/data/"
