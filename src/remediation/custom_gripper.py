@@ -20,8 +20,10 @@ SOURCE_Z_TOP = 0.0437506223631226
 SOURCE_Z_BOTTOM = -0.0477762395223592
 # First visual alignment adjustment from the rendered inspection image.
 # +X is farther along the tool, away from the robot base.
-FORWARD_EXTENSION = 0.020
-DOWNWARD_SHIFT = 0.006
+# Final visual alignment: the custom fingers sit 5 mm forward of the retracted
+# review pose, so their inset mounting faces align with the SMC carrier holes.
+FORWARD_EXTENSION = 0.0185
+DOWNWARD_SHIFT = 0.0065
 MIN_FINGER_GAP = 0.003
 STARTING_FINGER_GAP = MIN_FINGER_GAP + 2 * 0.006
 # The cell places each jaw root laterally before applying our CAD reference.
@@ -31,6 +33,11 @@ STARTING_FINGER_GAP = MIN_FINGER_GAP + 2 * 0.006
 # measured 15--27 mm CAD gap.  Shift each half 6 mm inward so the commanded
 # mechanism spans the required 3--15 mm mesh separation.
 JAW_ROOT_LATERAL_COMP = 0.00425
+# The supplied pneumatic linkage has opposite left/right motion relative to
+# the custom STEP reference frame.  Pair a custom half to the counterpart jaw
+# and compensate its fixed mounting offset so open/closed mesh gaps remain
+# 15/3 mm while retaining the supplied SMC carrier motion.
+COUNTERPART_JAW_INSET = 0.018002
 # Measured from the mounted CAD envelope in Isaac (see
 # custom_gripper_tcp_metrology.json). This supports simulation approach-pose
 # visualization only; physical TCP/contact calibration remains required.
@@ -52,12 +59,16 @@ def attach_collision_proxies(stage):
     height = 0.0356293480873969
     paths = []
     for sign, tag in ((1, 'L'), (-1, 'R')):
-        path = cell.JAW_PRIMS[tag] + '/CustomFingerCollisionProxy'
+        # Match the corrected counterpart-jaw visual linkage so collision
+        # geometry follows the same custom-finger state.
+        jaw_root = cell.JAW_PRIMS['R' if tag == 'L' else 'L']
+        path = jaw_root + '/CustomFingerCollisionProxy'
         proxy = UsdGeom.Cube.Define(stage, path)
         proxy.CreateSizeAttr(1.0)
         UsdGeom.Xformable(proxy).AddTranslateOp().Set(
             Gf.Vec3d(finger_x - carriage_x + C.FINGER_LENGTH / 2 + FORWARD_EXTENSION,
-                     -sign * (width / 2 + STARTING_FINGER_GAP / 2 + JAW_ROOT_LATERAL_COMP),
+                     (-sign * (width / 2 + STARTING_FINGER_GAP / 2 + JAW_ROOT_LATERAL_COMP)
+                      + sign * COUNTERPART_JAW_INSET),
                      -0.0178 - DOWNWARD_SHIFT)
         )
         UsdGeom.Xformable(proxy).AddScaleOp().Set(Gf.Vec3f(length / 2, width / 2, height / 2))
@@ -78,7 +89,7 @@ def attach_visual_pair(stage):
     target_center = (SOURCE_Y_MAX - SOURCE_Y_MIN) / 2.0 + STARTING_FINGER_GAP / 2.0
     paths = []
     for sign, tag in ((1, 'L'), (-1, 'R')):
-        jaw = cell.JAW_PRIMS[tag]
+        jaw = cell.JAW_PRIMS['R' if tag == 'L' else 'L']
         if not stage.GetPrimAtPath(jaw).IsValid():
             raise RuntimeError(f'Custom gripper requires active jaw {jaw}')
         path = jaw + '/CustomFingerCad'
@@ -90,7 +101,8 @@ def attach_visual_pair(stage):
         # Center the asymmetric STEP envelope first, then set the inner
         # surfaces to the 3 mm closed gap. Mirroring applies to the source
         # center as well as the mesh geometry.
-        y_translation = -sign * (target_center + SOURCE_Y_CENTER + JAW_ROOT_LATERAL_COMP)
+        y_translation = (-sign * (target_center + SOURCE_Y_CENTER + JAW_ROOT_LATERAL_COMP)
+                         + sign * COUNTERPART_JAW_INSET)
         xf.AddTranslateOp().Set(Gf.Vec3d(mount_x, y_translation, -0.0178 - DOWNWARD_SHIFT))
         xf.AddRotateYOp().Set(-90.0)
         if sign < 0:
@@ -100,7 +112,8 @@ def attach_visual_pair(stage):
     # SMC jaw body visible because it is the moving left/right assembly.
     for tag in ('L', 'R'):
         jaw_root = cell.JAW_PRIMS[tag]
-        for name in ('Finger', 'SoftTip', 'Detail', 'SensorCarrier', 'SensorRedNose', 'OuterCrossBolt'):
+        for name in ('Finger', 'SoftTip', 'Detail', 'SensorCarrier', 'SensorRedNose', 'OuterCrossBolt',
+                     'MountScrew', 'ScrewSocket', 'Tape', 'Collision'):
             visual = stage.GetPrimAtPath(jaw_root + '/' + name)
             if visual.IsValid():
                 UsdGeom.Imageable(visual).CreateVisibilityAttr().Set('invisible')
@@ -110,6 +123,21 @@ def attach_visual_pair(stage):
             for prim in stage.Traverse():
                 if str(prim.GetPath()).startswith(prefix) and prim.IsA(UsdGeom.Gprim):
                     UsdGeom.Imageable(prim).CreateVisibilityAttr().Set('invisible')
+        # The starter scene names some retired extender fasteners with numbered
+        # leaves (for example MountScrew0_front), rather than a common scope.
+        # Hide those visual-only remnants while retaining SMCJaw, the part that
+        # actually translates left/right with the pneumatic mechanism.
+        for prim in stage.Traverse():
+            path = str(prim.GetPath())
+            if path.startswith(jaw_root + '/') and prim.IsA(UsdGeom.Gprim):
+                leaf = path.rsplit('/', 1)[-1].lower()
+                if any(token in leaf for token in ('mountscrew', 'screwsocket', 'tape')):
+                    UsdGeom.Imageable(prim).CreateVisibilityAttr().Set('invisible')
+        # Retain the supplied black SMC carrier mesh and its mounting-hole
+        # detail. It is the visual reference for the pneumatic jaw assembly.
+        starter_carrier = stage.GetPrimAtPath(jaw_root + '/SMCJaw')
+        if starter_carrier.IsValid():
+            UsdGeom.Imageable(starter_carrier).CreateVisibilityAttr().Set('inherited')
     # The stock cell adds a fixed laser carrier with a red nose near the
     # fingertips. It is unrelated to the replacement gripper and is removed
     # from the visual assembly (there is no collision body on this detail).
@@ -134,8 +162,9 @@ def attach_visual_pair(stage):
         'closed_min_mesh_gap_m': MIN_FINGER_GAP,
         'open_min_mesh_gap_m': STARTING_FINGER_GAP,
         'jaw_root_lateral_compensation_m': JAW_ROOT_LATERAL_COMP,
-        'stock_finger_visuals_hidden': ['Finger', 'SoftTip', 'Detail', 'SensorCarrier', 'SensorRedNose', 'OuterCrossBolt'],
-        'moving_jaw_visual_retained': 'SMCJaw',
+        'stock_finger_visuals_hidden': ['Finger', 'SoftTip', 'Detail', 'SensorCarrier', 'SensorRedNose', 'OuterCrossBolt',
+                                        'MountScrew*', 'ScrewSocket*', 'Tape', 'Collision'],
+        'moving_jaw_visual_retained': 'SMCJaw carrier with mounting holes',
         'starting_jaw_state': 'fully_extended',
         'starting_extension_per_jaw_m': float(C.JAW_STROKE),
         'hidden_wrist_visuals': hidden_wrist_details,

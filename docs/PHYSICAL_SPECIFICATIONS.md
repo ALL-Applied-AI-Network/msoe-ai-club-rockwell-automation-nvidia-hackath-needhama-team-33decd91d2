@@ -19,6 +19,17 @@ uses the 284.30 mm value only for non-contact positioning. It is a conservative
 CAD-envelope measurement, not a physical TCP calibration or a cap-contact
 offset; those remain required before contact motion.
 
+**Accepted custom-finger visual mount (October 22, 2026):** Each supplied
+custom-finger half is mounted with local **−Z** in the grasp direction and the
+recessed **+Y** attachment face inward. The paired fingers use a 3--15 mm
+mesh-gap range over the SMC's 6 mm per-jaw stroke. The reviewed mount places
+the fingers **18.5 mm forward** of the baseline carrier reference and
+**6.5 mm downward**; their two inset attachment holes align to the retained
+black SMC carrier mounting faces. These are accepted simulation geometry
+values. Moving the geometry invalidates the earlier 284.30 mm CAD-envelope
+measurement, so the full-remediation trial treats its tool offset as a
+best-effort simulation value and does not promote it to physical TCP data.
+
 The team confirmed custom fingers with recessed profiles for a loose cap, an
 uncapped vial, or a capped vial. The supplied `data/gripper.step` is an AP242
 metre-based CAD model, but its mounting frame, TCP, grasp surfaces, and collision

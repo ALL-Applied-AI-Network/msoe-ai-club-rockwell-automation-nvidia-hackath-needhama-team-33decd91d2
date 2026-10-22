@@ -16,6 +16,9 @@ if FANUC.is_dir():
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--jaw-state', choices=('open', 'closed'), default='open')
+    parser.add_argument('--closeup-side', action='store_true',
+                        help='Render the side inspection camera close to the mounting faces.')
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     # Isaac forwards the parent process command line to Kit.  Keep this
@@ -51,8 +54,15 @@ def main():
         arm.initialize()
         positions = arm.get_joint_positions().copy()
         names = list(arm.dof_names)
-        for joint, target in cell.jaw_targets(C.JAW_CLOSED).items():
+        # The supplied SMC carrier uses its native open/closed endpoint
+        # convention: q=0 is open and each carrier has 6 mm of travel.
+        requested_jaw = C.JAW_OPEN if args.jaw_state == 'open' else C.JAW_CLOSED
+        for joint, target in cell.jaw_targets(requested_jaw).items():
             positions[names.index(joint)] = target
+        # Set immediately as well as driving toward the target.  This prevents
+        # a captured first frame from showing the CAD at its open endpoint but
+        # the pneumatic jaw carriers at their pre-reset closed pose.
+        arm.set_joint_positions(positions)
         arm.apply_action(ArticulationAction(joint_positions=positions))
         # Allow the position drive to settle before measuring or capturing.
         for _ in range(35):
@@ -71,6 +81,8 @@ def main():
             'perspective': (target + np.array((.24, -.24, .16)), (0, 0, 1)),
         }
         for name, (eye, up) in views.items():
+            if args.closeup_side and name == 'side':
+                eye = target + np.array((0.0, -.095, .008))
             camera_path = '/World/CustomGripperInspectionCam_' + name
             cell.camera(stage, camera_path, {'eye': eye, 'look_at': target, 'up': up,
                                              'resolution': (1280, 960), 'focal_length': 14.0,
@@ -102,11 +114,16 @@ def main():
         gap_contract = {'minimum_mesh_gap_m': 0.003, 'maximum_mesh_gap_m': 0.015,
                         'jaw_travel_m': 2 * float(JAW_STROKE), 'verified_travel_span_m': 0.012,
                         'status': 'contracted_to_SMC_6mm_per_jaw_travel'}
+        jaw_centers = {}
+        for tag, path in cell.JAW_PRIMS.items():
+            box = cache.ComputeWorldBound(stage.GetPrimAtPath(path)).ComputeAlignedBox()
+            jaw_centers[tag] = ((np.asarray(box.GetMin()) + np.asarray(box.GetMax())) / 2).tolist()
         (args.out / 'mount_report.json').write_text(json.dumps({**mount, 'collision_proxy_paths': collision_proxies,
             'source_descendants': descendants,
             'bounds_world_m': {'min': low.tolist(), 'max': high.tolist()},
             'per_finger_bounds_world_m': per_finger, 'finger_gap_contract': gap_contract,
-            'wrist_detail_paths': wrist_detail_paths}, indent=2) + '\n')
+            'jaw_state_commanded': args.jaw_state, 'jaw_joint_command_m': cell.jaw_targets(requested_jaw),
+            'jaw_centers_world_m': jaw_centers, 'wrist_detail_paths': wrist_detail_paths}, indent=2) + '\n')
     finally:
         app.close()
 
