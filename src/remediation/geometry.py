@@ -24,6 +24,9 @@ class PhysicalSpec:
     flange_inner_radius: float = 0.025146 / 2 - 0.002  # open-through cavity continues through flange
     plug_bottom_face_thickness: float = 0.002  # flat closed end under the hollow plug
     plug_depth: float = 0.013462
+    tray_base_thickness: float = 0.010
+    tray_top_clearance: float = 0.080
+    tray_top_thickness: float = 0.003
     aperture_radius: float = 0.03175 / 2
     world_base_z: float = 0.90
     surface_base_z: float = -0.0051
@@ -110,8 +113,9 @@ def world_to_base(position):
 
 
 def rim_base_z():
-    bases = [p[2] for p in load_layout()['slots_m'].values()]
-    return SPEC.surface_base_z + float(np.median(bases)) + SPEC.vial_height
+    # Vials rest on the 10 mm black base; their mouths extend through the
+    # silver perforated plate, which is supported 80 mm above that base.
+    return SPEC.surface_base_z + SPEC.tray_base_thickness + SPEC.vial_height
 
 
 def transit_base_z():

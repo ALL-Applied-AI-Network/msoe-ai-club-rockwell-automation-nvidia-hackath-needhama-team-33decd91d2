@@ -4,12 +4,12 @@ This document records the exact physical, geometric, and dimensional specificati
 
 **Implementation validation note (October 21, 2026):** The canonical remediation
 implementation in `src/remediation/geometry.py` uses the vial/cap dimensions below.
-Its tray slot locations and support heights come from a read-only measurement of
-the supplied Dataset 1 USD, recorded in `src/remediation/config/dataset1_layout.json`.
-Those source-asset dimensions are not an independent physical survey. The source
-tray places the vial bases about 69.6 mm above the tabletop; with 203.2 mm vials,
-the rims are about 272.8 mm above it. Transit clearance must account for this
-fixture height as well as the carried cap.
+Dataset 1 supplies the 6 × 5 XY slot pattern only. Per the team fixture update on
+October 22, 2026, the remediation tray uses a 10 mm black base, a 3 mm silver
+perforated plate, and 80 mm standoffs from the top of the base to the underside
+of the perforated plate. Vials rest on the base, so their rims are 213.2 mm above
+the work surface. Transit clearance must account for this fixture height as well
+as the carried cap.
 
 The team confirmed custom fingers with recessed profiles for a loose cap, an
 uncapped vial, or a capped vial. The supplied `data/gripper.step` is an AP242
@@ -66,6 +66,10 @@ must be regenerated before a later release decision.
 ---
 
 ## 3. Tray Fixture Specifications
+* **Bottom Plate**: Black, 10.00 mm thick. Vials rest on its upper face.
+* **Standoffs**: Four black supports hold the top plate 80.00 mm above the
+  upper face of the bottom plate.
+* **Top Plate**: Silver metal, 3.00 mm thick, perforated at every vial slot.
 * **Aperture Hole Diameter**: $1.25\text{ in} = 0.03175\text{ m} = 31.75\text{ mm}$
   * Clearance: $1.25\text{ in} - 1.05\text{ in} = 0.20\text{ in} = 5.08\text{ mm}$ diametral clearance around vial outer walls.
 * **Flange Catch**:

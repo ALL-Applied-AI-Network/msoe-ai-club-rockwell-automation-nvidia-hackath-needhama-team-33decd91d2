@@ -30,6 +30,8 @@ def main():
         app.update()
         import omni.usd
         from isaacsim.core.api import World
+        from isaacsim.core.prims import SingleArticulation
+        from isaacsim.core.utils.types import ArticulationAction
         from isaacsim.sensors.camera import Camera
         from pxr import Gf, Usd, UsdGeom
         import cv2
@@ -42,7 +44,18 @@ def main():
         mount = attach_visual_pair(stage)
         collision_proxies = attach_collision_proxies(stage)
         world.reset()
-        for _ in range(10):
+        # The custom fingers achieve their reviewed 15 mm separation at this
+        # commanded mechanical endpoint, not at Kit's uncontrolled default.
+        import scene_config as C
+        arm = SingleArticulation(C.ROBOT_PRIM)
+        arm.initialize()
+        positions = arm.get_joint_positions().copy()
+        names = list(arm.dof_names)
+        for joint, target in cell.jaw_targets(C.JAW_CLOSED).items():
+            positions[names.index(joint)] = target
+        arm.apply_action(ArticulationAction(joint_positions=positions))
+        # Allow the position drive to settle before measuring or capturing.
+        for _ in range(35):
             world.step(render=True)
         cache = UsdGeom.BBoxCache(Usd.TimeCode.Default(), [UsdGeom.Tokens.default_])
         boxes = [cache.ComputeWorldBound(stage.GetPrimAtPath(path)).ComputeAlignedBox() for path in mount['paths']]

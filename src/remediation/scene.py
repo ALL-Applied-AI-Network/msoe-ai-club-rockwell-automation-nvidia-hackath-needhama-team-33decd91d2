@@ -175,6 +175,7 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     cavity=material(stage,'CapCavity',np.clip(cap_color*np.array((.52,.48,.22)),0,1),roughness=.58)
     glass=material(stage,'Glass',(.92,.96,1.),.45,roughness=float(rng.uniform(.12,.35)))
     metal=material(stage,'Fixture',np.clip(np.array((.65,.67,.69))+rng.normal(0,.04,3),0,1),roughness=float(rng.uniform(.25,.65)))
+    black=material(stage,'TrayBase',(.025,.028,.032),roughness=.42)
     physics_mat=UsdShade.Material.Define(stage,'/World/RemediationLooks/Contact')
     pm=UsdPhysics.MaterialAPI.Apply(physics_mat.GetPrim())
     pm.CreateStaticFrictionAttr(SPEC.friction_static); pm.CreateDynamicFrictionAttr(SPEC.friction_dynamic); pm.CreateRestitutionAttr(0.)
@@ -185,20 +186,31 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     R=rotation(0,yaw)
     root=UsdGeom.Xform.Define(stage,'/World/RemediationTray')
     root.AddTranslateOp().Set(Gf.Vec3d(*center)); root.AddRotateZOp().Set(yaw)
-    for name,part in layout['parts'].items():
-        if name!='tray_good_top': box(stage,str(root.GetPath())+'/'+name,part['center_m'],part['size_m'],metal)
-    top=layout['parts']['tray_good_top']; top_z=top['center_m'][2]
+    # Fabricated remediation tray: a 10 mm black bottom plate, four black
+    # 80 mm standoffs, and a 3 mm silver plate with the vial apertures.
+    # Dataset 1 contributes the XY slot layout only; its old support geometry
+    # is not reused as a dimensional authority.
+    top_source=layout['parts']['tray_good_top']
+    tray_xy=top_source['size_m'][:2]
+    base_t, clearance, top_t = SPEC.tray_base_thickness, SPEC.tray_top_clearance, SPEC.tray_top_thickness
+    top_z=base_t + clearance + top_t/2
+    box(stage,str(root.GetPath())+'/BlackBottomPlate',(0,0,base_t/2),(tray_xy[0],tray_xy[1],base_t),black)
+    for ix, x in enumerate((-tray_xy[0]/2+.012, tray_xy[0]/2-.012)):
+        for iy, y in enumerate((-tray_xy[1]/2+.012, tray_xy[1]/2-.012)):
+            # USD prim names cannot contain a leading sign in an identifier.
+            box(stage,str(root.GetPath())+f'/BlackStandoff_{ix}_{iy}',
+                (x,y,base_t+clearance/2),(.010,.010,clearance),black)
     slots=np.array(list(layout['slots_m'].values())).reshape(6,5,3)
     xs=slots[:,:,0].mean(axis=1); ys=slots[:,:,1].mean(axis=0)
-    xe=np.r_[-top['size_m'][0]/2,(xs[:-1]+xs[1:])/2,top['size_m'][0]/2]
-    ye=np.r_[-top['size_m'][1]/2,(ys[:-1]+ys[1:])/2,top['size_m'][1]/2]
+    xe=np.r_[-tray_xy[0]/2,(xs[:-1]+xs[1:])/2,tray_xy[0]/2]
+    ye=np.r_[-tray_xy[1]/2,(ys[:-1]+ys[1:])/2,tray_xy[1]/2]
     shuffled=rng.permutation(30)+1
     crooked_ids=set(shuffled[:crooked]); missing_ids=set(shuffled[crooked:crooked+missing])
     inventory={'seed':seed,'tray_center_world_m':center.tolist(),'tray_yaw_deg':yaw,
                'camera_variation':camera_variation,'slots':{},'caps':[]}
     for index in range(1,31):
-        slot=f'G{index:02d}'; p=np.array(layout['slots_m'][slot]); row,col=divmod(index-1,5)
-        perforated_cell(stage,str(root.GetPath())+'/'+slot+'_plate',p[:2],(xe[row],xe[row+1],ye[col],ye[col+1]),top_z-top['size_m'][2]/2,top_z+top['size_m'][2]/2,metal)
+        slot=f'G{index:02d}'; p=np.array(layout['slots_m'][slot]); p[2]=base_t; row,col=divmod(index-1,5)
+        perforated_cell(stage,str(root.GetPath())+'/'+slot+'_plate',p[:2],(xe[row],xe[row+1],ye[col],ye[col+1]),top_z-top_t/2,top_z+top_t/2,metal)
         tube=UsdGeom.Xform.Define(stage,str(root.GetPath())+'/'+slot+'_tube')
         tube.AddTranslateOp().Set(Gf.Vec3d(*p))
         annulus(stage,str(tube.GetPath())+'/Wall',SPEC.vial_outer_radius,SPEC.vial_outer_radius,SPEC.vial_inner_radius,0,SPEC.vial_height,glass)

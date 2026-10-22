@@ -26,7 +26,11 @@ MIN_FINGER_GAP = 0.003
 STARTING_FINGER_GAP = MIN_FINGER_GAP + 2 * 0.006
 # The cell places each jaw root laterally before applying our CAD reference.
 # Compensate that existing root offset when positioning the asymmetric STEP.
-JAW_ROOT_LATERAL_COMP = 0.01025
+# The articulated Isaac jaws add 12 mm of total separation over their travel.
+# The initial visual-only pose was centered at the wide end, yielding a
+# measured 15--27 mm CAD gap.  Shift each half 6 mm inward so the commanded
+# mechanism spans the required 3--15 mm mesh separation.
+JAW_ROOT_LATERAL_COMP = 0.00425
 
 
 def attach_collision_proxies(stage):
