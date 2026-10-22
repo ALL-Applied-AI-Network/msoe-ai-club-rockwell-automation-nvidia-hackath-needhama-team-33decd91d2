@@ -11,6 +11,14 @@ of the perforated plate. Vials rest on the base, so their rims are 213.2 mm abov
 the work surface. Transit clearance must account for this fixture height as well
 as the carried cap.
 
+**Current simulation metrology (October 22, 2026):** The mounted custom-finger
+CAD envelope has an Isaac-measured grasp-tip offset of **284.30 mm** from the
+robot flange. The original 293.00 mm stock-tool planner value was therefore
+8.70 mm too long for the custom visual assembly. The simulation approach planner
+uses the 284.30 mm value only for non-contact positioning. It is a conservative
+CAD-envelope measurement, not a physical TCP calibration or a cap-contact
+offset; those remain required before contact motion.
+
 The team confirmed custom fingers with recessed profiles for a loose cap, an
 uncapped vial, or a capped vial. The supplied `data/gripper.step` is an AP242
 metre-based CAD model, but its mounting frame, TCP, grasp surfaces, and collision
@@ -87,6 +95,10 @@ must be regenerated before a later release decision.
   * $J6$ wrist center to faceplate: $70\text{ mm}$.
   * Faceplate adapter, upper spacer, SMC body, and finger blades: $223\text{ mm}$.
   * Total tool length (`tip_offset` along local $+X$): $\mathbf{293.0\text{ mm}} = 0.293\text{ m}$.
+  * **Custom-finger simulation grasp tip**: $284.30\text{ mm}$ from flange,
+    measured against the imported CAD envelope in Isaac. This supersedes the
+    stock value for the current non-contact simulation approach renderer only.
+    Do not use it as a physical robot TCP or a pick/place/press contact offset.
 * **Fingertip Grip Pads**:
   * Custom $34.0\text{ mm}$ wide conformal high-friction silicone pads spanning the $1.24\text{ in}$ ($31.50\text{ mm}$) cap flange with non-slip contact mechanics ($\mu_s \ge 3.0$).
 

@@ -31,6 +31,10 @@ STARTING_FINGER_GAP = MIN_FINGER_GAP + 2 * 0.006
 # measured 15--27 mm CAD gap.  Shift each half 6 mm inward so the commanded
 # mechanism spans the required 3--15 mm mesh separation.
 JAW_ROOT_LATERAL_COMP = 0.00425
+# Measured from the mounted CAD envelope in Isaac (see
+# custom_gripper_tcp_metrology.json). This supports simulation approach-pose
+# visualization only; physical TCP/contact calibration remains required.
+SIMULATION_GRASP_TIP_OFFSET_M = 0.2843020875330954
 
 
 def attach_collision_proxies(stage):

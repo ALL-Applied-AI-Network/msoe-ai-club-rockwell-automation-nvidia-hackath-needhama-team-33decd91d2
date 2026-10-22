@@ -25,14 +25,34 @@ def generate_dataset(out, scenes=100, seed=1000, crooked=5, missing=5, table_cap
     if not os.environ.get('SLURM_JOB_ID'):
         raise RuntimeError('Submit generation with scripts/submit_isaac_job.slurm')
     out=Path(out).resolve()
-    if out.exists() and any(out.iterdir()): raise FileExistsError(f'Use a fresh dataset directory: {out}')
-    out.mkdir(parents=True,exist_ok=True)
-    manifest={'schema_version':1,'accepted':False,'config_sha256':configuration_hash(),'classes':list(CLASS_NAMES),
-              'created_utc':datetime.utcnow().isoformat()+'Z','samples':[],'rejected_attempts':[],'failed_samples':[]}
+    manifest_path=out/'manifest.json'
+    if manifest_path.exists():
+        # A scheduler wall-time expiry must not discard independently qualified
+        # scenes. Resume only an incomplete run with the identical geometry and
+        # class contract; never blend datasets from different configurations.
+        manifest=json.loads(manifest_path.read_text())
+        if (manifest.get('config_sha256') != configuration_hash() or
+                tuple(manifest.get('classes', ())) != CLASS_NAMES):
+            raise ValueError('Cannot resume a dataset built with another physical configuration')
+        if manifest.get('accepted'):
+            raise ValueError('Dataset is already complete; use its existing data.yaml')
+        manifest['failed_samples']=[]
+    elif out.exists() and any(out.iterdir()):
+        raise FileExistsError(f'Use a fresh dataset directory: {out}')
+    else:
+        out.mkdir(parents=True,exist_ok=True)
+        manifest={'schema_version':1,'accepted':False,'config_sha256':configuration_hash(),'classes':list(CLASS_NAMES),
+                  'created_utc':datetime.utcnow().isoformat()+'Z','samples':[],'rejected_attempts':[],'failed_samples':[]}
     for split in ['train','val','test']:
-        (out/'images'/split).mkdir(parents=True); (out/'labels'/split).mkdir(parents=True)
+        (out/'images'/split).mkdir(parents=True, exist_ok=True)
+        (out/'labels'/split).mkdir(parents=True, exist_ok=True)
     try:
+        complete={int(item['sample_index']) for item in manifest['samples']}
+        if any(index < 0 or index >= scenes for index in complete):
+            raise ValueError('Requested scene count conflicts with the resumable dataset')
         for index in range(scenes):
+            if index in complete:
+                continue
             split='test' if index%10==0 else 'val' if index%10==1 else 'train'
             accepted=False
             for attempt in range(max_attempts):

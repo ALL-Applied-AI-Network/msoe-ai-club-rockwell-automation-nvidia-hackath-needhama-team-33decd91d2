@@ -2,6 +2,10 @@
 
 Review date: October 21, 2026. Status: implementation in progress; this document preserves the original audit and acceptance gates.
 
+For the current October 22 implementation evidence, artifact locations, measured
+simulation localization, and remaining release gates, see
+[`REMEDIATION_EXECUTION_STATUS.md`](REMEDIATION_EXECUTION_STATUS.md).
+
 ## Implementation status — October 21, 2026
 
 The original Dataset 1 station geometry was measured read-only through Slurm and recorded in `src/remediation/config/dataset1_layout.json`.  A canonical builder now uses those slot/support locations with the verified physical vial and cap dimensions, actual aperture openings, physics settling, dense cap-surface penetration checks, and instance-mask-derived labels.  The scene qualification reports are archived under `runs/archive/2026-10-21_remediation/`.
