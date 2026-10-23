@@ -12,12 +12,14 @@ the work surface. Transit clearance must account for this fixture height as well
 as the carried cap.
 
 **Current simulation metrology (October 22, 2026):** The mounted custom-finger
-CAD envelope has an Isaac-measured grasp-tip offset of **284.30 mm** from the
-robot flange. The original 293.00 mm stock-tool planner value was therefore
-8.70 mm too long for the custom visual assembly. The simulation approach planner
-uses the 284.30 mm value only for non-contact positioning. It is a conservative
-CAD-envelope measurement, not a physical TCP calibration or a cap-contact
-offset; those remain required before contact motion.
+CAD envelope has an Isaac-measured visual grasp-tip offset of **284.30 mm** from
+the robot flange. The original 293.00 mm stock-tool planner value was therefore
+8.70 mm too long for that visual assembly. This is not a physical TCP
+calibration or cap-contact offset. It made current TableCam missing-vial targets
+unreachable in fixed-down IK, so the present best-effort TableCam demonstration
+uses an explicit provisional **100 mm simulation-only** offset. Neither value
+may be used for physical contact until measured TableCam/TCP and cap-contact
+calibration is recorded.
 
 **Accepted custom-finger visual mount (October 22, 2026):** Each supplied
 custom-finger half is mounted with local **−Z** in the grasp direction and the
@@ -106,10 +108,12 @@ must be regenerated before a later release decision.
   * $J6$ wrist center to faceplate: $70\text{ mm}$.
   * Faceplate adapter, upper spacer, SMC body, and finger blades: $223\text{ mm}$.
   * Total tool length (`tip_offset` along local $+X$): $\mathbf{293.0\text{ mm}} = 0.293\text{ m}$.
-  * **Custom-finger simulation grasp tip**: $284.30\text{ mm}$ from flange,
-    measured against the imported CAD envelope in Isaac. This supersedes the
-    stock value for the current non-contact simulation approach renderer only.
-    Do not use it as a physical robot TCP or a pick/place/press contact offset.
+  * **Custom-finger visual CAD envelope**: $284.30\text{ mm}$ from flange,
+    measured against the imported geometry in Isaac. It is retained as
+    metrology evidence only; current TableCam best-effort IK uses a provisional
+    $100.00\text{ mm}$ simulation-only offset because the CAD-envelope number
+    cannot yet serve as a contact TCP. Do not use either number as a physical
+    pick/place/press contact offset.
 * **Fingertip Grip Pads**:
   * Custom $34.0\text{ mm}$ wide conformal high-friction silicone pads spanning the $1.24\text{ in}$ ($31.50\text{ mm}$) cap flange with non-slip contact mechanics ($\mu_s \ge 3.0$).
 

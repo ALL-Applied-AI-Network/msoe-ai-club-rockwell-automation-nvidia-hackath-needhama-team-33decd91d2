@@ -6,6 +6,43 @@ For the current October 22 implementation evidence, artifact locations, measured
 simulation localization, and remaining release gates, see
 [`REMEDIATION_EXECUTION_STATUS.md`](REMEDIATION_EXECUTION_STATUS.md).
 
+## Current execution and physical-submission next steps — October 22, 2026
+
+The remediation review path now has one Slurm submission that preserves the
+actual decision boundary: capture the **current loaded scene** from TableCam,
+run YOLO on that image, plan from those predictions, render the attempted
+action through TableCam, then overlay YOLO on every action frame. The entry
+point is `scripts/run_closed_loop_pipeline.slurm`. It runs Isaac Sim and
+Ultralytics as sequential child processes because they cannot share one Python
+interpreter without a protobuf registration crash.
+
+The first observation is an inventory, not sufficient evidence of repair. The
+next implementation milestone is a bounded state machine shared between Isaac
+and the physical policy:
+
+1. Inspect a fresh TableCam RGB/depth observation and reject uncertain,
+   unreachable, stale, or ambiguous targets.
+2. Select one supported task and send only a short, fixed-down approach/action/
+   retract chunk.
+3. Capture a new observation, run YOLO again, and compare the expected state
+   change: spare removed after pickup, missing vial capped after placement, or
+   crooked cap absent after reseating.
+4. Retry only within a fixed budget; otherwise mark the task unresolved and
+   stop safely. Track spare inventory so no replacement is assumed available.
+5. Keep simulator truth limited to offline evaluation. It must not correct
+   detections, action targets, or success status.
+
+For `PhysicalAI-Hackathon-2026/`, this shared state machine belongs behind
+`Policy.act(obs)`. The supplied client already calls `act` repeatedly with fresh
+images, depth when requested, joint state, and TCP state. The required adapter
+work is to load the remediation checkpoint in `policy.py`, request
+`CAMERAS = ['table']` and `DEPTH = ['table']`, use the real-cell helpers in
+`calibration/geometry.py` for localization, and return short validated TCP
+chunks. `uv run run.py --mock` validates the API and action limits; it does not
+validate perception, grasping, or repairs. Physical motion remains disabled
+until real TableCam/TCP and custom-finger contact calibration plus supervised
+single-action trials pass.
+
 ## Implementation status — October 21, 2026
 
 The original Dataset 1 station geometry was measured read-only through Slurm and recorded in `src/remediation/config/dataset1_layout.json`.  A canonical builder now uses those slot/support locations with the verified physical vial and cap dimensions, actual aperture openings, physics settling, dense cap-surface penetration checks, and instance-mask-derived labels.  The scene qualification reports are archived under `runs/archive/2026-10-21_remediation/`.

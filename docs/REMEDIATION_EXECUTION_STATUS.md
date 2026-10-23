@@ -63,28 +63,75 @@ uses a 260 mm transit plane. Its report is:
 This is deliberately a non-contact approach. It does not pick a spare, insert a
 cap, reseat a crooked cap, or report a repair as successful.
 
+## Current TableCam closed-loop pipeline
+
+The current simulation pipeline is intentionally organized around the same
+fixed TableCam that supplies the initial decision. Its single Slurm submission
+script is `scripts/run_closed_loop_pipeline.slurm`:
+
+1. Isaac captures native 1920 × 1080 RGB, aligned depth, and camera metadata
+   from the loaded remediation scene with `capture_live_tablecam.py`.
+2. The project Conda environment runs the remediation YOLO checkpoint on that
+   capture with `inspect_remediation_capture.py`.
+3. Isaac selects only from that fresh prediction JSON, plans fixed-down routes,
+   and renders the attempted action from TableCam with
+   `run_best_effort_closed_loop.py`.
+4. The Conda environment runs YOLO on every rendered TableCam frame and writes
+   the labelled review video.
+
+Isaac Sim and Ultralytics run as separate sequential child processes within the
+same Slurm job because their Python runtimes conflict over protobuf
+registrations. This is a runtime isolation detail, not a split perception/action
+workflow. A pipeline invocation is:
+
+```bash
+sbatch scripts/run_closed_loop_pipeline.slurm \
+  runs/archive/2026-10-22_remediation/black_silver_tray_qualification_v3/scene.usda \
+  runs/archive/2026-10-22_black_silver_fixture_yolo/training/weights/best.pt \
+  runs/archive/2026-10-22_remediation/<run_name>
+```
+
+The first frame inventories defects and starts one action plan. The current
+per-frame labels are rendered evidence only: they do not yet interrupt, replan,
+or verify the action. The required production behavior is instead
+**inspect → choose one action → approach/act/retract → reinspect → confirm,
+retry, or stop**. An action must never be marked successful from its rendered
+motion alone.
+
 ## Custom fingers and tool offset
 
 The imported custom finger CAD is mirrored onto the moving SMC jaws. Its commanded
 minimum mesh separation has been checked at 3.03–14.95 mm. Isaac CAD metrology
-measured a conservative grasp-tip offset of 284.302 mm from the flange:
+previously measured a conservative visual-envelope grasp-tip offset of 284.302 mm from the flange:
 
 - `runs/archive/2026-10-22_remediation/black_silver_prediction_dry_run/custom_gripper_tcp_metrology.json`
 
-The prior 293 mm stock tool value differs by 8.70 mm. The non-contact renderer
-uses the CAD-derived value. The custom-finger contract remains
+The prior 293 mm stock tool value differs by 8.70 mm. This visual measurement
+is not a physical TCP and made current TableCam missing-vial predictions
+unreachable in the fixed-down simulation solver. The best-effort TableCam run
+therefore exposes a separate provisional 100 mm **simulation-only** offset on
+its command line; it is used only to exercise the perception/action handoff,
+not to claim contact accuracy. The custom-finger contract remains
 `blocked_pending_contact_and_tcp_validation`; it has no measured physical TCP,
 cap pick offset, place offset, press offset, contact trial, or physical grasp
 evidence.
 
 ## Remaining work before full remediation
 
-1. Improve crooked-cap localization to the measured contact error budget.
-2. Measure actual physical TableCam-to-base/TCP references and custom-finger
-   contact offsets.
-3. Validate gripper collision/contact, spare pickup, placement, and crooked-cap
-   press in Isaac using the measured tool geometry.
-4. Add reinspection after each action and only mark repair success from new
-   perception evidence.
-5. Repeat the validated perception/controller path with supervised hardware
-   trials before enabling physical contact in `PhysicalAI-Hackathon-2026/`.
+1. Add an Isaac observation/action adapter that executes the same state machine
+   used by the physical policy: re-run YOLO after every short action chunk,
+   require state change for success, and stop on stale, ambiguous, unreachable,
+   or low-confidence observations.
+2. Improve crooked-cap localization to the measured press-contact error budget;
+   a bounding-box center is not enough for a press point.
+3. Measure physical TableCam-to-base/TCP references and custom-finger pick,
+   place, and press offsets. Replace the provisional simulation offset only
+   after this calibration passes.
+4. Qualify one isolated spare pickup, missing-cap placement, and crooked-cap
+   reseat in Isaac using collision/contact geometry that does not overlap the
+   retired stock-finger colliders.
+5. Move the shared detector/state machine into
+   `PhysicalAI-Hackathon-2026/policy.py`, request TableCam depth, use its
+   real-cell calibration helpers, and pass `uv run run.py --mock`.
+6. Validate real images and supervised hardware approaches before enabling
+   physical contact or submitting a non-hold policy.
