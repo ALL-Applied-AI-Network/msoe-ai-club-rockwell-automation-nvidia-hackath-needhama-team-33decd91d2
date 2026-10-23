@@ -1,0 +1,360 @@
+{
+  "pipeline": "pcmc_optimized",
+  "description": "PCMC 100% shared-material reordering with calibrated hold-up deduction",
+  "hold_up_volume_ml": 8.2,
+  "initial_tube_fluid": "T100",
+  "total_solutions": 10,
+  "total_target_volume_ml": 635.0,
+  "total_pumped_volume_ml": 553.0,
+  "total_delivered_volume_ml": 635.0,
+  "total_cross_contamination_ml": 0.0,
+  "vials_with_defects": 0,
+  "spill_warnings": 0,
+  "reagent_saved_ml": 82.0,
+  "schedule": [
+    {
+      "step": 1,
+      "name": "Recipe 5: Low Even",
+      "target_amounts": {
+        "T100": 10.0,
+        "T200": 10.0,
+        "T400": 10.0
+      },
+      "dispense_order": [
+        "T100",
+        "T400",
+        "T200"
+      ],
+      "pumped_amounts": {
+        "T100": 1.8,
+        "T400": 10.0,
+        "T200": 10.0
+      },
+      "delivered_amounts": {
+        "T100": 10.0,
+        "T400": 10.0,
+        "T200": 10.0
+      },
+      "total_volume": 30.0,
+      "target_volume": 30.0,
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T200",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 2,
+      "name": "Recipe 6: Pale Orange",
+      "target_amounts": {
+        "T100": 30.0,
+        "T200": 10.0
+      },
+      "dispense_order": [
+        "T200",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 1.8,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "total_volume": 40.0,
+      "target_volume": 40.0,
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T100",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 3,
+      "name": "Recipe 10: Pale Wash",
+      "target_amounts": {
+        "T100": 45.0,
+        "T200": 15.0,
+        "T400": 15.0
+      },
+      "dispense_order": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T100": 36.8,
+        "T200": 15.0,
+        "T400": 15.0
+      },
+      "delivered_amounts": {
+        "T100": 45.0,
+        "T200": 15.0,
+        "T400": 15.0
+      },
+      "total_volume": 75.0,
+      "target_volume": 75.0,
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T400",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 4,
+      "name": "Recipe 14: Clear+Blue",
+      "target_amounts": {
+        "T100": 60.0,
+        "T400": 10.0
+      },
+      "dispense_order": [
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 1.8,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "total_volume": 70.0,
+      "target_volume": 70.0,
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 5,
+      "name": "Recipe 7: Pale Blue",
+      "target_amounts": {
+        "T100": 20.0,
+        "T400": 50.0
+      },
+      "dispense_order": [
+        "T100",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T100": 11.8,
+        "T400": 50.0
+      },
+      "delivered_amounts": {
+        "T100": 20.0,
+        "T400": 50.0
+      },
+      "total_volume": 70.0,
+      "target_volume": 70.0,
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T400",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 6,
+      "name": "Recipe 11: High Blue",
+      "target_amounts": {
+        "T100": 10.0,
+        "T200": 10.0,
+        "T400": 50.0
+      },
+      "dispense_order": [
+        "T400",
+        "T200",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 41.8,
+        "T200": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T200": 10.0,
+        "T100": 10.0
+      },
+      "total_volume": 70.0,
+      "target_volume": 70.0,
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 7,
+      "name": "Recipe 9: Dark Saturate",
+      "target_amounts": {
+        "T100": 10.0,
+        "T200": 35.0,
+        "T400": 35.0
+      },
+      "dispense_order": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T100": 1.8,
+        "T200": 35.0,
+        "T400": 35.0
+      },
+      "delivered_amounts": {
+        "T100": 10.0,
+        "T200": 35.0,
+        "T400": 35.0
+      },
+      "total_volume": 80.0,
+      "target_volume": 80.0,
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T400",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 8,
+      "name": "Recipe 12: High Orange",
+      "target_amounts": {
+        "T100": 10.0,
+        "T200": 50.0,
+        "T400": 10.0
+      },
+      "dispense_order": [
+        "T400",
+        "T100",
+        "T200"
+      ],
+      "pumped_amounts": {
+        "T400": 1.8,
+        "T100": 10.0,
+        "T200": 50.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 10.0,
+        "T200": 50.0
+      },
+      "total_volume": 70.0,
+      "target_volume": 70.0,
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T200",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 9,
+      "name": "Recipe 13: Orange+Blue",
+      "target_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "dispense_order": [
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T200": 41.8,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "total_volume": 70.0,
+      "target_volume": 70.0,
+      "resident_fluid_inherited": "T200",
+      "resident_fluid_passed": "T400",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "spill_risk": false
+    },
+    {
+      "step": 10,
+      "name": "Recipe 8: Even Triple",
+      "target_amounts": {
+        "T100": 20.0,
+        "T200": 20.0,
+        "T400": 20.0
+      },
+      "dispense_order": [
+        "T400",
+        "T200",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 11.8,
+        "T200": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 20.0,
+        "T200": 20.0,
+        "T100": 20.0
+      },
+      "total_volume": 60.0,
+      "target_volume": 60.0,
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "contamination_volume": 0.0,
+      "is_foreign_contaminant": false,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "spill_risk": false
+    }
+  ]
+}

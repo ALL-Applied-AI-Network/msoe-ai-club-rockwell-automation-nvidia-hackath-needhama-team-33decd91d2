@@ -51,6 +51,8 @@ def parse_args():
                         help="Explicit output directory override (skips auto-timestamped naming)")
     parser.add_argument("--vial-step", type=int, default=None,
                         help="Specific vial step to render for mixing target (1-indexed)")
+    parser.add_argument("--compare", action="store_true", default=False,
+                        help="Run head-to-head comparison: baseline unmodified vs new PCMC algorithm")
     parser.add_argument("--renderer", choices=["RayTracedLighting", "PathTracing"], default="RayTracedLighting",
                         help="RTX renderer engine")
     return parser.parse_args()
@@ -359,6 +361,8 @@ def main():
         cmd = [sys.executable, str(sim_script), "--out-dir", str(run_dir), "--renderer", args.renderer, "--subframes", str(args.subframes)]
         if args.vial_step is not None:
             cmd.extend(["--step", str(args.vial_step)])
+        if args.compare:
+            cmd.append("--compare")
         subprocess.run(cmd, check=True)
 
 
