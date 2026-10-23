@@ -18,10 +18,10 @@ def main():
     p.add_argument('--capture-report',help='Simulation camera metadata; omit for real calibrated TableCam')
     p.add_argument('--out',required=True); p.add_argument('--device',default='cpu')
     args=p.parse_args()
-    camera=None
+    camera=None; capture=None
     if args.capture_report:
-        report=json.loads(Path(args.capture_report).read_text())
-        camera=camera_from_usd_capture(report['camera'])
+        capture=json.loads(Path(args.capture_report).read_text())
+        camera=camera_from_usd_capture(capture['camera'])
     image=cv2.imread(args.image)
     if image is None: raise ValueError('Cannot read input image')
     detector=RemediationVisionDetector(args.checkpoint,camera=camera,device=args.device)
@@ -31,8 +31,11 @@ def main():
         depth=np.load(args.depth)
     targets=detector.detect(cv2.cvtColor(image,cv2.COLOR_BGR2RGB),depth_m=depth)
     out=Path(args.out); out.parent.mkdir(parents=True,exist_ok=True)
-    out.write_text(json.dumps({'checkpoint':args.checkpoint,'image':args.image,'targets':targets,
-                               'motion_enabled':False,'contact_localization_validated':False},indent=2)+'\n')
+    out.write_text(json.dumps({'checkpoint':args.checkpoint,'image':args.image,'depth':args.depth,
+                               'camera':capture.get('camera') if capture else None,
+                               'source':capture.get('source') if capture else 'external_tablecam_capture',
+                               'targets':targets, 'motion_enabled':False,
+                               'contact_localization_validated':False},indent=2)+'\n')
     print(f'{len(targets)} detections; positions saved to {out}; no robot commands issued')
 
 

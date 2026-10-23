@@ -2,8 +2,8 @@
 """Run a prediction-selected, best-effort Isaac remediation contact trial.
 
 This is deliberately an *attempt* recorder.  Targets are selected from saved
-TableCam/YOLO observations; no scene-truth coordinates are used for selection
-or substitution.  It drives the simulated arm through a spare-cap pickup and
+TableCam/YOLO observations captured from the loaded scene; no scene-truth
+coordinates are used for selection or substitution.  It drives the simulated arm through a spare-cap pickup and
 placement attempt, followed by a vertical crooked-cap press attempt, and
 records the actual rendered motion.  A completed video is not proof of a
 grasp, placement, or physical-robot contact qualification.
@@ -18,9 +18,11 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT), str(ROOT / 'shared/data/fanuc_er4ia_sim')]
-# Derived only from the reviewed visual mount: 284.302 mm at 20 mm forward,
-# less the current 1.5 mm retraction.  It is not a physical TCP measurement.
-SIMULATION_TOOL_OFFSET_M = 0.2828020875330954
+# Provisional simulation-only grasp-tip offset.  The former 282.8 mm visual
+# mount estimate is not a calibrated TCP and makes current TableCam targets
+# falsely unreachable.  This value is exposed on the CLI and must be replaced
+# by measured TCP calibration before a physical attempt.
+SIMULATION_TOOL_OFFSET_M = 0.100
 
 
 def solve_route(point, contact_delta_m, clearance_m=.020):
@@ -89,24 +91,42 @@ def set_jaws(arm, names, opened):
     return positions
 
 
+def disable_gripper_collisions(stage):
+    """Disable overlapping EOAT colliders for this non-contact review render.
+
+    The stock finger colliders remain after their meshes are hidden and overlap
+    the added custom-finger proxies.  Leaving both active produces PhysX
+    self-contact impulses that visibly shake the wrist.  This run has no
+    validated grasp/contact model, so it must be kinematic until that model is
+    qualified rather than implying a physical pickup from unstable contact.
+    """
+    from pxr import UsdPhysics
+    import cell
+    import scene_config as C
+    roots = (cell.FLANGE + '/Gripper', *cell.JAW_PRIMS.values())
+    disabled = []
+    for prim in stage.Traverse():
+        path = str(prim.GetPath())
+        if any(path == root or path.startswith(root + '/') for root in roots):
+            if prim.HasAPI(UsdPhysics.CollisionAPI):
+                UsdPhysics.CollisionAPI(prim).CreateCollisionEnabledAttr().Set(False)
+                disabled.append(path)
+    return disabled
+
+
 def main():
+    global SIMULATION_TOOL_OFFSET_M
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scene', type=Path, required=True)
     parser.add_argument('--detections', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
+    parser.add_argument('--simulation-tool-offset-m', type=float, default=SIMULATION_TOOL_OFFSET_M)
     args = parser.parse_args()
-    observed = json.loads(args.detections.read_text()).get('targets', [])
-    # Camera framing is derived from observed tray objects, never from tray
-    # aperture coordinates used by motion planning.
-    tray_points = [np.asarray(d['base_pos_m'], dtype=float) for d in observed
-                   if d.get('class_name') != 'table_cap']
-    if not tray_points:
-        raise RuntimeError('YOLO did not report tray objects for camera framing')
-    tray_focus = np.mean(tray_points, axis=0)
-    tray_focus[2] = max(point[2] for point in tray_points) + .015
-    spare, spare_path, spare_tilt, spare_rejected = choose(observed, 'table_cap')
-    missing, missing_path, missing_tilt, missing_rejected = choose(observed, 'missing_cap')
-    crooked, crooked_path, crooked_tilt, crooked_rejected = choose(observed, 'crooked_cap')
+    SIMULATION_TOOL_OFFSET_M = float(args.simulation_tool_offset_m)
+    current_observation = json.loads(args.detections.read_text())
+    if current_observation.get('source') != 'current_loaded_scene_tablecam':
+        raise ValueError('--detections must come from capture_live_tablecam.py and current-scene YOLO inference')
+    observed = current_observation.get('targets', [])
     args.out.mkdir(parents=True, exist_ok=True)
     sys.argv = [sys.argv[0]]
     from isaacsim import SimulationApp
@@ -117,7 +137,6 @@ def main():
         import omni.usd
         from isaacsim.core.api import World
         from isaacsim.core.prims import SingleArticulation
-        from isaacsim.core.utils.types import ArticulationAction
         from isaacsim.sensors.camera import Camera
         import cell
         import scene_config as C
@@ -128,19 +147,19 @@ def main():
         print('[closed-loop] scene open', flush=True)
         world = World(stage_units_in_meters=1/1., physics_dt=1/60., rendering_dt=1/30.)
         attach_visual_pair(stage); attach_collision_proxies(stage); world.reset()
-        print('[closed-loop] custom gripper attached', flush=True)
+        disabled_colliders = disable_gripper_collisions(stage)
+        print(f'[closed-loop] custom gripper attached; disabled {len(disabled_colliders)} overlapping EOAT colliders', flush=True)
         arm = SingleArticulation(C.ROBOT_PRIM); arm.initialize()
         names = list(arm.dof_names); arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
-        overview_path = '/World/ClosedLoopAttemptOverviewCam'
-        # From the accepted high isometric pose: lower 0.10 m and raise the
-        # view elevation by 20 degrees, retaining the same table-plane pose.
-        cell.camera(stage, overview_path, {'eye': (.827, -.490, 1.700),
-                                           'look_at': (.385, .035, 1.040),
-                                           'up': (0, 0, 1), 'resolution': (1280, 720),
-                                           'focal_length': 10.0, 'horiz_aperture': 20.955})
-        camera = Camera(overview_path, resolution=(1280, 720)); camera.initialize()
+        spare, spare_path, spare_tilt, spare_rejected = choose(observed, 'table_cap')
+        missing, missing_path, missing_tilt, missing_rejected = choose(observed, 'missing_cap')
+        crooked, crooked_path, crooked_tilt, crooked_rejected = choose(observed, 'crooked_cap')
+        # Render from the same fixed TableCam used by perception.  The emitted
+        # frames are subsequently passed through YOLO one-by-one, rather than
+        # pairing motion with a different camera or archived observation.
+        camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720)); camera.initialize()
         set_jaws(arm, names, True)
-        print('[closed-loop] arm and overview camera ready', flush=True)
+        print('[closed-loop] arm and TableCam ready', flush=True)
         for _ in range(30): world.step(render=True)
         print('[closed-loop] camera warmup complete', flush=True)
         frame_dir = args.out / 'frames'
@@ -159,11 +178,13 @@ def main():
                 positions[arm_idx] = joints if joints is not None else positions[arm_idx]
                 positions[names.index('jaw_l')] = jaw_positions[names.index('jaw_l')]
                 positions[names.index('jaw_r')] = jaw_positions[names.index('jaw_r')]
-                arm.apply_action(ArticulationAction(joint_positions=positions)); world.step(render=True)
+                # Direct kinematic poses prevent the one-frame controller lag
+                # that previously made the wrist and custom jaws visibly shake.
+                arm.set_joint_positions(positions); world.step(render=True)
                 rgba = camera.get_rgba()
                 if rgba is None or not rgba.size: continue
                 frame = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
-                cv2.putText(frame, 'BEST-EFFORT CLOSED-LOOP SIMULATION ATTEMPT', (20, 34), cv2.FONT_HERSHEY_SIMPLEX, .68, (30, 230, 255), 2)
+                cv2.putText(frame, 'BEST-EFFORT CLOSED-LOOP SIMULATION ATTEMPT | TableCam', (20, 34), cv2.FONT_HERSHEY_SIMPLEX, .68, (30, 230, 255), 2)
                 cv2.putText(frame, phase.replace('_', ' '), (20, 65), cv2.FONT_HERSHEY_SIMPLEX, .66, (255, 255, 255), 2)
                 cv2.putText(frame, 'Targets selected from YOLO/TableCam; contact result pending reinspection', (20, 96), cv2.FONT_HERSHEY_SIMPLEX, .5, (210, 235, 255), 1)
                 if not cv2.imwrite(str(frame_dir / f'{frames:04d}.png'), frame):
@@ -171,7 +192,11 @@ def main():
                 frames += 1
         print(f'[closed-loop] wrote {frames} frames', flush=True)
         report = {'mode': 'best_effort_prediction_selected_contact_attempt', 'physical_robot_authorized': False,
-                  'contact_result_validated': False, 'scene': str(args.scene), 'detections': str(args.detections),
+                  'contact_result_validated': False, 'scene': str(args.scene),
+                  'current_scene_detections': str(args.detections),
+                  'current_scene_tablecam_observation': current_observation,
+                  'gripper_collision_mode': 'disabled for deterministic non-contact review',
+                  'disabled_gripper_colliders': disabled_colliders,
                   'simulation_tool_offset_m': SIMULATION_TOOL_OFFSET_M,
                   'targets': {'table_cap': spare, 'missing_cap': missing, 'crooked_cap': crooked},
                   'rejected_predictions': {'table_cap': spare_rejected, 'missing_cap': missing_rejected, 'crooked_cap': crooked_rejected},
