@@ -8,6 +8,8 @@ robot contact.
 
 The field-ready list of physical measurements and capture requirements is
 [`PHYSICAL_MEASUREMENT_CHECKLIST.md`](PHYSICAL_MEASUREMENT_CHECKLIST.md).
+The reproducible command sequence is in
+[`REMEDIATION_RUNBOOK.md`](REMEDIATION_RUNBOOK.md).
 
 The canonical builder uses the Dataset 1 6 × 5 XY slot pattern with a fabricated
 fixture: a 10 mm black bottom plate, four supports, and a 3 mm silver perforated
