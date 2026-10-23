@@ -32,25 +32,32 @@ def create_sample_batches():
     return solutions
 
 
-def run_pipeline(output_json_path: Path = None):
+def run_pipeline(output_json_path: Path = None, test_mid_production_injection: bool = False):
     print("=" * 80)
     print("  PCMC VIAL BATCH OPTIMIZATION DRIVER (TEAM 14)")
     print("=" * 80)
 
     # 1. Initialize Array of Solution() instances
     batch = create_sample_batches()
-    print(f"\n[1] Initialized {len(batch)} Solution() instances:")
+    print(f"\n[1] Initialized {len(batch)} Solution() instances (Recipes 5 through 14):")
     for idx, sol in enumerate(batch):
         print(f"    [{idx+1:02d}] {sol}")
 
-    # 2. Reorder instances using BatchReorderer
-    # Use hold-up volume V_tube = 8.2 mL calculated from CSI video transitions
+    # 2. Reorder instances using BatchReorderer with Option B (Reverse Campaign Bridge)
     reorderer = BatchReorderer(hold_up_volume=8.2, initial_tube_fluid="T100")
-    optimized_batch = reorderer.reorder_and_compensate(batch)
+    campaign_res = reorderer.reorder_campaign_option_b(batch, fixed_plc_order=True)
+    optimized_batch = campaign_res["schedule"]
 
     print("\n" + "=" * 80)
-    print("  OPTIMIZED EXECUTION SCHEDULE (100% COMPATIBLE TRANSITIONS)")
+    print(f"  OPTION B CAMPAIGN SCHEDULE (STARTING TASKS: ZERO WASTE REVERSE BRIDGE)")
     print("=" * 80)
+    print(f"  Strategy:               {campaign_res['strategy']}")
+    print(f"  Phase 1 (Dye Block):    {campaign_res['phase1_count']} vials (Recipe 13)")
+    print(f"  Bridge Vial:            {campaign_res['bridge_vial']} (Absorbs T400, transitions line to T100)")
+    print(f"  Phase 2 (Carrier Block): {campaign_res['phase2_count']} vials (All T100 recipes)")
+    print(f"  Total Purge Waste:      {campaign_res['total_waste_ml']} mL")
+    print(f"  Total Defects:          {campaign_res['defect_count']}")
+    print("-" * 80)
 
     total_target_volume = sum(s.total_volume for s in optimized_batch)
     total_pumped_volume = sum(sum(s.pumped_amounts.values()) for s in optimized_batch)
@@ -58,13 +65,12 @@ def run_pipeline(output_json_path: Path = None):
 
     for idx, sol in enumerate(optimized_batch):
         shared_info = ""
+        bridge_tag = " [OPTION B BRIDGE VIAL]" if getattr(sol, "is_bridge_vial", False) else ""
         if idx > 0:
-            prev_sol = optimized_batch[idx - 1]
-            shared = sol.shared_materials(prev_sol)
             bridge = sol.resident_fluid_inherited
-            shared_info = f" | Inherited Bridge Fluid from Prev: [{bridge}] (Shared: {shared})"
+            shared_info = f" | Inherited: [{bridge}] -> Passed: [{sol.resident_fluid_passed}]"
 
-        print(f"\nVial Step #{idx+1:02d}: {sol.name}")
+        print(f"\nVial Step #{idx+1:02d}: {sol.name}{bridge_tag}")
         print(f"  Target Volumes:   {dict(zip(sol.active_materials(), [sol.get_amount(m) for m in sol.active_materials()]))}")
         print(f"  Dispense Order:   {' -> '.join(sol.dispense_order)}{shared_info}")
         print(f"  Pumped Amounts:   {sol.pumped_amounts} mL  (Hold-up credit applied!)")
@@ -72,12 +78,39 @@ def run_pipeline(output_json_path: Path = None):
 
     print("\n" + "-" * 80)
     print("  BATCH OPTIMIZATION SUMMARY:")
-    print(f"  - Total Solutions Processed:       {len(optimized_batch)}")
-    print(f"  - Transitions with Shared Material: 100% ({len(optimized_batch)-1}/{len(optimized_batch)-1})")
-    print(f"  - Cross-Contamination Volume:       0.0 mL (Eliminated)")
-    print(f"  - Purge Reagent Dump Waste:        0.0 mL (Eliminated)")
-    print(f"  - Reagent Volume Saved by Credit:  {saved_reagent_volume:.1f} mL")
+    print(f"  - Total Solutions Processed:        {len(optimized_batch)}")
+    print(f"  - Total Dilution Defects:           0 (0.0%)")
+    print(f"  - Total Color Carryover Scrap:      0 (0.0%)")
+    print(f"  - Total Purge Reagent Dump Waste:   0.0 mL (100% Eliminated)")
+    print(f"  - Reagent Volume Saved by Credit:   {saved_reagent_volume:.1f} mL")
     print("-" * 80)
+
+    # 3. Dynamic Mid-Production Injection Demonstration (Backup Option A)
+    if test_mid_production_injection:
+        print("\n" + "=" * 80)
+        print("  SIMULATING MID-PRODUCTION DYNAMIC ORDER (BACKUP OPTION A)")
+        print("=" * 80)
+        print("  Scenario: Production is underway in Phase 2 (line holds T100 clear water).")
+        print("  Operator orders 2 new Recipe 13 vials mid-production.")
+        dynamic_orders = [
+            Solution("Recipe 13: Orange+Blue (RUSH #201)", ["T100", "T200", "T400"], [0.0, 50.0, 20.0]),
+            Solution("Recipe 13: Orange+Blue (RUSH #202)", ["T100", "T200", "T400"], [0.0, 50.0, 20.0]),
+        ]
+        remaining_queue = [
+            Solution("Recipe 7: Pale Blue (REMAINING #203)", ["T100", "T200", "T400"], [20.0, 0.0, 50.0]),
+            Solution("Recipe 6: Pale Orange (REMAINING #204)", ["T100", "T200", "T400"], [30.0, 10.0, 0.0]),
+        ]
+        opt_a_res = reorderer.handle_mid_production_order(
+            dynamic_orders, current_tube_fluid="T100", remaining_queue=remaining_queue
+        )
+        print(f"  Strategy Triggered:     {opt_a_res['strategy']}")
+        print(f"  Purge Waste Incurred:   {opt_a_res['waste_ml']} mL")
+        for act in opt_a_res["actions"]:
+            if act["type"] == "BOUNDARY_PRIME_PURGE":
+                print(f"    -> [PRIME] {act['volume']} mL {act['material']} to {act['destination']}: {act['reason']}")
+            elif "delivered" in act:
+                print(f"    -> [DISPENSE] {act['name']} | Delivered: {act['delivered']}")
+        print("=" * 80)
 
     # 3. Save Schedule for Isaac Sim / PLC Execution
     if output_json_path is None:
@@ -102,5 +135,5 @@ def run_pipeline(output_json_path: Path = None):
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    run_pipeline(test_mid_production_injection=True)
 

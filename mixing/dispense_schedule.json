@@ -4,9 +4,79 @@
     "team": "Team 14",
     "hold_up_volume_ml": 8.2,
     "vial_count": 10,
-    "reagent_saved_ml": 82.0
+    "reagent_saved_ml": 0.0
   },
   "schedule": [
+    {
+      "name": "Recipe 13: Orange+Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        0.0,
+        50.0,
+        20.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T200",
+        "T400"
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T400",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ]
+    },
+    {
+      "name": "Recipe 7: Pale Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        20.0,
+        0.0,
+        50.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T400": 41.8,
+        "T100": 28.2
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "resident_fluid_inherited": "T400",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": true,
+      "pre_dispense_action": null,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ]
+    },
     {
       "name": "Recipe 5: Low Even",
       "materials": [
@@ -21,22 +91,24 @@
       ],
       "total_volume": 30.0,
       "dispense_order": [
-        "T100",
+        "T200",
         "T400",
-        "T200"
+        "T100"
       ],
       "pumped_amounts": {
-        "T100": 1.8,
+        "T200": 10.0,
         "T400": 10.0,
-        "T200": 10.0
+        "T100": 10.0
       },
       "delivered_amounts": {
-        "T100": 10.0,
+        "T200": 10.0,
         "T400": 10.0,
-        "T200": 10.0
+        "T100": 10.0
       },
       "resident_fluid_inherited": "T100",
-      "resident_fluid_passed": "T200",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
       "rgb_color": [
         0.275,
         0.5,
@@ -61,15 +133,17 @@
         "T100"
       ],
       "pumped_amounts": {
-        "T200": 1.8,
+        "T200": 10.0,
         "T100": 30.0
       },
       "delivered_amounts": {
         "T200": 10.0,
         "T100": 30.0
       },
-      "resident_fluid_inherited": "T200",
+      "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
       "rgb_color": [
         0.95,
         0.45,
@@ -90,22 +164,24 @@
       ],
       "total_volume": 75.0,
       "dispense_order": [
-        "T100",
         "T200",
-        "T400"
+        "T400",
+        "T100"
       ],
       "pumped_amounts": {
-        "T100": 36.8,
         "T200": 15.0,
-        "T400": 15.0
+        "T400": 15.0,
+        "T100": 45.0
       },
       "delivered_amounts": {
-        "T100": 45.0,
         "T200": 15.0,
-        "T400": 15.0
+        "T400": 15.0,
+        "T100": 45.0
       },
       "resident_fluid_inherited": "T100",
-      "resident_fluid_passed": "T400",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
       "rgb_color": [
         0.275,
         0.5,
@@ -130,193 +206,21 @@
         "T100"
       ],
       "pumped_amounts": {
-        "T400": 1.8,
+        "T400": 10.0,
         "T100": 60.0
       },
       "delivered_amounts": {
         "T400": 10.0,
         "T100": 60.0
       },
-      "resident_fluid_inherited": "T400",
+      "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
       "rgb_color": [
         0.05,
         0.35,
         0.88
-      ]
-    },
-    {
-      "name": "Recipe 7: Pale Blue",
-      "materials": [
-        "T100",
-        "T200",
-        "T400"
-      ],
-      "amounts": [
-        20.0,
-        0.0,
-        50.0
-      ],
-      "total_volume": 70.0,
-      "dispense_order": [
-        "T100",
-        "T400"
-      ],
-      "pumped_amounts": {
-        "T100": 11.8,
-        "T400": 50.0
-      },
-      "delivered_amounts": {
-        "T100": 20.0,
-        "T400": 50.0
-      },
-      "resident_fluid_inherited": "T100",
-      "resident_fluid_passed": "T400",
-      "rgb_color": [
-        0.05,
-        0.35,
-        0.88
-      ]
-    },
-    {
-      "name": "Recipe 11: High Blue",
-      "materials": [
-        "T100",
-        "T200",
-        "T400"
-      ],
-      "amounts": [
-        10.0,
-        10.0,
-        50.0
-      ],
-      "total_volume": 70.0,
-      "dispense_order": [
-        "T400",
-        "T200",
-        "T100"
-      ],
-      "pumped_amounts": {
-        "T400": 41.8,
-        "T200": 10.0,
-        "T100": 10.0
-      },
-      "delivered_amounts": {
-        "T400": 50.0,
-        "T200": 10.0,
-        "T100": 10.0
-      },
-      "resident_fluid_inherited": "T400",
-      "resident_fluid_passed": "T100",
-      "rgb_color": [
-        0.125,
-        0.467,
-        0.555
-      ]
-    },
-    {
-      "name": "Recipe 9: Dark Saturate",
-      "materials": [
-        "T100",
-        "T200",
-        "T400"
-      ],
-      "amounts": [
-        10.0,
-        35.0,
-        35.0
-      ],
-      "total_volume": 80.0,
-      "dispense_order": [
-        "T100",
-        "T400",
-        "T200"
-      ],
-      "pumped_amounts": {
-        "T100": 1.8,
-        "T400": 35.0,
-        "T200": 35.0
-      },
-      "delivered_amounts": {
-        "T100": 10.0,
-        "T400": 35.0,
-        "T200": 35.0
-      },
-      "resident_fluid_inherited": "T100",
-      "resident_fluid_passed": "T200",
-      "rgb_color": [
-        0.275,
-        0.5,
-        0.365
-      ]
-    },
-    {
-      "name": "Recipe 12: High Orange",
-      "materials": [
-        "T100",
-        "T200",
-        "T400"
-      ],
-      "amounts": [
-        10.0,
-        50.0,
-        10.0
-      ],
-      "total_volume": 70.0,
-      "dispense_order": [
-        "T200",
-        "T100",
-        "T400"
-      ],
-      "pumped_amounts": {
-        "T200": 41.8,
-        "T100": 10.0,
-        "T400": 10.0
-      },
-      "delivered_amounts": {
-        "T200": 50.0,
-        "T100": 10.0,
-        "T400": 10.0
-      },
-      "resident_fluid_inherited": "T200",
-      "resident_fluid_passed": "T400",
-      "rgb_color": [
-        0.425,
-        0.533,
-        0.175
-      ]
-    },
-    {
-      "name": "Recipe 13: Orange+Blue",
-      "materials": [
-        "T100",
-        "T200",
-        "T400"
-      ],
-      "amounts": [
-        0.0,
-        50.0,
-        20.0
-      ],
-      "total_volume": 70.0,
-      "dispense_order": [
-        "T400",
-        "T200"
-      ],
-      "pumped_amounts": {
-        "T400": 11.8,
-        "T200": 50.0
-      },
-      "delivered_amounts": {
-        "T400": 20.0,
-        "T200": 50.0
-      },
-      "resident_fluid_inherited": "T400",
-      "resident_fluid_passed": "T200",
-      "rgb_color": [
-        0.371,
-        0.521,
-        0.243
       ]
     },
     {
@@ -338,7 +242,7 @@
         "T100"
       ],
       "pumped_amounts": {
-        "T200": 11.8,
+        "T200": 20.0,
         "T400": 20.0,
         "T100": 20.0
       },
@@ -347,12 +251,128 @@
         "T400": 20.0,
         "T100": 20.0
       },
-      "resident_fluid_inherited": "T200",
+      "resident_fluid_inherited": "T100",
       "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
       "rgb_color": [
         0.275,
         0.5,
         0.365
+      ]
+    },
+    {
+      "name": "Recipe 9: Dark Saturate",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        35.0,
+        35.0
+      ],
+      "total_volume": 80.0,
+      "dispense_order": [
+        "T200",
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ]
+    },
+    {
+      "name": "Recipe 11: High Blue",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        10.0,
+        50.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T200",
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ]
+    },
+    {
+      "name": "Recipe 12: High Orange",
+      "materials": [
+        "T100",
+        "T200",
+        "T400"
+      ],
+      "amounts": [
+        10.0,
+        50.0,
+        10.0
+      ],
+      "total_volume": 70.0,
+      "dispense_order": [
+        "T200",
+        "T400",
+        "T100"
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "resident_fluid_inherited": "T100",
+      "resident_fluid_passed": "T100",
+      "is_bridge_vial": false,
+      "pre_dispense_action": null,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
       ]
     }
   ]

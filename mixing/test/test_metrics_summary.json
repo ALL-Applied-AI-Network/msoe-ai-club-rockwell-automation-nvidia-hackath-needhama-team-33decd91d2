@@ -1,0 +1,25 @@
+{
+  "baseline": {
+    "total_vials": 200,
+    "defective_vials": 62,
+    "defective_percentage": 31.0,
+    "dilution_defects": 18,
+    "color_carryover_scrap": 2,
+    "spill_violations": 42,
+    "purge_waste_if_dumped_ml": 1631.8,
+    "actual_chemical_waste_ml": 0.0,
+    "total_contamination_volume_ml": 1640.0
+  },
+  "optimized": {
+    "total_vials": 200,
+    "defective_vials": 0,
+    "defective_percentage": 0.0,
+    "dilution_defects": 0,
+    "color_carryover_scrap": 0,
+    "spill_violations": 0,
+    "actual_chemical_waste_ml": 8.2,
+    "waste_reduction_vs_baseline_dump_percent": 99.5,
+    "total_contamination_volume_ml": 0.0,
+    "total_holdup_savings_ml": 1623.6
+  }
+}

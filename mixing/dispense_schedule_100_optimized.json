@@ -1,0 +1,2535 @@
+{
+  "metadata": {
+    "batch": "user_100_batch",
+    "type": "optimized_option_b",
+    "strategy": "OPTION_B_REVERSE_CAMPAIGN_BRIDGE",
+    "bridge_vial": "Vial #006: Recipe 7: Pale Blue",
+    "total_waste_ml": 0.0
+  },
+  "schedule": [
+    {
+      "step": 1,
+      "name": "Vial #008: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 2,
+      "name": "Vial #017: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 3,
+      "name": "Vial #020: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 4,
+      "name": "Vial #022: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 5,
+      "name": "Vial #046: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 6,
+      "name": "Vial #050: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 7,
+      "name": "Vial #075: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 8,
+      "name": "Vial #081: Recipe 13: Orange+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.371,
+        0.521,
+        0.243
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 9,
+      "name": "Vial #006: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 41.8,
+        "T100": 28.2
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": true,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 10,
+      "name": "Vial #001: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 11,
+      "name": "Vial #007: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 12,
+      "name": "Vial #009: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 13,
+      "name": "Vial #010: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 14,
+      "name": "Vial #018: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 15,
+      "name": "Vial #026: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 16,
+      "name": "Vial #042: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 17,
+      "name": "Vial #052: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 18,
+      "name": "Vial #054: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 19,
+      "name": "Vial #073: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 20,
+      "name": "Vial #092: Recipe 14: Clear+Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "delivered_amounts": {
+        "T400": 10.0,
+        "T100": 60.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 21,
+      "name": "Vial #031: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 22,
+      "name": "Vial #035: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 23,
+      "name": "Vial #040: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 24,
+      "name": "Vial #041: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 25,
+      "name": "Vial #053: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 26,
+      "name": "Vial #066: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 27,
+      "name": "Vial #068: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 28,
+      "name": "Vial #069: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 29,
+      "name": "Vial #083: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 30,
+      "name": "Vial #087: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 31,
+      "name": "Vial #093: Recipe 10: Pale Wash",
+      "total_volume": 75.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "delivered_amounts": {
+        "T200": 15.0,
+        "T400": 15.0,
+        "T100": 45.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 32,
+      "name": "Vial #014: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 33,
+      "name": "Vial #036: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 34,
+      "name": "Vial #037: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 35,
+      "name": "Vial #039: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 36,
+      "name": "Vial #047: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 37,
+      "name": "Vial #049: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 38,
+      "name": "Vial #056: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 39,
+      "name": "Vial #060: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 40,
+      "name": "Vial #062: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 41,
+      "name": "Vial #072: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 42,
+      "name": "Vial #090: Recipe 6: Pale Orange",
+      "total_volume": 40.0,
+      "rgb_color": [
+        0.95,
+        0.45,
+        0.05
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T100": 30.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 43,
+      "name": "Vial #004: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 44,
+      "name": "Vial #003: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 45,
+      "name": "Vial #011: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 46,
+      "name": "Vial #023: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 47,
+      "name": "Vial #029: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 48,
+      "name": "Vial #030: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 49,
+      "name": "Vial #033: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 50,
+      "name": "Vial #038: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 51,
+      "name": "Vial #048: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 52,
+      "name": "Vial #063: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 53,
+      "name": "Vial #067: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 54,
+      "name": "Vial #074: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 55,
+      "name": "Vial #077: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 56,
+      "name": "Vial #079: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 57,
+      "name": "Vial #088: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 58,
+      "name": "Vial #096: Recipe 11: High Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.125,
+        0.467,
+        0.555
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 50.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 59,
+      "name": "Vial #098: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 60,
+      "name": "Vial #100: Recipe 7: Pale Blue",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.05,
+        0.35,
+        0.88
+      ],
+      "pumped_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T400": 50.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 61,
+      "name": "Vial #027: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 62,
+      "name": "Vial #025: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 63,
+      "name": "Vial #045: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 64,
+      "name": "Vial #065: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 65,
+      "name": "Vial #078: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 66,
+      "name": "Vial #095: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 67,
+      "name": "Vial #097: Recipe 12: High Orange",
+      "total_volume": 70.0,
+      "rgb_color": [
+        0.425,
+        0.533,
+        0.175
+      ],
+      "pumped_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 50.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 68,
+      "name": "Vial #032: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 69,
+      "name": "Vial #043: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 70,
+      "name": "Vial #051: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 71,
+      "name": "Vial #059: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 72,
+      "name": "Vial #064: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 73,
+      "name": "Vial #071: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 74,
+      "name": "Vial #080: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 75,
+      "name": "Vial #089: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 76,
+      "name": "Vial #099: Recipe 9: Dark Saturate",
+      "total_volume": 80.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 35.0,
+        "T400": 35.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 77,
+      "name": "Vial #005: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 78,
+      "name": "Vial #015: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 79,
+      "name": "Vial #016: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 80,
+      "name": "Vial #021: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 81,
+      "name": "Vial #024: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 82,
+      "name": "Vial #034: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 83,
+      "name": "Vial #055: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 84,
+      "name": "Vial #058: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 85,
+      "name": "Vial #061: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 86,
+      "name": "Vial #070: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 87,
+      "name": "Vial #076: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 88,
+      "name": "Vial #082: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 89,
+      "name": "Vial #085: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 90,
+      "name": "Vial #091: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 91,
+      "name": "Vial #094: Recipe 8: Even Triple",
+      "total_volume": 60.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "delivered_amounts": {
+        "T200": 20.0,
+        "T400": 20.0,
+        "T100": 20.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 92,
+      "name": "Vial #002: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 93,
+      "name": "Vial #012: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 94,
+      "name": "Vial #013: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 95,
+      "name": "Vial #019: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 96,
+      "name": "Vial #028: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 97,
+      "name": "Vial #044: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 98,
+      "name": "Vial #057: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 99,
+      "name": "Vial #084: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    },
+    {
+      "step": 100,
+      "name": "Vial #086: Recipe 5: Low Even",
+      "total_volume": 30.0,
+      "rgb_color": [
+        0.275,
+        0.5,
+        0.365
+      ],
+      "pumped_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "delivered_amounts": {
+        "T200": 10.0,
+        "T400": 10.0,
+        "T100": 10.0
+      },
+      "is_bridge_vial": false,
+      "contamination_volume": 0.0,
+      "is_dilution": false,
+      "is_color_defect": false,
+      "spill_risk": false,
+      "has_defect": false
+    }
+  ]
+}

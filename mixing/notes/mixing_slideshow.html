@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .slide-enter { animation: fadeIn 0.25s ease-in-out; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-transparent text-[var(--foreground)] antialiased p-3 font-sans">
+  <div class="bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl shadow-lg overflow-hidden max-w-4xl mx-auto flex flex-col min-h-[580px]">
+    
+    <!-- Top Header & Slide Counter -->
+    <div class="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--content)] bg-opacity-40">
+      <div class="flex items-center space-x-3">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-bold text-sm shadow">
+          🧪
+        </span>
+        <div>
+          <h1 class="text-base font-semibold leading-tight text-[var(--foreground)]">CSI Station 3 Mixing Architecture</h1>
+          <p class="text-xs text-[var(--muted-foreground)]">Team 14 • Fluid Mixing Optimization & Digital Twin Simulation</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span id="slideIndicator" class="text-xs font-mono px-2.5 py-1 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)]">
+          1 / 10
+        </span>
+      </div>
+    </div>
+
+    <!-- Main Slide Body Container -->
+    <div id="slideContainer" class="p-6 flex-1 flex flex-col justify-between slide-enter">
+      <!-- Dynamic slide content injected here via JS -->
+    </div>
+
+    <!-- Bottom Navigation Bar -->
+    <div class="px-6 py-3.5 border-t border-[var(--border)] bg-[var(--content)] bg-opacity-30 flex items-center justify-between">
+      <button id="prevBtn" onclick="prevSlide()" class="px-4 py-2 text-xs font-medium rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--content)] transition disabled:opacity-30 disabled:cursor-not-allowed">
+        ← Previous
+      </button>
+
+      <!-- Dots Indicator -->
+      <div id="dotsContainer" class="flex items-center space-x-1.5">
+        <!-- Injected via JS -->
+      </div>
+
+      <button id="nextBtn" onclick="nextSlide()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition disabled:opacity-30 disabled:cursor-not-allowed">
+        Next →
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    const slides = [
+      {
+        tag: "SYSTEM OVERVIEW",
+        title: "The Nozzle Hold-Up Problem (V_tube ≈ 8.2 mL)",
+        file: "Problem Statement",
+        bullets: [
+          "<strong>Physical Context:</strong> CSI Station 3 uses 4 reagent tanks (T100 Clear, T200 Orange, T400 Blue, T300 Banned) feeding into a single nozzle via a shared manifold.",
+          "<strong>The Failure Mode:</strong> After each fill, an unpurged residual volume of <strong>~8.2 mL</strong> sits in the tube. The subsequent recipe pushes this liquid into the next vial.",
+          "<strong>Disastrous Baseline Effects:</strong> 11.7% dilution defect on Recipe 13, murky olive-green scrap on blue recipes, and 22% vial spill violations (>80 mL).",
+          "<strong>The Mission:</strong> Eliminate all defects and waste without adding cycle-time purge delays."
+        ],
+        code: "# The Problem: Next vial receives foreign liquid left in tube\nResident_Fluid = 8.2 mL  # In nozzle\nVial_1_Delivered = Target + Foreign_Resident_Volume"
+      },
+      {
+        tag: "DOMAIN MODEL",
+        title: "solution.py — Solution Class & Operating Rules",
+        file: "mixing/solution.py",
+        bullets: [
+          "<strong>Physical Constraints Validation:</strong> Asserts total volume ≤ 80.0 mL, active components ≥ 10.0 mL, Tank T-200 ≤ 50.0 mL, and T-300 strictly 0.0 mL.",
+          "<strong>Optical Physics Engine:</strong> Computes theoretical RGB colors using subtractive dye mixing (Orange + Blue → Olive Green, Diluent → transparency).",
+          "<strong>Dispense State Tracking:</strong> Stores dispense order, volume-compensated pump amounts, inherited bridge fluid, and pre-dispense boundary actions."
+        ],
+        code: "class Solution:\n    def __init__(self, name, materials, amounts):\n        self.validate_operating_constraints()\n        self.dispense_order = []\n        self.pumped_amounts = {}\n        self.is_bridge_vial = False"
+      },
+      {
+        tag: "ALGORITHMIC CORE",
+        title: "batch_reorderer.py — Hamiltonian Path & Scheduling",
+        file: "mixing/batch_reorderer.py",
+        bullets: [
+          "<strong>Graph DFS Reordering:</strong> Models chemical compatibility as an adjacency graph, solving for a continuous Hamiltonian path where every consecutive vial shares reagent.",
+          "<strong>Fixed Hardware Enforcement:</strong> Enforces the factory PLC sequence: T-200 → T-400 → T-100 (T-100 strictly last).",
+          "<strong>Hold-Up Credit Deduction:</strong> If entry fluid matches the tube's resident fluid, exact 8.2 mL hold-up credit is applied: V_pump = max(0, V_target - V_tube)."
+        ],
+        code: "reorderer = BatchReorderer(hold_up_volume=8.2, initial_tube_fluid='T100')\noptimized = reorderer.reorder_and_compensate(batch, fixed_hardware_order=True)"
+      },
+      {
+        tag: "CAMPAIGN STRATEGY",
+        title: "Option B (Start of Batch) & Backup Option A",
+        file: "mixing/batch_reorderer.py",
+        bullets: [
+          "<strong>Option B (Starting Tasks - 0.0 mL Waste):</strong> Sequences all Recipe 13s (Orange+Blue) first. They cycle cleanly with 0 water. Leaves T-400 (Blue) in line.",
+          "<strong>The Recipe 7 Bridge:</strong> Recipe 7 (50mL Blue, 20mL Clear) absorbs the resident Blue dye (pumps 41.8 mL Blue), flushes with Clear Water, and primes the line for all remaining recipes!",
+          "<strong>Backup Option A (Mid-Production Orders):</strong> If rush recipes are ordered mid-shift while running water, fires a single 8.2 mL boundary prime to waste drain, preventing dilution."
+        ],
+        code: "# Option B Reverse Campaign Bridge:\n[Recipe 13 block] -> [Recipe 7 Bridge] -> [Remaining 91 Diluent Recipes]\n# Result: 0.0 mL Purge Waste, 0 Dilution Defects across all 100 vials!"
+      },
+      {
+        tag: "PIPELINE CONDUCTOR",
+        title: "driver.py — Execution Driver & Schedule Generator",
+        file: "mixing/driver.py",
+        bullets: [
+          "<strong>Production Schedule Generator:</strong> Instantiates standard CSI benchmark Recipes 5 through 14 from Video 5.",
+          "<strong>Executes Option B Campaign:</strong> Reorders the schedule, applies bridge compensation, and validates 100% mass balance.",
+          "<strong>Demonstrates Backup Option A:</strong> Simulates dynamic rush orders injected mid-production.",
+          "<strong>Exports Artifacts:</strong> Saves machine-readable JSON schedules consumed by NVIDIA Isaac Sim."
+        ],
+        code: "# Run driver:\npython3 -m mixing.driver\n# Outputs: mixing/dispense_schedule.json"
+      },
+      {
+        tag: "BENCHMARKING",
+        title: "compare_algorithms.py — Head-to-Head Evaluation",
+        file: "mixing/compare_algorithms.py",
+        bullets: [
+          "<strong>Comparative Pipeline:</strong> Runs unmodified sequential baseline vs. PCMC optimization side-by-side.",
+          "<strong>Cross-Contamination:</strong> 82.0 mL in baseline reduced to 0.0 mL in PCMC (100% eliminated).",
+          "<strong>Quality Yield:</strong> 10 / 10 baseline vials suffer color defects or spills; 10 / 10 PCMC vials are 100% clean and defect-free.",
+          "<strong>Reagent Dump Waste:</strong> Eliminates 73.8 mL of waste purges."
+        ],
+        code: "# Head-to-Head Results:\nCross-Contamination: Baseline: 82.0 mL  | PCMC: 0.0 mL\nDefective Vials:     Baseline: 10 / 10  | PCMC: 0 / 10"
+      },
+      {
+        tag: "INDUSTRIAL VALIDATION",
+        title: "simulate_user_100_batch.py — 100-Vial Stress Test",
+        file: "mixing/simulate_user_100_batch.py",
+        bullets: [
+          "<strong>Full Sequence Simulation:</strong> Stress-tests the user's specific 100-vial batch (16x R8, 14x R6, 11x R9, 11x R10, 8x R13, 8x R7...).",
+          "<strong>Baseline Catastrophe:</strong> 32 / 100 vials defective (8 dilution defects on Recipe 13, 2 olive-green carryovers, 22 spill violations >80 mL).",
+          "<strong>Option B Triumph:</strong> 0 defects (0.0%), 0 spills, and 0.0 mL purge waste across all 100 vials!",
+          "<strong>Option A Resilience:</strong> Incurs only 8.2 mL waste if Recipe 13s are dynamically injected mid-production."
+        ],
+        code: "# 100-Vial Summary:\nBaseline Total Defects: 32 / 100 (32%)\nOption B Total Defects:  0 / 100 (0.0%)\nOption B Purge Waste:   0.0 mL"
+      },
+      {
+        tag: "DIGITAL TWIN",
+        title: "isaac_dispense_sim.py — NVIDIA Isaac Sim RTX Renderer",
+        file: "mixing/isaac_dispense_sim.py",
+        bullets: [
+          "<strong>SimulationApp Connector:</strong> Automates Isaac Sim headless simulation and RTX RayTracedLighting / PathTracing.",
+          "<strong>Volumetric Cylinder Mesh Scaling:</strong> Directly scales cylinder geometry along Z-axis based on exact delivered volume.",
+          "<strong>Principled BSDF Shading:</strong> Injects accurate diffuse color and transparency directly into shader inputs.",
+          "<strong>Comparative HUD Cards:</strong> Renders side-by-side comparison cards (Baseline vs Optimized) with HUD telemetry."
+        ],
+        code: "# Slurm Cluster Submission:\nsbatch scripts/submit_isaac_job.slurm mixing/isaac_dispense_sim.py"
+      },
+      {
+        tag: "COMPUTER VISION",
+        title: "video_tube_estimator.py & holdup_analysis.csv",
+        file: "mixing/video_tube_estimator.py",
+        bullets: [
+          "<strong>Empirical Ground-Truth Measurement:</strong> Analyzed real CSI testbed Video 5 to determine nozzle volume.",
+          "<strong>Jet Stream Colorimetry:</strong> Tracked dye displacement during recipe transitions frame-by-frame.",
+          "<strong>Dataset Compilation:</strong> Measured transition pulse counts, converging on V_tube = 8.2 ± 0.3 mL.",
+          "<strong>Hardware Grounding:</strong> Ensures PCMC algorithms reflect real factory physics rather than theoretical guesses."
+        ],
+        code: "# Empirical Result:\nV_tube = 8.2 mL (Dispensing nozzle hold-up)"
+      },
+      {
+        tag: "EXECUTION ARTIFACTS",
+        title: "dispense_schedule*.json & Supporting Docs",
+        file: "mixing/dispense_schedule.json",
+        bullets: [
+          "<strong>dispense_schedule.json:</strong> Machine-readable JSON contract consumed by Isaac Sim and the Rockwell PLC.",
+          "<strong>Structured Metadata:</strong> Records target volumes, pump pulses, delivered volumes, RGB hex codes, and bridge flags.",
+          "<strong>plan.md:</strong> The original mathematical design and project roadmap.",
+          "<strong>batch_optimizer.py:</strong> Early greedy prototype, preserved for archival history."
+        ],
+        code: '{\n  "metadata": { "hold_up_volume_ml": 8.2, "vial_count": 10 },\n  "schedule": [ { "name": "Recipe 13", "pumped_amounts": {...} } ]\n}'
+      }
+    ];
+
+    let currentSlide = 0;
+
+    function renderSlide() {
+      const s = slides[currentSlide];
+      const container = document.getElementById("slideContainer");
+      container.className = "p-6 flex-1 flex flex-col justify-between slide-enter";
+
+      let bulletsHtml = s.bullets.map(b => `<li class="text-xs sm:text-sm text-[var(--foreground)] leading-relaxed">${b}</li>`).join("");
+
+      container.innerHTML = `
+        <div>
+          <div class="flex items-center space-x-2 mb-2">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-[var(--primary)] bg-opacity-20 text-[var(--foreground)] uppercase tracking-wider">
+              ${s.tag}
+            </span>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">${s.file}</span>
+          </div>
+          <h2 class="text-lg sm:text-xl font-bold text-[var(--foreground)] mb-4">${s.title}</h2>
+          <ul class="space-y-2.5 mb-5 list-disc list-inside">
+            ${bulletsHtml}
+          </ul>
+        </div>
+        <div class="mt-4">
+          <div class="text-xs font-mono text-[var(--muted-foreground)] mb-1 flex items-center justify-between">
+            <span>Terminal / Code Preview</span>
+            <span class="text-[11px] opacity-75">Python 3.10+</span>
+          </div>
+          <pre class="bg-[var(--content)] border border-[var(--border)] rounded-xl p-3.5 text-xs font-mono overflow-x-auto text-[var(--foreground)] leading-snug"><code>${escapeHtml(s.code)}</code></pre>
+        </div>
+      `;
+
+      // Update counter and buttons
+      document.getElementById("slideIndicator").innerText = `${currentSlide + 1} / ${slides.length}`;
+      document.getElementById("prevBtn").disabled = (currentSlide === 0);
+      document.getElementById("nextBtn").disabled = (currentSlide === slides.length - 1);
+
+      // Update dots
+      const dotsContainer = document.getElementById("dotsContainer");
+      dotsContainer.innerHTML = slides.map((_, idx) => `
+        <button onclick="goToSlide(${idx})" class="w-2.5 h-2.5 rounded-full transition-all ${idx === currentSlide ? 'bg-[var(--primary)] w-5' : 'bg-[var(--border)] hover:bg-[var(--muted-foreground)]'}"></button>
+      `).join("");
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function nextSlide() {
+      if (currentSlide < slides.length - 1) {
+        currentSlide++;
+        renderSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 0) {
+        currentSlide--;
+        renderSlide();
+      }
+    }
+
+    function goToSlide(idx) {
+      currentSlide = idx;
+      renderSlide();
+    }
+
+    // Keyboard navigation
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") nextSlide();
+      if (e.key === "ArrowLeft") prevSlide();
+    });
+
+    // Initialize
+    renderSlide();
+  </script>
+</body>
+</html>

@@ -53,6 +53,8 @@ def parse_args():
                         help="Specific vial step to render for mixing target (1-indexed)")
     parser.add_argument("--compare", action="store_true", default=False,
                         help="Run head-to-head comparison: baseline unmodified vs new PCMC algorithm")
+    parser.add_argument("--user-200-test", action="store_true", default=False,
+                        help="Render 200-vial dynamic test suite (400 simulated images in mixing/test)")
     parser.add_argument("--renderer", choices=["RayTracedLighting", "PathTracing"], default="RayTracedLighting",
                         help="RTX renderer engine")
     return parser.parse_args()
@@ -358,11 +360,14 @@ def main():
         render_fanuc(args, run_dir)
     elif args.target == "mixing":
         sim_script = REPO_ROOT / "mixing" / "isaac_dispense_sim.py"
-        cmd = [sys.executable, str(sim_script), "--out-dir", str(run_dir), "--renderer", args.renderer, "--subframes", str(args.subframes)]
+        target_out = args.out_dir if args.out_dir else (str(REPO_ROOT / "mixing" / "test") if args.user_200_test else str(run_dir))
+        cmd = [sys.executable, str(sim_script), "--out-dir", target_out, "--renderer", args.renderer, "--subframes", str(args.subframes)]
         if args.vial_step is not None:
             cmd.extend(["--step", str(args.vial_step)])
         if args.compare:
             cmd.append("--compare")
+        if args.user_200_test:
+            cmd.append("--user-200-test")
         subprocess.run(cmd, check=True)
 
 

@@ -25,11 +25,17 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Isaac Sim Liquid Mixing Dispense Connector")
     parser.add_argument("--schedule", default=str(SCHEDULE_FILE), help="Path to dispense_schedule.json")
     parser.add_argument("--step", type=int, default=None, help="Specific vial step to render (1-indexed), or None for all")
-    parser.add_argument("--subframes", type=int, default=8, help="Rendering subframes")
+    parser.add_argument("--subframes", type=int, default=4, help="Rendering subframes")
     parser.add_argument("--renderer", choices=["RayTracedLighting", "PathTracing"], default="RayTracedLighting")
     parser.add_argument("--out-dir", default=None, help="Output directory")
     parser.add_argument("--compare", action="store_true", default=False,
                         help="Run head-to-head comparison: baseline unmodified vs new PCMC algorithm")
+    parser.add_argument("--user-100-batch", action="store_true", default=False,
+                        help="Render all 100 vials of user-specified sequence (Option B vs Baseline)")
+    parser.add_argument("--user-200-test", action="store_true", default=False,
+                        help="Render all 200 vials of user 2-test task (Dynamic Queue: List 1 + List 2)")
+    parser.add_argument("--base-schedule", default=None, help="Explicit baseline schedule JSON path")
+    parser.add_argument("--opt-schedule", default=None, help="Explicit optimized schedule JSON path")
     return parser.parse_args()
 
 
@@ -120,21 +126,35 @@ def create_side_by_side_card(img_base, img_pcmc, b_step: dict, o_step: dict):
     b_vol = b_step["total_volume"]
     b_contam = b_step.get("contamination_volume", 0.0)
     b_spill = b_step.get("spill_risk", False)
+    b_dilution = b_step.get("is_dilution", False)
+    b_color_scrap = b_step.get("is_color_defect", False)
+    has_defect = b_step.get("has_defect", False) or (b_contam > 0 or b_spill or b_dilution or b_color_scrap)
 
-    # Left Banner (Baseline): Red/Dark Grey
-    b_color = (180, 25, 25) if (b_contam > 0 or b_spill) else (50, 50, 50)
+    # Left Banner (Baseline): Red if defect, Dark Grey if clean
+    b_color = (180, 25, 25) if has_defect else (50, 50, 50)
     draw.rectangle([(10, 10), (630, 65)], fill=b_color)
     draw.text((20, 16), f"BASELINE (UNMODIFIED): {b_name}", fill=(255, 255, 255))
-    status_str = f"Delivered: {b_vol:.1f}mL | Contamination: {b_contam:.1f}mL"
+
+    parts = [f"Delivered: {b_vol:.1f}mL"]
+    if b_dilution:
+        parts.append("DILUTION DEFECT (+8.2mL Water)")
+    elif b_color_scrap:
+        parts.append("COLOR SCRAP (+8.2mL Dye)")
+    elif b_contam > 0:
+        parts.append(f"Contam: {b_contam:.1f}mL")
     if b_spill:
-        status_str += " | SPILL RISK (>80mL)"
-    draw.text((20, 38), status_str, fill=(255, 230, 230))
+        parts.append("SPILL RISK (>80mL)")
+    if not (b_dilution or b_color_scrap or b_spill or b_contam > 0):
+        parts.append("0.0mL Contam (Clean)")
+    draw.text((20, 38), " | ".join(parts), fill=(255, 230, 230))
 
     # Right Banner (PCMC): Emerald Green
     o_name = o_step["name"]
     o_vol = o_step["total_volume"]
+    is_bridge = o_step.get("is_bridge_vial", False)
+    bridge_tag = " [OPTION B BRIDGE]" if is_bridge else ""
     draw.rectangle([(650, 10), (1270, 65)], fill=(20, 135, 45))
-    draw.text((660, 16), f"NEW ALGORITHM (PCMC): {o_name}", fill=(255, 255, 255))
+    draw.text((660, 16), f"NEW ALGORITHM (PCMC): {o_name}{bridge_tag}", fill=(255, 255, 255))
     draw.text((660, 38), f"Delivered: {o_vol:.1f}mL | 0.0mL Contam (100% Pure, Zero Waste)", fill=(230, 255, 230))
 
     return np.array(pil_img)
@@ -205,14 +225,38 @@ def render_with_isaac_sim(schedule_data: dict, args, out_dir: Path):
         stream_shader = stage.GetPrimAtPath("/FillStation/_materials/USD_jet_approximation/Principled_BSDF")
         tl = omni.timeline.get_timeline_interface()
 
-        if args.compare:
+        if args.compare or args.user_100_batch or args.user_200_test or (args.base_schedule and args.opt_schedule):
             # Comparative Mode: Render both Baseline and Optimized
             print("[IsaacSim Connector] Comparative Mode Enabled: Rendering Baseline vs. PCMC...")
             sys.path.insert(0, str(REPO_ROOT))
-            from mixing.compare_algorithms import compute_baseline_schedule, compute_optimized_schedule
 
-            base_sched = compute_baseline_schedule(v_tube=8.2, initial_fluid="T100")["schedule"]
-            opt_sched = compute_optimized_schedule(v_tube=8.2, initial_fluid="T100")["schedule"]
+            if args.user_200_test or (args.base_schedule and args.opt_schedule):
+                base_path = Path(args.base_schedule) if args.base_schedule else REPO_ROOT / "mixing" / "test" / "dispense_schedule_200_baseline.json"
+                opt_path = Path(args.opt_schedule) if args.opt_schedule else REPO_ROOT / "mixing" / "test" / "dispense_schedule_200_optimized.json"
+                if not base_path.exists() or not opt_path.exists():
+                    print("[IsaacSim Connector] 200-Vial schedules not found. Generating via generate_200_vial_test.py...")
+                    from mixing.generate_200_vial_test import export_test_data
+                    export_test_data()
+                print(f"[IsaacSim Connector] Loading 200-Vial comparative schedules:\n  Base: {base_path}\n  Opt:  {opt_path}")
+                with open(base_path) as f:
+                    base_sched = json.load(f)["schedule"]
+                with open(opt_path) as f:
+                    opt_sched = json.load(f)["schedule"]
+            elif args.user_100_batch:
+                print("[IsaacSim Connector] Loading 100-Vial User Batch comparative schedules...")
+                base_path = REPO_ROOT / "mixing" / "dispense_schedule_100_baseline.json"
+                opt_path = REPO_ROOT / "mixing" / "dispense_schedule_100_optimized.json"
+                if not base_path.exists() or not opt_path.exists():
+                    from mixing.simulate_user_100_batch import export_100_vial_schedules
+                    export_100_vial_schedules(REPO_ROOT / "mixing")
+                with open(base_path) as f:
+                    base_sched = json.load(f)["schedule"]
+                with open(opt_path) as f:
+                    opt_sched = json.load(f)["schedule"]
+            else:
+                from mixing.compare_algorithms import compute_baseline_schedule, compute_optimized_schedule
+                base_sched = compute_baseline_schedule(v_tube=8.2, initial_fluid="T100")["schedule"]
+                opt_sched = compute_optimized_schedule(v_tube=8.2, initial_fluid="T100")["schedule"]
 
             if args.step is not None:
                 base_sched = [base_sched[args.step - 1]]
@@ -225,25 +269,32 @@ def render_with_isaac_sim(schedule_data: dict, args, out_dir: Path):
             dir_opt.mkdir(parents=True, exist_ok=True)
             dir_comp.mkdir(parents=True, exist_ok=True)
 
+            total_count = len(base_sched)
+            print(f"[IsaacSim Connector] Beginning comparative rendering of {total_count} vials...")
+
             for idx, (b_sol, o_sol) in enumerate(zip(base_sched, opt_sched)):
-                step_num = idx + 1 if args.step is None else args.step
-                print(f"[IsaacSim Connector] Comparative Step #{step_num:02d}: {b_sol['name']} vs. {o_sol['name']}")
+                step_num = b_sol.get("step", idx + 1) if args.step is None else args.step
+                if idx % 10 == 0 or idx == total_count - 1 or idx < 10:
+                    print(f"[IsaacSim Connector] Comparative Step #{step_num:03d} / {total_count}: {b_sol['name']} vs. {o_sol['name']}")
 
                 # 1. Render Baseline
                 img_b = _render_vial_step(b_sol, kit, tl, liquid_prim, liquid_shader, stream_shader, ann, args.subframes, Gf, rep)
-                cv2.imwrite(str(dir_base / f"vial_{step_num:02d}_{b_sol['name'].replace(' ', '_').replace(':', '')}.png"), img_b[..., ::-1])
+                safe_b_name = b_sol['name'].replace(' ', '_').replace(':', '').replace('#', '')
+                cv2.imwrite(str(dir_base / f"vial_{step_num:03d}_{safe_b_name}.png"), img_b[..., ::-1])
 
                 # 2. Render Optimized
                 img_o = _render_vial_step(o_sol, kit, tl, liquid_prim, liquid_shader, stream_shader, ann, args.subframes, Gf, rep)
-                cv2.imwrite(str(dir_opt / f"vial_{step_num:02d}_{o_sol['name'].replace(' ', '_').replace(':', '')}.png"), img_o[..., ::-1])
+                safe_o_name = o_sol['name'].replace(' ', '_').replace(':', '').replace('#', '')
+                cv2.imwrite(str(dir_opt / f"vial_{step_num:03d}_{safe_o_name}.png"), img_o[..., ::-1])
 
                 # 3. Create Side-by-Side Comparison
                 card_rgb = create_side_by_side_card(img_b, img_o, b_sol, o_sol)
-                comp_file = dir_comp / f"comparison_vial_{step_num:02d}.png"
+                comp_file = dir_comp / f"comparison_vial_{step_num:03d}.png"
                 cv2.imwrite(str(comp_file), card_rgb[..., ::-1])
-                print(f"  -> Saved comparison card to: {comp_file}")
+                if idx < 10 or idx % 10 == 0 or idx == total_count - 1:
+                    print(f"  -> Saved comparison card #{step_num:03d} to: {comp_file}")
 
-            print(f"\n[IsaacSim Connector] All comparative renders saved to: {out_dir}")
+            print(f"\n[IsaacSim Connector] All {total_count} comparative renders saved successfully to: {out_dir}")
 
         else:
             # Single Schedule Mode
@@ -320,7 +371,12 @@ def render_standalone_preview(schedule_data: dict, out_dir: Path, compare: bool 
 def main():
     args = parse_args()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    out_dir = Path(args.out_dir) if args.out_dir else REPO_ROOT / "runs" / f"{timestamp}_mixing_comparison"
+    if args.out_dir:
+        out_dir = Path(args.out_dir)
+    elif args.user_200_test:
+        out_dir = REPO_ROOT / "mixing" / "test"
+    else:
+        out_dir = REPO_ROOT / "runs" / f"{timestamp}_mixing_comparison"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     schedule_path = Path(args.schedule)

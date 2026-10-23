@@ -37,6 +37,10 @@ class Solution:
         self.delivered_amounts: Dict[str, float] = {}
         self.resident_fluid_inherited: Optional[str] = None
         self.resident_fluid_passed: Optional[str] = None
+        self.force_immediate: bool = False  # Manual override to disrupt deferral
+        self.requires_purge_if_forced: bool = False
+        self.is_bridge_vial: bool = False  # True if this recipe bridges across incompatible campaigns (Option B)
+        self.pre_dispense_action: Optional[Dict] = None  # Boundary prime/purge action if triggered (Option A)
 
         # Validate operating constraints from CSI / MAIC specification
         violations = self.validate_operating_constraints()
@@ -148,6 +152,8 @@ class Solution:
             "delivered_amounts": self.delivered_amounts,
             "resident_fluid_inherited": self.resident_fluid_inherited,
             "resident_fluid_passed": self.resident_fluid_passed,
+            "is_bridge_vial": self.is_bridge_vial,
+            "pre_dispense_action": self.pre_dispense_action,
             "rgb_color": [round(c, 3) for c in self.compute_rgb_color()],
         }
 

@@ -67,6 +67,24 @@ mixing/
      * Chains intra-vial dispense order: `[entry_material, intermediate..., handover_material]`.
      * Calculates compensated pump amounts: $V_{\text{pump}} = \max(0, V_{\text{target}} - V_{\text{tube}})$.
      * Seamlessly inherits tube fluid from the previous batch (`initial_tube_fluid`) and records the trailing fluid (`resident_fluid_passed`).
+   * `reorder_with_deferral(solutions, fixed_plc_order=True, allow_deferral=True)` / `separate_and_defer_incompatible(...)`:
+     * Handles isolated incompatible recipes (e.g. Recipe 13 [0 mL Clear] mixed into a batch of Recipe 6's [which must exit with Clear under fixed PLC rules]).
+     * Automatically defers the incompatible recipe to a secondary staging buffer (`saved_for_later`) so the homogeneous clean batch runs without defect or purge disruptions.
+     * **Manual Disruption Overrides:**
+       - Per-Recipe Rush Override: `solution.force_immediate = True` forces immediate inclusion in active batch and flags `requires_purge_if_forced = True`.
+       - Global Policy Override: `allow_deferral = False` forces all recipes into the active schedule without deferral.
+   * `reorder_campaign_option_b(solutions, fixed_plc_order=True)` (**Primary for Starting Tasks**):
+     * Automatically sequences carrier-free recipes (e.g. Recipe 13: Orange+Blue, $0\text{ mL T100}$) **first**.
+     * Vials self-circulate between Orange and Blue with zero water dilution.
+     * Trailing line fluid is left as `T400` (Blue dye).
+     * Selects and compensates an optimal **Bridge Vial** (e.g. Recipe 7: Pale Blue, $50\text{ mL T400}$, $20\text{ mL T100}$) to absorb resident `T400` and transition line to clean `T100` with **zero purge waste ($0.0\text{ mL}$)** and **zero defects**.
+   * `handle_mid_production_order(new_solutions, current_tube_fluid="T100", remaining_queue=None)` (**Backup Option A**):
+     * Handles dynamic / rush orders placed mid-production when the line is actively running carrier fluid.
+     * Discharges an intentional single $8.2\text{ mL}$ boundary prime/purge to the waste drain, evacuating `T100` water and priming the line with dye.
+     * Injected recipes run with 100% purity (0 dilution defects).
+     * Automatically returns to carrier queue via Option B return bridge (Recipe 7) or return rinse.
+   * `orchestrate_batch(solutions, is_mid_production=False, ...)`:
+     * Unified production dispatcher routing starting tasks to Option B and mid-production dynamic orders to Backup Option A.
 
 3. **`mixing/driver.py`**:
    * Initializes benchmark Recipes 5–14 (from CSI Video 5).
@@ -154,3 +172,57 @@ When developing or evaluating changes, ensure the following benchmarks pass:
 - [ ] **Equipment Safety:** Tank T-200 $\le 50.0\text{ mL}$, Tank T-300 strictly $0.0\text{ mL}$.
 - [ ] **Visual Accuracy:** Fluid columns in Isaac Sim renders rest flush on the vial carrier base without gaps or clipping.
 
+# Agent Guidelines & Repository Architecture
+
+This document defines critical rules, environment constraints, and directory conventions that all AI agents and developers must adhere to when working on this repository.
+
+---
+
+## 1. Directory Structure & Permissions Policy
+
+### `shared/` (`/data/ai_club/team_14_2026/`)
+The `shared/` directory is symlinked to the cluster team workspace (`/data/ai_club/team_14_2026/`).
+
+- **`shared/data/` (STRICTLY READ-ONLY)**:
+  - Contains the raw competition data extracted from `data.zip` (provided by the competition organizers).
+  - **NEVER write, edit, rename, or delete any files inside `shared/data/`.**
+  - All agents must treat `shared/data/` as immutable reference data.
+- **`shared/scenes/` (TEAM COLLABORATION & SHARED ASSETS)**:
+  - Canonical simulation USD scenes, verified physical layouts (such as `clean_vial_tray.usda`), and reusable digital twin stages belong here.
+  - Accessible to all members of the `ai_club` group.
+- **`shared/cache/`**:
+  - Replicable cache files, Warp kernels, and intermediate artifacts shared across nodes.
+
+### `./runs/` (EXPERIMENT ARTIFACTS & ARCHIVES)
+All generated simulation runs, debug crops, perception evaluations, and model checkpoints must be structured cleanly:
+- **Never dump loose debug files into the root of `./runs/`**.
+- Intermediate debug images and crops must be grouped into timestamped subdirectories:
+  - `runs/archive/YYYY-MM-DD_<task_description>/`
+- Output videos and public demos should be placed in `runs/` or referenced directly from `docs/media/`.
+
+---
+
+## 2. Cluster & Slurm Execution Rules
+
+1. **GPU Simulation Execution**:
+   - Heavy simulation rendering, Isaac Sim runs, and synthetic dataset generation **must** be submitted via Slurm using:
+     ```bash
+     sbatch scripts/submit_isaac_job.slurm <target_script> [arguments]
+     ```
+   - Do not launch heavy Isaac Sim rendering processes directly on the login node.
+2. **Permissions Helper**:
+   - Run `scripts/fix_shared_permissions.sh` to ensure `shared/scenes/` is writable by `ai_club` and `shared/data/` remains read-only.
+
+---
+
+## 3. Physical Specifications & Digital Twin Simulation
+
+When simulating the vial tray, Fanuc ER-4iA arm, and gripper:
+- **Physical Specifications**: Consult [`docs/PHYSICAL_SPECIFICATIONS.md`](file:///home/ad.msoe.edu/needhama/Documents/GitHub/innovation-lab-fall-2026/docs/PHYSICAL_SPECIFICATIONS.md) for verified dimensions:
+  - Vials: $1.00\text{ in}$ ID ($25.40\text{ mm}$), $1.05\text{ in}$ OD ($26.67\text{ mm}$), $8.00\text{ in}$ H ($203.20\text{ mm}$).
+  - Caps: $1.24\text{ in}$ flange ($31.50\text{ mm}$), $0.90\text{ in}$ plug ($22.86\text{ mm}$).
+  - Gripper: SMC MHZL2-16D2 $12\text{ mm}$ stroke ($6\text{ mm}$/jaw) with $34\text{ mm}$ conformal pads.
+- **Vision-Guided Remediation**:
+  - Never hardcode tray aperture coordinates. All robot trajectories must be guided by perception via overhead camera (`TableCam`) ray-plane backprojection.
+  - Clearance height across the tray must be $> 0.203\text{ m}$ (minimum $0.26\text{ m}$) to clear all 8-inch vials without clipping or phasing.
+ 
