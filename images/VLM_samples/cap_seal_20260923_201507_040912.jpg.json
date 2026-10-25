@@ -1,0 +1,127 @@
+{
+  "filename": "cap_seal_20260923_201507_040912.jpg",
+  "image_path": "images/pruned_images/cap_seal_20260923_201507_040912.jpg",
+  "apertures": {
+    "G01": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G02": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G03": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G04": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G05": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G06": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G07": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G08": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G09": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G10": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G11": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G12": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G13": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G14": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G15": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G16": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G17": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G18": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G19": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G20": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G21": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G22": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G23": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G24": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G25": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G26": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G27": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G28": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G29": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G30": {
+      "label": "pass",
+      "confidence": 0.8
+    }
+  },
+  "server": "http://dh-node10:8006/v1"
+}

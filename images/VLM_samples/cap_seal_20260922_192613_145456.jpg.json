@@ -1,0 +1,127 @@
+{
+  "filename": "cap_seal_20260922_192613_145456.jpg",
+  "image_path": "images/pruned_images/cap_seal_20260922_192613_145456.jpg",
+  "apertures": {
+    "G01": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G02": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G03": {
+      "label": "missing_cap",
+      "confidence": 0.7
+    },
+    "G04": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G05": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G06": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G07": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G08": {
+      "label": "pass",
+      "confidence": 0.8
+    },
+    "G09": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G10": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G11": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G12": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G13": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G14": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G15": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G16": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G17": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G18": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G19": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G20": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G21": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G22": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G23": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G24": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G25": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G26": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G27": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G28": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G29": {
+      "label": "no_vial",
+      "confidence": 0.8
+    },
+    "G30": {
+      "label": "no_vial",
+      "confidence": 0.8
+    }
+  },
+  "server": "http://dh-node8:8000/v1"
+}

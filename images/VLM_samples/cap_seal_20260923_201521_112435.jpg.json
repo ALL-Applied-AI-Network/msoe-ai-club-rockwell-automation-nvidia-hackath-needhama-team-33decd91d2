@@ -1,0 +1,127 @@
+{
+  "filename": "cap_seal_20260923_201521_112435.jpg",
+  "image_path": "images/pruned_images/cap_seal_20260923_201521_112435.jpg",
+  "apertures": {
+    "G01": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G02": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G03": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G04": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G05": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G06": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G07": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G08": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G09": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G10": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G11": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G12": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G13": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G14": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G15": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G16": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G17": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G18": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G19": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G20": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G21": {
+      "label": "pass",
+      "confidence": 0.85
+    },
+    "G22": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G23": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G24": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G25": {
+      "label": "crooked_cap",
+      "confidence": 0.8
+    },
+    "G26": {
+      "label": "no_vial",
+      "confidence": 0.85
+    },
+    "G27": {
+      "label": "no_vial",
+      "confidence": 0.85
+    },
+    "G28": {
+      "label": "no_vial",
+      "confidence": 0.85
+    },
+    "G29": {
+      "label": "no_vial",
+      "confidence": 0.85
+    },
+    "G30": {
+      "label": "no_vial",
+      "confidence": 0.85
+    }
+  },
+  "server": "http://dh-node10:8005/v1"
+}
