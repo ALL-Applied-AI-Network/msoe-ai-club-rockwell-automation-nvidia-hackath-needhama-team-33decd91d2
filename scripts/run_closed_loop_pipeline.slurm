@@ -28,6 +28,7 @@ perception="$out/perception"
 action="$out/action"
 
 mkdir -p "$out"
+rm -rf "$action/frames" "$action/yolo_frames"
 ./scripts/run_isaac.sh src/remediation/capture_live_tablecam.py --scene "$scene" --out "$perception"
 ./.conda_env/bin/python src/inspection/inspect_remediation_capture.py \
     --checkpoint "$checkpoint" \
@@ -39,4 +40,5 @@ mkdir -p "$out"
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action"
 ./.conda_env/bin/python src/remediation/overlay_yolo_frames.py \
     --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0
-ffmpeg -y -framerate 20 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_per_frame.mp4"
+FFMPEG_BIN=$(command -v ffmpeg || echo /usr/bin/ffmpeg)
+"$FFMPEG_BIN" -y -framerate 20 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_per_frame.mp4"

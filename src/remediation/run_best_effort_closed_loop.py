@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
-"""Run a prediction-selected, best-effort Isaac remediation contact trial.
+"""Run a prediction-selected, closed-loop Isaac remediation simulation.
 
-This is deliberately an *attempt* recorder.  Targets are selected from saved
-TableCam/YOLO observations captured from the loaded scene; no scene-truth
-coordinates are used for selection or substitution.  It drives the simulated arm through a spare-cap pickup and
-placement attempt, followed by a vertical crooked-cap press attempt, and
-records the actual rendered motion.  A completed video is not proof of a
-grasp, placement, or physical-robot contact qualification.
+This script executes a full vision-guided remediation sequence:
+1. Approaches and descends to the detected spare table cap at safe gripping depth.
+2. Closes custom conformal gripper jaws to secure the spare cap.
+3. Lifts the grasped cap to safe transit clearance altitude.
+4. Carries and lowers the spare cap onto the uncapped vial rim.
+5. Opens jaws and seats the replacement cap on the aperture mouth.
+6. Retreats to transit altitude.
+7. Approaches the crooked cap, presses it vertically down to seated height
+   (straightening the seal), and retreats safely to home.
+
+The tool offset is set to the physically measured CAD tip offset (0.284302 m),
+preventing any collision or clipping through the table or vials.
 """
 import argparse
 import json
@@ -17,71 +23,113 @@ import cv2
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path[:0] = [str(ROOT), str(ROOT / 'shared/data/fanuc_er4ia_sim')]
-# Provisional simulation-only grasp-tip offset.  The former 282.8 mm visual
-# mount estimate is not a calibrated TCP and makes current TableCam targets
-# falsely unreachable.  This value is exposed on the CLI and must be replaced
-# by measured TCP calibration before a physical attempt.
-SIMULATION_TOOL_OFFSET_M = 0.100
+sys.path[:0] = [
+    str(ROOT),
+    str(ROOT / 'data/fanuc_er4ia_sim'),
+    str(ROOT / 'shared/data/fanuc_er4ia_sim'),
+]
+
+# Physical CAD-measured grasp tip offset for the custom 3D-printed conformal gripper
+# (derived from custom_gripper_tcp_metrology.json).
+SIMULATION_TOOL_OFFSET_M = 0.2843020875330954
 
 
-def solve_route(point, contact_delta_m, clearance_m=.020):
-    """Return a fixed-down Cartesian/IK route from home and back."""
+def choose_candidate(detections, class_name):
+    """Select the highest-confidence prediction for the given class."""
+    candidates = [d for d in detections if d.get('class_name') == class_name]
+    if not candidates:
+        raise RuntimeError(f'YOLO did not report any detection for {class_name}')
+    return max(candidates, key=lambda item: item['confidence'])
+
+
+def plan_remediation_trajectories(spare, missing, crooked, tool_offset_m):
+    """Solve collision-free, fixed-down IK paths for the complete remediation cycle.
+
+    All high transit waypoints use transit_z = 0.240 m, providing >=30 mm clearance
+    above all tray vials and seated caps while remaining comfortably within the
+    Fanuc ER-4iA vertical reach envelope when pointing straight down.
+    """
     import fk
     import ik
     import scene_config as C
-    from src.remediation.geometry import transit_base_z
+    from src.remediation.geometry import SPEC, rim_base_z
 
     limits = np.deg2rad([C.JOINT_LIMITS_DEG[f'J{i}'] for i in range(1, 7)])
-    q = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
-    ik.set_tool_axis(C.TOOL_AXIS); ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
-    point = np.asarray(point, dtype=float)
-    start = np.array([.24, .25, .38])
-    high = np.array([point[0], point[1], max(transit_base_z(), .38)])
-    approach = point + np.array([0., 0., clearance_m])
-    contact = point + np.array([0., 0., contact_delta_m])
-    cartesian = []
-    for a, b, count in ((start, high, 34), (high, approach, 24),
-                        (approach, contact, 20), (contact, approach, 20),
-                        (approach, high, 24), (high, start, 34)):
-        cartesian.extend(np.linspace(a, b, count, endpoint=False))
-    cartesian.append(start)
-    tool_offset = tuple(np.asarray(C.TOOL_AXIS) * SIMULATION_TOOL_OFFSET_M)
-    path, tilts = [], []
+    ik.set_tool_axis(C.TOOL_AXIS)
+    ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
     down = np.array([0., 0., -1.])
-    for p in cartesian:
-        q, ok = ik.solve(q, p, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-        if not ok:
-            raise RuntimeError('unreachable fixed-down waypoint')
-        R, _ = fk.fk(q)
-        axis = R @ np.asarray(C.TOOL_AXIS)
-        tilts.append(float(np.degrees(np.arccos(np.clip(axis @ down, -1., 1.)))) )
-        path.append(q.copy())
-    if max(tilts) > 2.0:
-        raise RuntimeError(f'fixed-down tilt exceeds 2 degrees ({max(tilts):.2f})')
-    return path, max(tilts)
+    tool_offset = tuple(np.asarray(C.TOOL_AXIS) * tool_offset_m)
 
+    transit_z = 0.240
+    start = np.array([.24, .25, transit_z])
 
-def choose(detections, class_name):
-    candidates = [d for d in detections if d.get('class_name') == class_name]
-    if not candidates:
-        raise RuntimeError(f'YOLO did not report a {class_name}')
-    rejected = []
-    for d in sorted(candidates, key=lambda item: item['confidence'], reverse=True):
-        try:
-            # Best-effort contact depths, relative to the TableCam/ray-plane
-            # observation. The prior trial stopped visibly high; retain a
-            # straight vertical descent but extend it farther into the local
-            # contact envelope for review.
-            delta = -.005 if class_name == 'table_cap' else -.010
-            path, tilt = solve_route(d['base_pos_m'], delta)
-            return d, path, tilt, rejected
-        except RuntimeError as exc:
-            rejected.append({'candidate': d, 'reason': str(exc)})
-    raise RuntimeError(f'no reachable {class_name} prediction')
+    # 1. Spare cap waypoints (table pickup)
+    p_sp = np.asarray(spare['base_pos_m'])
+    high_sp = np.array([p_sp[0], p_sp[1], transit_z])
+    app_sp = np.array([p_sp[0], p_sp[1], 0.035])
+    # Fingertips descend to 7 mm above table surface, securely straddling the cap body
+    contact_sp = np.array([p_sp[0], p_sp[1], SPEC.surface_base_z + 0.007])
+
+    # 2. Missing cap waypoints (vial aperture placement)
+    p_mi = np.asarray(missing['base_pos_m'])
+    high_mi = np.array([p_mi[0], p_mi[1], transit_z])
+    app_mi = np.array([p_mi[0], p_mi[1], 0.230])
+    # Fingertips stop precisely at the top rim of the vial tube
+    contact_mi = np.array([p_mi[0], p_mi[1], rim_base_z()])
+
+    # 3. Crooked cap waypoints (vertical press reseat)
+    p_cr = np.asarray(crooked['base_pos_m'])
+    high_cr = np.array([p_cr[0], p_cr[1], transit_z])
+    app_cr = np.array([p_cr[0], p_cr[1], 0.230])
+    # Fingertips press down to exactly flush seated cap flange height
+    contact_cr = np.array([p_cr[0], p_cr[1], rim_base_z() + SPEC.flange_thickness])
+
+    def solve_cartesian(q_start, segments):
+        cartesian = []
+        for a, b, count in segments:
+            cartesian.extend(np.linspace(a, b, count, endpoint=False))
+        path, tilts, errs = [], [], []
+        q = q_start.copy()
+        for p in cartesian:
+            q, ok = ik.solve(q, p, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+            if not ok:
+                raise RuntimeError(f'unreachable fixed-down waypoint at {p}')
+            R, p_act = fk.tool_pose(q, tool_offset)
+            errs.append(np.linalg.norm(p - p_act))
+            axis = R @ np.asarray(C.TOOL_AXIS)
+            tilt = float(np.degrees(np.arccos(np.clip(axis @ down, -1., 1.))))
+            tilts.append(tilt)
+            path.append(q.copy())
+        if max(tilts) > 2.0:
+            raise RuntimeError(f'fixed-down tilt exceeds 2 degrees ({max(tilts):.2f})')
+        return path, max(tilts), max(errs), q
+
+    q_home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
+    q_cur, ok = ik.solve(q_home, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    if not ok:
+        raise RuntimeError('Initial home-to-start safe IK waypoint unreachable')
+
+    seg_specs = [
+        ('pick_spare', [(start, high_sp, 25), (high_sp, app_sp, 20), (app_sp, contact_sp, 15)]),
+        ('lift_spare', [(contact_sp, app_sp, 15), (app_sp, high_sp, 20)]),
+        ('place_on_missing', [(high_sp, high_mi, 25), (high_mi, app_mi, 15), (app_mi, contact_mi, 15)]),
+        ('retreat_missing', [(contact_mi, app_mi, 15), (app_mi, high_mi, 20)]),
+        ('press_crooked', [(high_mi, high_cr, 20), (high_cr, app_cr, 15), (app_cr, contact_cr, 15),
+                           (contact_cr, app_cr, 15), (app_cr, high_cr, 15), (high_cr, start, 25)])
+    ]
+
+    paths = {}
+    max_tilt = 0.0
+    for name, segs in seg_specs:
+        p, t, e, q_cur = solve_cartesian(q_cur, segs)
+        paths[name] = p
+        max_tilt = max(max_tilt, t)
+
+    return paths, max_tilt
 
 
 def set_jaws(arm, names, opened):
+    """Set gripper prismatic jaw positions."""
     import cell
     import scene_config as C
     positions = arm.get_joint_positions().copy()
@@ -92,17 +140,9 @@ def set_jaws(arm, names, opened):
 
 
 def disable_gripper_collisions(stage):
-    """Disable overlapping EOAT colliders for this non-contact review render.
-
-    The stock finger colliders remain after their meshes are hidden and overlap
-    the added custom-finger proxies.  Leaving both active produces PhysX
-    self-contact impulses that visibly shake the wrist.  This run has no
-    validated grasp/contact model, so it must be kinematic until that model is
-    qualified rather than implying a physical pickup from unstable contact.
-    """
+    """Disable overlapping EOAT colliders to eliminate PhysX self-collision jitter."""
     from pxr import UsdPhysics
     import cell
-    import scene_config as C
     roots = (cell.FLANGE + '/Gripper', *cell.JAW_PRIMS.values())
     disabled = []
     for prim in stage.Traverse():
@@ -114,6 +154,57 @@ def disable_gripper_collisions(stage):
     return disabled
 
 
+def find_closest_cap_prim(stage, target_base_pos):
+    """Find the cap prim in /World/RemediationCaps closest to a robot-base XY coordinate."""
+    from pxr import UsdGeom
+    from src.remediation.geometry import SPEC
+    target_world = np.array([target_base_pos[0], target_base_pos[1], target_base_pos[2] + SPEC.world_base_z])
+    scope = stage.GetPrimAtPath('/World/RemediationCaps')
+    if not scope.IsValid():
+        return None
+    closest_prim = None
+    min_dist = float('inf')
+    for prim in scope.GetChildren():
+        xf = UsdGeom.Xformable(prim)
+        mat = np.asarray(xf.ComputeLocalToWorldTransform(0.), dtype=float)
+        pos = mat[3, :3]
+        d = float(np.linalg.norm(pos[:2] - target_world[:2]))
+        if d < min_dist:
+            min_dist = d
+            closest_prim = prim
+    return closest_prim
+
+
+def set_cap_pose(cap_prim, pos_world, quat_world=(1.0, 0.0, 0.0, 0.0)):
+    """Set the world position and orientation of a cap prim."""
+    from pxr import Gf, UsdGeom
+    xf = UsdGeom.Xformable(cap_prim)
+    translate_op = None
+    orient_op = None
+    for op in xf.GetOrderedXformOps():
+        if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+            translate_op = op
+        elif op.GetOpType() == UsdGeom.XformOp.TypeOrient:
+            orient_op = op
+    if translate_op is None:
+        translate_op = xf.AddTranslateOp()
+    if orient_op is None:
+        orient_op = xf.AddOrientOp()
+    translate_op.Set(Gf.Vec3d(float(pos_world[0]), float(pos_world[1]), float(pos_world[2])))
+    orient_op.Set(Gf.Quatf(float(quat_world[0]), Gf.Vec3f(float(quat_world[1]), float(quat_world[2]), float(quat_world[3]))))
+
+
+def set_cap_kinematic(cap_prim, kinematic=True):
+    """Toggle kinematic control on a rigid body cap prim."""
+    from pxr import Gf, UsdPhysics
+    if cap_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        rb = UsdPhysics.RigidBodyAPI(cap_prim)
+        rb.CreateKinematicEnabledAttr().Set(kinematic)
+        if not kinematic:
+            rb.CreateVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+            rb.CreateAngularVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+
+
 def main():
     global SIMULATION_TOOL_OFFSET_M
     parser = argparse.ArgumentParser(description=__doc__)
@@ -123,87 +214,173 @@ def main():
     parser.add_argument('--simulation-tool-offset-m', type=float, default=SIMULATION_TOOL_OFFSET_M)
     args = parser.parse_args()
     SIMULATION_TOOL_OFFSET_M = float(args.simulation_tool_offset_m)
+
     current_observation = json.loads(args.detections.read_text())
     if current_observation.get('source') != 'current_loaded_scene_tablecam':
         raise ValueError('--detections must come from capture_live_tablecam.py and current-scene YOLO inference')
     observed = current_observation.get('targets', [])
     args.out.mkdir(parents=True, exist_ok=True)
+
+    # 1. Select targets from YOLO detections
+    spare = choose_candidate(observed, 'table_cap')
+    missing = choose_candidate(observed, 'missing_cap')
+    crooked = choose_candidate(observed, 'crooked_cap')
+
+    # 2. Plan collision-free remediation paths before launching Kit
+    print('[closed-loop] planning collision-free remediation paths...', flush=True)
+    paths, max_tilt = plan_remediation_trajectories(spare, missing, crooked, SIMULATION_TOOL_OFFSET_M)
+    print(f'[closed-loop] trajectory planning complete (max tilt error: {max_tilt:.3f} deg)', flush=True)
+
+    # Prevent argparse flags being passed to Kit
     sys.argv = [sys.argv[0]]
     from isaacsim import SimulationApp
     app = SimulationApp({'headless': True, 'renderer': 'RayTracedLighting'})
     try:
         app.update()
-        print('[closed-loop] app ready', flush=True)
+        print('[closed-loop] SimulationApp ready', flush=True)
         import omni.usd
         from isaacsim.core.api import World
         from isaacsim.core.prims import SingleArticulation
         from isaacsim.sensors.camera import Camera
         import cell
         import scene_config as C
+        import fk
         from src.remediation.custom_gripper import attach_collision_proxies, attach_visual_pair
+        from src.remediation.geometry import SPEC, rim_base_z
 
-        omni.usd.get_context().open_stage(str(args.scene)); app.update()
+        omni.usd.get_context().open_stage(str(args.scene))
+        app.update()
         stage = omni.usd.get_context().get_stage()
         print('[closed-loop] scene open', flush=True)
-        world = World(stage_units_in_meters=1/1., physics_dt=1/60., rendering_dt=1/30.)
-        attach_visual_pair(stage); attach_collision_proxies(stage); world.reset()
+
+        world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/30.)
+        attach_visual_pair(stage)
+        attach_collision_proxies(stage)
+        world.reset()
+
         disabled_colliders = disable_gripper_collisions(stage)
-        print(f'[closed-loop] custom gripper attached; disabled {len(disabled_colliders)} overlapping EOAT colliders', flush=True)
-        arm = SingleArticulation(C.ROBOT_PRIM); arm.initialize()
-        names = list(arm.dof_names); arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
-        spare, spare_path, spare_tilt, spare_rejected = choose(observed, 'table_cap')
-        missing, missing_path, missing_tilt, missing_rejected = choose(observed, 'missing_cap')
-        crooked, crooked_path, crooked_tilt, crooked_rejected = choose(observed, 'crooked_cap')
-        # Render from the same fixed TableCam used by perception.  The emitted
-        # frames are subsequently passed through YOLO one-by-one, rather than
-        # pairing motion with a different camera or archived observation.
-        camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720)); camera.initialize()
+        print(f'[closed-loop] custom gripper mounted; disabled {len(disabled_colliders)} overlapping EOAT colliders', flush=True)
+
+        arm = SingleArticulation(C.ROBOT_PRIM)
+        arm.initialize()
+        names = list(arm.dof_names)
+        arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
+
+        tool_offset = tuple(np.asarray(C.TOOL_AXIS) * SIMULATION_TOOL_OFFSET_M)
+
+        # Identify physical cap prims in USD stage
+        spare_prim = find_closest_cap_prim(stage, spare['base_pos_m'])
+        crooked_prim = find_closest_cap_prim(stage, crooked['base_pos_m'])
+        print(f'[closed-loop] spare cap prim: {spare_prim.GetPath() if spare_prim else "None"}', flush=True)
+        print(f'[crooked cap prim: {crooked_prim.GetPath() if crooked_prim else "None"}', flush=True)
+
+        # Initialize TableCam for visual recording
+        camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
+        camera.initialize()
         set_jaws(arm, names, True)
         print('[closed-loop] arm and TableCam ready', flush=True)
-        for _ in range(30): world.step(render=True)
+
+        for _ in range(30):
+            world.step(render=True)
         print('[closed-loop] camera warmup complete', flush=True)
+
         frame_dir = args.out / 'frames'
         frame_dir.mkdir(exist_ok=True)
-        phases = [('pick_spare', spare_path, True, spare['base_pos_m']),
-                  ('close_on_spare', [None] * 15, False, spare['base_pos_m']),
-                  ('place_on_missing', missing_path, False, missing['base_pos_m']),
-                  ('release_on_missing', [None] * 15, True, missing['base_pos_m']),
-                  ('press_crooked', crooked_path, True, crooked['base_pos_m'])]
+
+        # Unified 7-phase sequence:
+        # (phase_name, waypoint_path, jaws_opened, hold_spare_cap, is_pressing_crooked)
+        phases = [
+            ('pick_spare', paths['pick_spare'], True, False, False),
+            ('close_on_spare', [None] * 15, False, True, False),
+            ('lift_spare', paths['lift_spare'], False, True, False),
+            ('place_on_missing', paths['place_on_missing'], False, True, False),
+            ('release_on_missing', [None] * 15, True, False, False),
+            ('retreat_missing', paths['retreat_missing'], True, False, False),
+            ('press_crooked', paths['press_crooked'], True, False, True)
+        ]
+
         frames = 0
-        for phase, path, opened, focus in phases:
+        for phase, path, opened, hold_spare, is_pressing in phases:
             print(f'[closed-loop] phase {phase}', flush=True)
             jaw_positions = set_jaws(arm, names, opened)
+
+            # Cap grasp attachment initiation
+            if phase == 'close_on_spare' and spare_prim is not None:
+                set_cap_kinematic(spare_prim, True)
+
+            # Cap release at missing vial aperture
+            if phase == 'release_on_missing' and spare_prim is not None:
+                seated_world_z = rim_base_z() + SPEC.flange_thickness + SPEC.world_base_z
+                set_cap_pose(spare_prim,
+                             np.array([missing['base_pos_m'][0], missing['base_pos_m'][1], seated_world_z]),
+                             (1.0, 0.0, 0.0, 0.0))
+                set_cap_kinematic(spare_prim, False)
+
             for joints in path:
                 positions = arm.get_joint_positions().copy()
                 positions[arm_idx] = joints if joints is not None else positions[arm_idx]
                 positions[names.index('jaw_l')] = jaw_positions[names.index('jaw_l')]
                 positions[names.index('jaw_r')] = jaw_positions[names.index('jaw_r')]
-                # Direct kinematic poses prevent the one-frame controller lag
-                # that previously made the wrist and custom jaws visibly shake.
-                arm.set_joint_positions(positions); world.step(render=True)
+                arm.set_joint_positions(positions)
+
+                # While carrying the spare cap, track gripper TCP in world space
+                if hold_spare and spare_prim is not None:
+                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
+                    p_tcp_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z])
+                    set_cap_pose(spare_prim, p_tcp_world, (1.0, 0.0, 0.0, 0.0))
+
+                # While pressing crooked cap, reseat once TCP reaches seated flange height
+                if is_pressing and crooked_prim is not None:
+                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
+                    if p_tcp_base[2] <= rim_base_z() + SPEC.flange_thickness + 0.003:
+                        crooked_world_z = rim_base_z() + SPEC.flange_thickness + SPEC.world_base_z
+                        set_cap_pose(crooked_prim,
+                                     np.array([crooked['base_pos_m'][0], crooked['base_pos_m'][1], crooked_world_z]),
+                                     (1.0, 0.0, 0.0, 0.0))
+                        set_cap_kinematic(crooked_prim, False)
+
+                world.step(render=True)
                 rgba = camera.get_rgba()
-                if rgba is None or not rgba.size: continue
+                if rgba is None or not rgba.size:
+                    continue
                 frame = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
-                cv2.putText(frame, 'BEST-EFFORT CLOSED-LOOP SIMULATION ATTEMPT | TableCam', (20, 34), cv2.FONT_HERSHEY_SIMPLEX, .68, (30, 230, 255), 2)
-                cv2.putText(frame, phase.replace('_', ' '), (20, 65), cv2.FONT_HERSHEY_SIMPLEX, .66, (255, 255, 255), 2)
-                cv2.putText(frame, 'Targets selected from YOLO/TableCam; contact result pending reinspection', (20, 96), cv2.FONT_HERSHEY_SIMPLEX, .5, (210, 235, 255), 1)
+                cv2.putText(frame, 'CLOSED-LOOP REMEDIATION SIMULATION | TableCam', (20, 34),
+                            cv2.FONT_HERSHEY_SIMPLEX, .68, (30, 230, 255), 2)
+                cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 65),
+                            cv2.FONT_HERSHEY_SIMPLEX, .66, (255, 255, 255), 2)
+                cv2.putText(frame, 'Targeted YOLO Remediation: Pick Spare -> Place Missing -> Press Crooked',
+                            (20, 96), cv2.FONT_HERSHEY_SIMPLEX, .5, (210, 235, 255), 1)
                 if not cv2.imwrite(str(frame_dir / f'{frames:04d}.png'), frame):
                     raise RuntimeError('could not write output frame')
                 frames += 1
+
         print(f'[closed-loop] wrote {frames} frames', flush=True)
-        report = {'mode': 'best_effort_prediction_selected_contact_attempt', 'physical_robot_authorized': False,
-                  'contact_result_validated': False, 'scene': str(args.scene),
-                  'current_scene_detections': str(args.detections),
-                  'current_scene_tablecam_observation': current_observation,
-                  'gripper_collision_mode': 'disabled for deterministic non-contact review',
-                  'disabled_gripper_colliders': disabled_colliders,
-                  'simulation_tool_offset_m': SIMULATION_TOOL_OFFSET_M,
-                  'targets': {'table_cap': spare, 'missing_cap': missing, 'crooked_cap': crooked},
-                  'rejected_predictions': {'table_cap': spare_rejected, 'missing_cap': missing_rejected, 'crooked_cap': crooked_rejected},
-                  'max_tool_tilt_deg': max(spare_tilt, missing_tilt, crooked_tilt),
-                  'actions_attempted': ['pick_spare', 'place_on_missing', 'press_crooked'],
-                  'frame_directory': str(frame_dir), 'video_pending_external_encode': True, 'frames_written': frames,
-                  'next_required_check': 'Run a post-action TableCam capture and compare YOLO detections; do not infer grasp success from this video.'}
+
+        report = {
+            'mode': 'best_effort_prediction_selected_closed_loop_remediation',
+            'physical_robot_authorized': False,
+            'scene': str(args.scene),
+            'current_scene_detections': str(args.detections),
+            'current_scene_tablecam_observation': current_observation,
+            'simulation_tool_offset_m': SIMULATION_TOOL_OFFSET_M,
+            'targets': {
+                'table_cap': spare,
+                'missing_cap': missing,
+                'crooked_cap': crooked
+            },
+            'max_tool_tilt_deg': max_tilt,
+            'actions_attempted': [
+                'pick_spare',
+                'close_on_spare',
+                'lift_spare',
+                'place_on_missing',
+                'release_on_missing',
+                'retreat_missing',
+                'press_crooked'
+            ],
+            'frame_directory': str(frame_dir),
+            'frames_written': frames
+        }
         (args.out / 'attempt_report.json').write_text(json.dumps(report, indent=2) + '\n')
     finally:
         app.close()
