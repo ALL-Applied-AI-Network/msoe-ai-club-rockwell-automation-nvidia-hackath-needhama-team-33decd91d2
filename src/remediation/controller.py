@@ -68,6 +68,18 @@ class RemediationController:
         self.queue.append(checked_action(p,closed))
 
     def _route(self,obs,target,spare=None):
+        # Build all waypoints through ``_add`` before returning a command.  If
+        # one is out of workspace, remove the earlier waypoints too: a target
+        # rejection must never leave a partial route that can move the arm.
+        queue_start=len(self.queue)
+        try:
+            self._route_checked(obs,target,spare)
+        except ValueError:
+            while len(self.queue)>queue_start:
+                self.queue.pop()
+            raise
+
+    def _route_checked(self,obs,target,spare=None):
         current=uf0_to_base(np.array(obs['tcp_pose'][:3]))
         height=max(transit_base_z(),current[2])
         p=np.array(target['base_pos_m'],dtype=float)
@@ -136,8 +148,18 @@ class RemediationController:
             if target['class_name']=='missing_cap':
                 if not spares: continue
                 spare=min(spares,key=lambda s:np.linalg.norm(np.array(s['base_pos_m'])-target['base_pos_m']))
+            try:
+                self._route(obs,target,spare)
+            except ValueError as exc:
+                # A false positive can project outside the physical robot's
+                # calibrated workspace.  Reject that candidate and keep the
+                # client alive; do not turn a safety check into a crashed run.
+                self.attempts[key]=self.max_attempts
+                self.events.append({'event':'target_rejected',
+                                    'reason':str(exc),
+                                    'target':np.asarray(target['base_pos_m'],dtype=float).tolist()})
+                continue
             self.attempts[key]=self.attempts.get(key,0)+1
-            self._route(obs,target,spare)
             return self.queue.popleft()
         # No detection is never proof that the tray is complete.
         self.events.append({'event':'hold','reason':'no_qualified_repair_target'})

@@ -128,7 +128,8 @@ class Policy:
         # triplets while retaining every TCP command in trace.jsonl.
         if self.frame_count >= 600 or not is_decision:
             self._write_trace({"t": stamp, "controller_state": state,
-                               "action_tcp": action, "detections": detections, "frame": None})
+                               "action_tcp": action, "detections": detections,
+                               "events": self.events[-20:], "frame": None})
             return
         index = self.frame_count
         self.frame_count += 1
@@ -150,7 +151,8 @@ class Policy:
             cv2.imwrite(str(self.trace_dir / "depth" / raw_name), np.asarray(depth))
         self._write_trace({"t": stamp, "controller_state": state,
                            "action_tcp": action, "tcp_pose_before": obs.get("tcp_pose"),
-                           "detections": detections, "frame": raw_name})
+                           "detections": detections, "events": self.events[-20:],
+                           "frame": raw_name})
 
     def _snapshot_detections(self, image, stamp):
         """Use one fresh TableCam snapshot to update a complete repair decision."""
