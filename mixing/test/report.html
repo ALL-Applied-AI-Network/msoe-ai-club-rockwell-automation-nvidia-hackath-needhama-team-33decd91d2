@@ -134,11 +134,11 @@
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_010.png" alt="Color Scrap" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_009.png" alt="Color Scrap" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
         <h3 style="font-size: 16px; margin: 0 0 6px 0;">Color Carryover: Recipe 6 (Pale Orange)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          Leftover blue dye shifts orange recipe into olive-green scrap. PCMC sequencing ensures clean transitions.
+          In Baseline (Card #009), leftover blue dye from prior recipe turns orange recipe into olive-green scrap. PCMC sequencing ensures zero foreign dye transfer.
         </p>
       </div>
     </div>
@@ -152,20 +152,20 @@
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_051.png" alt="Mid-Production Arrival" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_006.png" alt="Option B Bridge" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
-        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Halfway Arrival: Step 51 (Option A Prime)</h3>
+        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Zero-Waste Bridge Vial: Recipe 7 (Pale Blue)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          List 2 arrives at Step 50. Option A purges 8.2 mL water to waste drain and dispenses Recipe 13 with 100% pure dye.
+          Card #006 illustrates Recipe 7. In PCMC, this recipe absorbs resident blue dye with hold-up credit, flushes with clear diluent, and transitions the line with zero waste.
         </p>
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_061.png" alt="Option A Return Bridge" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_050.png" alt="Mid-Production Arrival" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
-        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Carrier Re-Entry: Step 61 (Return Bridge)</h3>
+        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Halfway Arrival: Step 50 (Recipe 13 Dilution)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          Recipe 7 absorbs resident blue dye with hold-up credit, flushes with clear diluent, and restores T-100 carrier line state.
+          Card #050 shows Recipe 13 at the halfway point. In Baseline, it suffers an 11.7% dilution defect (+8.2 mL water). In PCMC, pure dye formulation is delivered with 100% fidelity.
         </p>
       </div>
     </div>
@@ -177,13 +177,14 @@
   <table id="ledgerTable">
     <thead>
       <tr>
-        <th>Step</th>
+        <th>Vial #</th>
         <th>Recipe Name</th>
         <th>Target [T100, T200, T400]</th>
         <th>Baseline Delivered</th>
         <th>Baseline Unwanted / Missing</th>
         <th>Baseline Status</th>
         <th>PCMC Delivered</th>
+        <th>PCMC Dispense Step</th>
         <th>PCMC Waste</th>
         <th>PCMC Status</th>
       </tr>
@@ -196,7 +197,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #010</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -207,7 +209,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #182</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -218,7 +221,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #044</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -229,7 +233,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #043</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -240,7 +245,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #127</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -251,9 +257,10 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #009</span></td>
         <td>0.0 mL</td>
-        <td><span class="badge badge-success">✅ 100% Pass</span></td>
+        <td><span class="badge badge-bridge">🌟 Bridge Vial</span></td>
       </tr>
       <tr>
         <td><strong>#007</strong></td>
@@ -262,7 +269,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #011</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -274,6 +282,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
         <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #001</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -284,9 +293,10 @@
         <td><code>[30.0, 10.0, 8.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 COLOR_CARRYOVER_SCRAP</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #012</span></td>
         <td>0.0 mL</td>
-        <td><span class="badge badge-bridge">🌟 Bridge Vial</span></td>
+        <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
       <tr>
         <td><strong>#010</strong></td>
@@ -295,7 +305,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #013</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -306,7 +317,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #045</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -317,7 +329,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #183</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -328,7 +341,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #184</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -339,7 +353,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #032</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -350,7 +365,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #128</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -361,7 +377,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #129</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -372,7 +389,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #002</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -384,6 +402,7 @@
         <td>+8.2mL T400</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #014</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -394,7 +413,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #185</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -405,7 +425,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #003</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -416,7 +437,8 @@
         <td><code>[20.0, 20.0, 28.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #130</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -427,7 +449,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #004</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -438,7 +461,8 @@
         <td><code>[10.0, 10.0, 58.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #046</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -449,7 +473,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #131</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -460,7 +485,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #092</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -471,7 +497,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #015</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -482,7 +509,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #091</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -493,7 +521,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #186</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -504,7 +533,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #047</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -515,7 +545,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #048</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -527,6 +558,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
         <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #021</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -537,7 +569,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #108</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -548,7 +581,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #049</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -559,7 +593,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #132</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -570,7 +605,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #022</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -582,6 +618,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #033</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -593,6 +630,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #034</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -603,7 +641,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #050</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -615,6 +654,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #035</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -625,7 +665,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #023</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -636,7 +677,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #024</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -647,7 +689,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #016</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -658,7 +701,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #109</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -669,7 +713,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #187</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -680,7 +725,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #093</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -691,7 +737,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #005</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -702,7 +749,8 @@
         <td><code>[30.0, 10.0, 8.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 COLOR_CARRYOVER_SCRAP</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #036</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -714,6 +762,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #062</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -724,7 +773,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #037</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -735,7 +785,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #006</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -746,8 +797,9 @@
         <td><code>[10.0, 35.0, 43.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
-        <td>8.2 mL</td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #110</span></td>
+        <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
       <tr>
@@ -757,7 +809,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #017</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -768,7 +821,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #025</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -779,7 +833,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #018</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -790,7 +845,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #133</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -801,7 +857,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #038</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -812,7 +869,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #188</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -823,7 +881,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #134</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -834,7 +893,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #111</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -845,7 +905,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #039</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -856,9 +917,10 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #135</span></td>
         <td>0.0 mL</td>
-        <td><span class="badge badge-bridge">🌟 Bridge Vial</span></td>
+        <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
       <tr>
         <td><strong>#062</strong></td>
@@ -867,7 +929,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #040</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -879,6 +942,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #063</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -889,7 +953,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #112</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -900,7 +965,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #094</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -911,7 +977,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #026</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -922,9 +989,10 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #061</span></td>
         <td>0.0 mL</td>
-        <td><span class="badge badge-success">✅ 100% Pass</span></td>
+        <td><span class="badge badge-bridge">🌟 Bridge Vial</span></td>
       </tr>
       <tr>
         <td><strong>#068</strong></td>
@@ -933,7 +1001,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #027</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -944,7 +1013,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #028</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -955,7 +1025,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #136</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -966,7 +1037,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #113</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -977,7 +1049,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #041</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -988,7 +1061,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #019</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1000,6 +1074,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #064</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1010,7 +1085,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #007</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1021,7 +1097,8 @@
         <td><code>[20.0, 20.0, 28.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #137</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1032,7 +1109,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #065</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1043,7 +1121,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #095</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1055,6 +1134,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #066</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1065,7 +1145,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #114</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1076,7 +1157,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #008</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1087,7 +1169,8 @@
         <td><code>[20.0, 20.0, 28.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #138</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1098,7 +1181,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #029</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1109,7 +1193,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #189</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1120,7 +1205,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #139</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1131,7 +1217,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #190</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1142,7 +1229,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #030</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1153,7 +1241,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #067</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1164,7 +1253,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #115</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1175,7 +1265,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #042</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1186,7 +1277,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #140</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1197,7 +1289,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #020</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1208,7 +1301,8 @@
         <td><code>[53.2, 15.0, 15.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #031</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1219,7 +1313,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #141</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1231,6 +1326,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #096</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1241,7 +1337,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #068</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1253,6 +1350,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #097</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1263,7 +1361,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #069</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1274,7 +1373,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #116</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1285,7 +1385,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #070</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1297,6 +1398,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #098</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1307,7 +1409,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #071</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1318,7 +1421,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #142</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1329,7 +1433,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #117</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1340,7 +1445,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #143</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1351,7 +1457,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #144</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1362,7 +1469,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #191</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1373,7 +1481,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #072</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1384,8 +1493,9 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
-        <td>0.0 mL</td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #051</span></td>
+        <td>8.2 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
       <tr>
@@ -1395,7 +1505,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #154</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1406,7 +1517,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #173</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1417,7 +1529,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #145</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1428,7 +1541,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #073</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1439,7 +1553,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #099</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1450,7 +1565,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #192</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1462,6 +1578,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
         <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #118</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1472,7 +1589,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #164</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1483,7 +1601,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #074</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1494,7 +1613,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #052</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1505,7 +1625,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #155</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1516,7 +1637,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #193</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1527,7 +1649,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #174</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1538,7 +1661,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #075</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1549,7 +1673,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #146</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1561,6 +1686,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
         <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #119</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1571,7 +1697,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #100</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1582,7 +1709,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #165</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1593,7 +1721,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #076</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1604,7 +1733,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #053</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1615,7 +1745,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #156</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1626,7 +1757,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #147</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1637,7 +1769,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #077</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1649,6 +1782,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #175</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1659,7 +1793,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #194</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1670,7 +1805,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #120</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1681,7 +1817,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #101</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1692,7 +1829,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #166</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1703,7 +1841,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #078</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1714,7 +1853,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #054</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1725,7 +1865,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #157</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1736,7 +1877,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #079</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1748,6 +1890,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #176</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1758,7 +1901,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #148</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1769,7 +1913,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #121</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1780,7 +1925,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #195</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1791,7 +1937,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #102</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1802,7 +1949,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #167</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1813,7 +1961,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #080</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1824,7 +1973,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #055</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1835,7 +1985,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #158</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1846,7 +1997,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #177</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1857,7 +2009,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #081</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1869,6 +2022,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #149</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1879,7 +2033,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #196</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1890,7 +2045,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #122</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1901,7 +2057,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #103</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1912,7 +2069,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #168</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1923,7 +2081,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #082</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1934,7 +2093,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #056</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1946,6 +2106,7 @@
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
         <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #159</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1956,7 +2117,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #150</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1967,7 +2129,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #178</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1978,7 +2141,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #083</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -1989,7 +2153,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #123</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2000,7 +2165,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #197</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2011,7 +2177,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #104</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2023,6 +2190,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #169</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2033,7 +2201,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #084</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2044,7 +2213,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #057</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2055,7 +2225,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #160</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2066,7 +2237,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #085</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2077,7 +2249,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #151</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2089,6 +2262,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #179</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2099,7 +2273,8 @@
         <td><code>[18.2, 10.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #198</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2110,7 +2285,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #124</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2121,7 +2297,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #105</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2132,7 +2309,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #170</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2143,7 +2321,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #086</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2154,7 +2333,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #058</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2165,7 +2345,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #161</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2177,6 +2358,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #180</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2187,7 +2369,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #087</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2198,7 +2381,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #152</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2209,7 +2393,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #125</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2221,6 +2406,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #199</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2231,7 +2417,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #106</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2242,7 +2429,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #171</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2253,7 +2441,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #088</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2264,7 +2453,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #059</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2275,7 +2465,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #162</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2286,7 +2477,8 @@
         <td><code>[68.2, 0.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[60.0, 0.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #153</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2297,7 +2489,8 @@
         <td><code>[18.2, 10.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 10.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #089</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2308,7 +2501,8 @@
         <td><code>[28.2, 20.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[20.0, 20.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #181</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2320,6 +2514,7 @@
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
         <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #200</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2330,7 +2525,8 @@
         <td><code>[18.2, 35.0, 35.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 35.0, 35.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #126</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2341,7 +2537,8 @@
         <td><code>[18.2, 50.0, 10.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[10.0, 50.0, 10.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #107</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2352,7 +2549,8 @@
         <td><code>[38.2, 10.0, 0.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[30.0, 10.0, 0.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #172</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2363,7 +2561,8 @@
         <td><code>[28.2, 0.0, 50.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-success">Clean</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[20.0, 0.0, 50.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #090</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2374,7 +2573,8 @@
         <td><code>[8.2, 50.0, 20.0]</code></td>
         <td>+8.2mL T100</td>
         <td><span class="badge badge-danger">🚨 DILUTION_DEFECT</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[0.0, 50.0, 20.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #060</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>
@@ -2385,7 +2585,8 @@
         <td><code>[45.0, 15.0, 23.2]</code></td>
         <td>+8.2mL T400</td>
         <td><span class="badge badge-danger">🚨 SPILL_RISK</span></td>
-        <td><code>[10.0, 10.0, 10.0]</code></td>
+        <td><code>[45.0, 15.0, 15.0]</code></td>
+        <td><span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #163</span></td>
         <td>0.0 mL</td>
         <td><span class="badge badge-success">✅ 100% Pass</span></td>
       </tr>

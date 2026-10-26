@@ -123,50 +123,55 @@ def generate_markdown_report():
     lines.append("")
     lines.append("All 400 images (200 baseline unmodified + 200 PCMC optimized) were rendered using the Isaac Sim RTX renderer (`FillCam` pinhole camera, 640 × 480 px, physical liquid mesh height scaling and base-anchoring).")
     lines.append("")
+    lines.append("> **1:1 Recipe Type Alignment:** Every side-by-side comparison card pairs each baseline vial directly with its **exact corresponding recipe instance** from the PCMC schedule, guaranteeing that both panels compare identical recipe types and nominal formulations.")
+    lines.append("")
     lines.append("Below are key representative side-by-side comparison cards illustrating the failure modes and the PCMC resolution:")
     lines.append("")
-    lines.append("### A. Dilution Defect: Recipe 13 (Orange+Blue)")
-    lines.append("In the unmodified baseline, 8.2 mL of leftover clear diluent (water) is pushed into Recipe 13 (nominal 0.0 mL diluent). The resulting mixture is diluted by 11.7%, causing off-spec pale coloration and overfilling to 78.2 mL. In PCMC, Backup Option A boundary prime eliminates water carryover, delivering 100% pure dye.")
+    lines.append("### A. Dilution Defect Elimination: Recipe 13 (Orange+Blue)")
+    lines.append("In the unmodified baseline (Card #008), 8.2 mL of leftover clear diluent (water) is pushed into Recipe 13 (nominal 0.0 mL diluent). The resulting mixture is diluted by 11.7%, causing off-spec pale coloration and overfilling to 78.2 mL. In PCMC (dispensed at Step #001 in Phase 1), zero water is present, delivering 100% pure dye with rich optical absorption.")
     lines.append("")
     lines.append("![Comparison Recipe 13](comparison/comparison_vial_008.png)")
     lines.append("")
-    lines.append("### B. Color Carryover Scrap: Recipe 6 (Pale Orange)")
-    lines.append("In the unmodified baseline, when Recipe 6 (orange dye + diluent) follows a recipe dispensing blue dye, 8.2 mL of foreign blue dye is injected into the orange formulation, shifting the optical absorbance into a murky olive green defect. In PCMC, intra-vial sequencing and shared material matching ensure zero foreign dye transfer.")
+    lines.append("### B. Color Carryover Scrap Elimination: Recipe 6 (Pale Orange)")
+    lines.append("In the unmodified baseline (Card #009), Recipe 6 (orange dye + diluent) follows Recipe 13 which dispensed blue dye. 8.2 mL of foreign blue dye is injected into the orange formulation, turning the vial into olive-green scrap. In PCMC (dispensed at Step #012), intelligent scheduling and intra-vial sequencing ensure zero foreign dye transfer.")
     lines.append("")
-    lines.append("![Comparison Recipe 6](comparison/comparison_vial_010.png)")
+    lines.append("![Comparison Recipe 6](comparison/comparison_vial_009.png)")
     lines.append("")
-    lines.append("### C. Spill Risk Overfill: Recipe 9 & Recipe 10")
-    lines.append("Nominal target volume for Recipe 9 is 80.0 mL. Uncompensated carryover in the baseline pushes volume to 88.2 mL, creating severe sloshing and spillage risk on the MagneMover track. In PCMC, hold-up deduction reduces pump strokes to exactly 71.8 mL, delivering precisely 80.0 mL.")
+    lines.append("### C. Spill Risk Overfill Prevention: Recipe 9 (Dark Saturate)")
+    lines.append("Nominal target volume for Recipe 9 is 80.0 mL. Uncompensated carryover in the baseline (Card #003) pushes volume to 88.2 mL, creating severe sloshing and spillage risk on the MagneMover track. In PCMC (dispensed at Step #044), hold-up deduction reduces pump strokes to exactly 71.8 mL, delivering precisely 80.0 mL.")
     lines.append("")
     lines.append("![Comparison Recipe 9](comparison/comparison_vial_003.png)")
     lines.append("")
-    lines.append("### D. Zero-Waste Bridge Vial: Recipe 7 (Pale Blue - Shift Start)")
-    lines.append("The PCMC Option B bridge mechanism utilizes Recipe 7 to absorb resident T-400 blue dye from prior recipes, credit the hold-up volume, and flush the nozzle with clean T-100 clear diluent, achieving zero purge waste.")
+    lines.append("### D. Zero-Waste Bridge Vial: Recipe 7 (Pale Blue)")
+    lines.append("Card #006 illustrates Recipe 7: Pale Blue. In PCMC, this recipe is utilized as the Option B Bridge Vial (dispensed at Step #009) to absorb trailing blue dye with hold-up credit ($50 - 8.2 = 41.8\\text{ mL}$ pumped), flush the line with clean T-100 clear diluent, and transition the line with zero chemical waste.")
     lines.append("")
-    lines.append("![Comparison Recipe 7](comparison/comparison_vial_009.png)")
+    lines.append("![Comparison Recipe 7](comparison/comparison_vial_006.png)")
     lines.append("")
-    lines.append("### E. Dynamic Mid-Production Arrival: Step 51 (Backup Option A Injection)")
-    lines.append("When List 2 arrives dynamically at Step 50, the line holds T-100 clear water. In Baseline, Recipe 12 and Recipe 13 receive carryover. In PCMC, Backup Option A discharges an 8.2 mL boundary prime to waste, and runs the 10 Recipe 13s with zero dilution.")
+    lines.append("### E. Halfway Mid-Production Dynamic Injection: Recipe 13 (Step 50)")
+    lines.append("Card #050 shows the final Recipe 13 of List 1 before List 2 arrives. In Baseline, it suffers an 11.7% dilution defect (+8.2 mL water). In PCMC, Backup Option A discharges an 8.2 mL boundary prime to waste, and runs all Recipe 13s with zero dilution.")
     lines.append("")
-    lines.append("![Comparison Step 51](comparison/comparison_vial_051.png)")
-    lines.append("")
-    lines.append("### F. Mid-Production Carrier Re-Entry: Step 61 (Option A Return Bridge)")
-    lines.append("After completing the pure dye injection, Step 61 utilizes Recipe 7 as an Option A Return Bridge Vial to absorb trailing blue dye, dispense T-100 last, and return the line cleanly to carrier liquid for the remainder of the production run.")
-    lines.append("")
-    lines.append("![Comparison Step 61](comparison/comparison_vial_061.png)")
+    lines.append("![Comparison Step 50](comparison/comparison_vial_050.png)")
     lines.append("")
     lines.append("---")
     lines.append("")
     lines.append("## 5. Complete 200-Vial Detailed Audit Ledger")
     lines.append("")
-    lines.append("This ledger details the exact dispensed volumes of **T-100, T-200, and T-400** for every single vial in both tests, along with recorded waste, unwanted product, and missing product:")
+    lines.append("This ledger details the exact dispensed volumes of **T-100, T-200, and T-400** for every single vial in both tests, along with recorded waste, unwanted product, and missing product. **Both Baseline and PCMC columns are aligned to the same recipe instance for direct 1:1 evaluation:**")
     lines.append("")
-    lines.append("| Step | Recipe Name | Target [T100, T200, T400] | Baseline Delivered [T100, T200, T400] | Baseline Unwanted / Missing | Baseline Status | PCMC Delivered [T100, T200, T400] | PCMC Waste | PCMC Status |")
-    lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+    lines.append("| Vial # | Recipe Name | Target [T100, T200, T400] | Baseline Delivered | Baseline Unwanted / Missing | Baseline Status | PCMC Delivered | PCMC Dispense Step | PCMC Waste | PCMC Status |")
+    lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+
+    import re
+    o_by_tag = {}
+    for s in o_sched:
+        m = re.search(r'(Task[12]_Vial_\d{3})', s["name"])
+        if m:
+            o_by_tag[m.group(1)] = s
 
     for i in range(200):
         b = b_sched[i]
-        o = o_sched[i]
+        tag = f"Task1_Vial_{i+1:03d}" if i < 100 else f"Task2_Vial_{i+1-100:03d}"
+        o = o_by_tag[tag]
 
         b_t = b["target_amounts"]
         b_d = b["delivered_amounts"]
@@ -180,8 +185,9 @@ def generate_markdown_report():
         o_del_str = f"[{o_d['T100']:.1f}, {o_d['T200']:.1f}, {o_d['T400']:.1f}]"
         o_waste_str = f"{o['waste_ml']:.1f} mL" if o["waste_ml"] > 0 else "0.0 mL"
         o_stat = "🌟 Bridge" if o["is_bridge_vial"] else "✅ 100% Pass"
+        o_step_str = f"Step #{o['step']:03d}"
 
-        lines.append(f"| **#{i+1:03d}** | {b['name'].split(': ', 1)[1]} | `{b_tgt_str}` | `{b_del_str}` | {b_unw} | {b_stat} | `{o_del_str}` | {o_waste_str} | {o_stat} |")
+        lines.append(f"| **#{i+1:03d}** | {b['name'].split(': ', 1)[1]} | `{b_tgt_str}` | `{b_del_str}` | {b_unw} | {b_stat} | `{o_del_str}` | {o_step_str} | {o_waste_str} | {o_stat} |")
 
     report_content = "\n".join(lines)
     report_path = TEST_DIR / "README.md"
@@ -348,11 +354,11 @@ def generate_html_report():
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_010.png" alt="Color Scrap" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_009.png" alt="Color Scrap" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
         <h3 style="font-size: 16px; margin: 0 0 6px 0;">Color Carryover: Recipe 6 (Pale Orange)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          Leftover blue dye shifts orange recipe into olive-green scrap. PCMC sequencing ensures clean transitions.
+          In Baseline (Card #009), leftover blue dye from prior recipe turns orange recipe into olive-green scrap. PCMC sequencing ensures zero foreign dye transfer.
         </p>
       </div>
     </div>
@@ -366,20 +372,20 @@ def generate_html_report():
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_051.png" alt="Mid-Production Arrival" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_006.png" alt="Option B Bridge" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
-        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Halfway Arrival: Step 51 (Option A Prime)</h3>
+        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Zero-Waste Bridge Vial: Recipe 7 (Pale Blue)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          List 2 arrives at Step 50. Option A purges 8.2 mL water to waste drain and dispenses Recipe 13 with 100% pure dye.
+          Card #006 illustrates Recipe 7. In PCMC, this recipe absorbs resident blue dye with hold-up credit, flushes with clear diluent, and transitions the line with zero waste.
         </p>
       </div>
     </div>
     <div class="gallery-card">
-      <img src="comparison/comparison_vial_061.png" alt="Option A Return Bridge" onerror="this.src='../notes/images/comparison_vial_01.png'">
+      <img src="comparison/comparison_vial_050.png" alt="Mid-Production Arrival" onerror="this.src='../notes/images/comparison_vial_01.png'">
       <div class="gallery-card-body">
-        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Carrier Re-Entry: Step 61 (Return Bridge)</h3>
+        <h3 style="font-size: 16px; margin: 0 0 6px 0;">Halfway Arrival: Step 50 (Recipe 13 Dilution)</h3>
         <p style="font-size: 13px; color: var(--text-muted); margin: 0;">
-          Recipe 7 absorbs resident blue dye with hold-up credit, flushes with clear diluent, and restores T-100 carrier line state.
+          Card #050 shows Recipe 13 at the halfway point. In Baseline, it suffers an 11.7% dilution defect (+8.2 mL water). In PCMC, pure dye formulation is delivered with 100% fidelity.
         </p>
       </div>
     </div>
@@ -391,13 +397,14 @@ def generate_html_report():
   <table id="ledgerTable">
     <thead>
       <tr>
-        <th>Step</th>
+        <th>Vial #</th>
         <th>Recipe Name</th>
         <th>Target [T100, T200, T400]</th>
         <th>Baseline Delivered</th>
         <th>Baseline Unwanted / Missing</th>
         <th>Baseline Status</th>
         <th>PCMC Delivered</th>
+        <th>PCMC Dispense Step</th>
         <th>PCMC Waste</th>
         <th>PCMC Status</th>
       </tr>
@@ -405,9 +412,18 @@ def generate_html_report():
     <tbody>
 """
 
+    import re
+    o_by_tag = {}
+    for s in o_sched:
+        m = re.search(r'(Task[12]_Vial_\d{3})', s["name"])
+        if m:
+            o_by_tag[m.group(1)] = s
+
     for i in range(200):
         b = b_sched[i]
-        o = o_sched[i]
+        tag = f"Task1_Vial_{i+1:03d}" if i < 100 else f"Task2_Vial_{i+1-100:03d}"
+        o = o_by_tag[tag]
+
         b_t = b["target_amounts"]
         b_d = b["delivered_amounts"]
         b_tgt_str = f"[{b_t['T100']:.0f}, {b_t['T200']:.0f}, {b_t['T400']:.0f}]"
@@ -420,6 +436,7 @@ def generate_html_report():
         o_del_str = f"[{o_d['T100']:.1f}, {o_d['T200']:.1f}, {o_d['T400']:.1f}]"
         o_waste_str = f"{o['waste_ml']:.1f} mL" if o["waste_ml"] > 0 else "0.0 mL"
         o_stat_badge = '<span class="badge badge-bridge">🌟 Bridge Vial</span>' if o["is_bridge_vial"] else '<span class="badge badge-success">✅ 100% Pass</span>'
+        o_step_badge = f'<span class="badge" style="background:#1e293b; border:1px solid #475569; color:#94a3b8;">Step #{o["step"]:03d}</span>'
 
         html += f"""      <tr>
         <td><strong>#{i+1:03d}</strong></td>
@@ -429,6 +446,7 @@ def generate_html_report():
         <td>{b_unw}</td>
         <td>{b_stat_badge}</td>
         <td><code>{o_del_str}</code></td>
+        <td>{o_step_badge}</td>
         <td>{o_waste_str}</td>
         <td>{o_stat_badge}</td>
       </tr>
