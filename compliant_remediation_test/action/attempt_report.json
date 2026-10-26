@@ -2,7 +2,7 @@
   "mode": "wrist_reorientation_staged_insertion_remediation",
   "physical_robot_authorized": false,
   "scene": "shared/scenes/remediation_dataset1_v1.usda",
-  "current_scene_detections": "runs/compliant_remediation_test/perception/current_scene_detections.json",
+  "current_scene_detections": "compliant_remediation_test/perception/current_scene_detections.json",
   "current_scene_tablecam_observation": {
     "source": "current_loaded_scene_tablecam",
     "scene": "shared/scenes/remediation_dataset1_v1.usda",
@@ -57,6 +57,6 @@
     "teleportation": false,
     "final_tilt_deg": 0.0
   },
-  "frame_directory": "runs/compliant_remediation_test/action/frames",
+  "frame_directory": "compliant_remediation_test/action/frames",
   "frames_written": 460
 }

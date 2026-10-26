@@ -139,15 +139,14 @@ def set_jaw_separation(arm, names, jaw_val):
     positions = arm.get_joint_positions().copy()
     for joint, value in cell.jaw_targets(jaw_val).items():
         positions[names.index(joint)] = value
-    arm.set_joint_positions(positions)
     return positions
 
 
-def disable_gripper_collisions(stage):
-    """Deconflict EOAT colliders via CollisionSubAgent."""
+def configure_stage_collisions(stage):
+    """Deconflict EOAT colliders and configure sub-mm physics via CollisionSubAgent."""
     from src.remediation.collision_manager import CollisionSubAgent
     agent = CollisionSubAgent()
-    return agent.deconflict_eoat_colliders(stage)
+    return agent.configure_stage(stage)
 
 
 def find_closest_cap_prim(stage, target_base_pos):
@@ -206,11 +205,15 @@ def get_cap_pose(cap_prim):
 
 def set_cap_kinematic(cap_prim, kinematic=True):
     """Toggle kinematic control on a rigid body cap prim."""
-    from pxr import Gf, UsdPhysics
+    from pxr import Gf, UsdPhysics, PhysxSchema
     if cap_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        if kinematic and cap_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+            PhysxSchema.PhysxRigidBodyAPI(cap_prim).CreateEnableCCDAttr().Set(False)
         rb = UsdPhysics.RigidBodyAPI(cap_prim)
         rb.CreateKinematicEnabledAttr().Set(kinematic)
         if not kinematic:
+            if cap_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
+                PhysxSchema.PhysxRigidBodyAPI(cap_prim).CreateEnableCCDAttr().Set(True)
             rb.CreateVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
             rb.CreateAngularVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
 
@@ -253,6 +256,7 @@ def main():
         import omni.usd
         from isaacsim.core.api import World
         from isaacsim.core.prims import SingleArticulation
+        from isaacsim.core.utils.types import ArticulationAction
         from isaacsim.sensors.camera import Camera
         import cell
         import scene_config as C
@@ -268,10 +272,9 @@ def main():
         world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/30.)
         attach_visual_pair(stage)
         attach_collision_proxies(stage)
+        col_report = configure_stage_collisions(stage)
+        print(f'[lifelike-remediation] custom gripper mounted; stage collisions configured: {col_report}', flush=True)
         world.reset()
-
-        disabled_colliders = disable_gripper_collisions(stage)
-        print(f'[lifelike-remediation] custom gripper mounted; disabled {len(disabled_colliders)} overlapping EOAT colliders', flush=True)
 
         arm = SingleArticulation(C.ROBOT_PRIM)
         arm.initialize()
@@ -297,7 +300,10 @@ def main():
         # Initialize TableCam for visual recording
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
         camera.initialize()
-        set_jaw_separation(arm, names, C.JAW_OPEN)
+        init_positions = set_jaw_separation(arm, names, C.JAW_OPEN)
+        arm.set_joint_positions(init_positions)
+        arm.set_joint_velocities(np.zeros(len(names)))
+        arm.apply_action(ArticulationAction(joint_positions=init_positions))
         print('[lifelike-remediation] arm and TableCam ready', flush=True)
 
         for _ in range(30):
@@ -343,7 +349,9 @@ def main():
                 positions = set_jaw_separation(arm, names, jaw_pos)
                 if joints is not None:
                     positions[arm_idx] = joints
-                    arm.set_joint_positions(positions)
+                arm.set_joint_positions(positions)
+                arm.set_joint_velocities(np.zeros(len(names)))
+                arm.apply_action(ArticulationAction(joint_positions=positions))
 
                 # Cap firmly held between conformal pads during carry
                 if mode == 'carrying' and spare_prim is not None:

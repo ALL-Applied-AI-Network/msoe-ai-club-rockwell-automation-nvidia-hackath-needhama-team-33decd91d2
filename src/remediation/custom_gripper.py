@@ -74,7 +74,10 @@ def attach_collision_proxies(stage):
         UsdGeom.Xformable(proxy).AddScaleOp().Set(Gf.Vec3f(length / 2, width / 2, height / 2))
         UsdGeom.Imageable(proxy).CreateVisibilityAttr().Set('invisible')
         UsdPhysics.CollisionAPI.Apply(proxy.GetPrim())
-        UsdPhysics.MeshCollisionAPI.Apply(proxy.GetPrim()).CreateApproximationAttr().Set('convexHull')
+        from pxr import PhysxSchema
+        physx_col = PhysxSchema.PhysxCollisionAPI.Apply(proxy.GetPrim())
+        physx_col.CreateContactOffsetAttr().Set(0.0005)
+        physx_col.CreateRestOffsetAttr().Set(0.0)
         paths.append(path)
     return paths
 
