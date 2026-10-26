@@ -17,8 +17,13 @@ top plate. The underside of the silver plate is 80 mm above the top of the
 black base. Vials rest on the base and pass through 31.75 mm apertures. The
 latest single-scene qualification passed physics and label checks:
 
-- `runs/archive/2026-10-22_remediation/black_silver_tray_qualification_v3/qualification.json`
-- `runs/archive/2026-10-22_remediation/black_silver_tray_qualification_v3/side.png`
+- `shared/scenes/black_silver_remediation_qualified_v3.usda`
+- `shared/scenes/black_silver_remediation_qualified_v3.qualification.json`
+
+The USD above is the canonical scene for compliant remediation. Do not use the
+older `shared/scenes/remediation_dataset1_v2_cad.usda` for this workflow; it is
+an earlier patched Dataset 1 scene rather than the qualified black-and-silver
+fixture.
 
 Caps use the hollow tapered geometry defined in `src/remediation/geometry.py`:
 a 2 mm wall and a flat, closed 2 mm plug-bottom face.
@@ -91,7 +96,7 @@ workflow. A pipeline invocation is:
 
 ```bash
 sbatch scripts/run_closed_loop_pipeline.slurm \
-  runs/archive/2026-10-22_remediation/black_silver_tray_qualification_v3/scene.usda \
+  shared/scenes/black_silver_remediation_qualified_v3.usda \
   runs/archive/2026-10-22_black_silver_fixture_yolo/training/weights/best.pt \
   runs/archive/2026-10-22_remediation/<run_name>
 ```

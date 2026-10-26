@@ -19,12 +19,12 @@ The `shared/` directory is symlinked to the cluster team workspace (`/data/ai_cl
 - **`shared/cache/`**:
   - Replicable cache files, Warp kernels, and intermediate artifacts shared across nodes.
 
-### `./runs/` (EXPERIMENT ARTIFACTS & ARCHIVES)
-All generated simulation runs, debug crops, perception evaluations, and model checkpoints must be structured cleanly:
-- **Never dump loose debug files into the root of `./runs/`**.
+### `shared/runs/` (EXPERIMENT ARTIFACTS & ARCHIVES)
+All generated simulation runs, debug crops, perception evaluations, and model checkpoints must be structured cleanly and shared with the team:
+- **Never dump loose debug files into the root of `shared/runs/`**.
 - Intermediate debug images and crops must be grouped into timestamped subdirectories:
-  - `runs/archive/YYYY-MM-DD_<task_description>/`
-- Output videos and public demos should be placed in `runs/` or referenced directly from `docs/media/`.
+  - `shared/runs/YYYY-MM-DD_<task_description>/`
+- Output videos and public demos should be placed in `shared/runs/` or referenced directly from `docs/media/`.
 
 ---
 

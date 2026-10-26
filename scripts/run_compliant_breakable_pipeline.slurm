@@ -17,14 +17,25 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-if [[ $# -ne 3 ]]; then
-    echo "Usage: sbatch $0 <scene.usda> <yolo_checkpoint.pt> <output_directory>" >&2
+canonical_scene="shared/scenes/black_silver_remediation_qualified_v3.usda"
+if [[ $# -eq 2 ]]; then
+    scene="$canonical_scene"
+    checkpoint="$1"
+    out="$2"
+elif [[ $# -eq 3 ]]; then
+    scene="$1"
+    checkpoint="$2"
+    out="$3"
+else
+    echo "Usage: sbatch $0 [scene.usda] <yolo_checkpoint.pt> <output_directory>" >&2
+    echo "  With no scene argument, uses $canonical_scene" >&2
     exit 2
 fi
 
-scene="$1"
-checkpoint="$2"
-out="$3"
+if [[ ! -f "$scene" ]]; then
+    echo "Scene does not exist: $scene" >&2
+    exit 2
+fi
 perception="$out/perception"
 action="$out/action"
 
