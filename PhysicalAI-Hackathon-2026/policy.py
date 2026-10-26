@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from src.inspection.vision_pipeline import RemediationVisionDetector
 from src.remediation.geometry import base_to_uf0, transit_base_z
 from src.remediation.controller import ContactTool, RemediationController
+from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/inspection_models/remediation_yolo_best.pt"
@@ -49,6 +50,7 @@ class Policy:
     def __init__(self, checkpoint=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
         self.detector = RemediationVisionDetector(weights, confidence=0.80)
+        self.cameras = load_cameras()
         self.full_remediation = os.environ.get("REMEDIATION_MODE", "hover").lower() == "full"
         self.controller = RemediationController(UNMEASURED_CONTACT_TOOL) if self.full_remediation else None
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
@@ -158,6 +160,52 @@ class Policy:
                      localization_note=item["localization_note"] + "; supervised full-remediation test mode")
                 for item in detections]
 
+    def _fuse_table_depth(self, detections, depth_mm):
+        """Attach the calibrated RGB-D point inside each current YOLO box.
+
+        The RGB and depth streams have different resolutions and optical
+        centres. Depth pixels are first transformed into robot-base points,
+        then projected into the RGB image. This avoids the unsafe assumption
+        that a 1920x1080 RGB pixel maps by simple scaling to 640x400 depth.
+        """
+        if depth_mm is None:
+            return detections
+        depth_mm = np.asarray(depth_mm)
+        depth_cam = self.cameras["table_depth"]
+        if tuple(depth_mm.shape[:2][::-1]) != tuple(depth_cam["size"]):
+            raise ValueError(f"Table depth has {depth_mm.shape[:2]}, expected {depth_cam['size'][::-1]}")
+        # Half-resolution sampling still provides dozens of points inside a
+        # cap box while keeping per-observation CPU work modest.
+        points, pixels = depth_to_base(depth_cam, depth_mm, stride=2, with_pixels=True)
+        rgb_pixels = project(self.cameras["table"], points)
+        fused = []
+        for item in detections:
+            x0, y0, x1, y1 = np.asarray(item["bbox_xyxy"], dtype=float)
+            # Prefer the central 70 percent of the box to avoid the background
+            # around a cap or the neighbouring vial rim.
+            mx, my = 0.15 * (x1 - x0), 0.15 * (y1 - y0)
+            inside = ((rgb_pixels[:, 0] >= x0 + mx) & (rgb_pixels[:, 0] <= x1 - mx) &
+                      (rgb_pixels[:, 1] >= y0 + my) & (rgb_pixels[:, 1] <= y1 - my))
+            if inside.sum() < 8:
+                inside = ((rgb_pixels[:, 0] >= x0) & (rgb_pixels[:, 0] <= x1) &
+                          (rgb_pixels[:, 1] >= y0) & (rgb_pixels[:, 1] <= y1))
+            updated = dict(item)
+            if inside.sum() >= 8:
+                selected = points[inside]
+                selected_depth = depth_mm[pixels[inside, 1], pixels[inside, 0]].astype(float) / 1000.0
+                point = np.median(selected, axis=0)
+                updated["base_pos_m"] = point.tolist()
+                updated["tcp_pos_mm"] = base_to_uf0(point).tolist()
+                updated["depth_median_m"] = float(np.median(selected_depth))
+                updated["depth_available"] = True
+                updated["depth_rgbd_point_count"] = int(inside.sum())
+                updated["localization_note"] += "; calibrated RGB-D box median"
+            else:
+                updated["depth_available"] = False
+                updated["localization_note"] += "; no valid projected depth points in box"
+            fused.append(updated)
+        return fused
+
     def _full_act(self, obs, image, stamp, fresh):
         """Pick a spare for a missing vial, then reseat a crooked cap.
 
@@ -174,6 +222,7 @@ class Policy:
             return self.controller.hold(observed)
         self.last_observation_time = stamp
         detections = self._snapshot_detections(image, stamp)
+        detections = self._fuse_table_depth(detections, observed.get("depth", {}).get("table"))
         if self.controller.state == "pickup" and self.controller.pending is not None:
             spare = np.asarray(self.controller.pending["spare"]["base_pos_m"], dtype=float)
             still_on_table = any(
