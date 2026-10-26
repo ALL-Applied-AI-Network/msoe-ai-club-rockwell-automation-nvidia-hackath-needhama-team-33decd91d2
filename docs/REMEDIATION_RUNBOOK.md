@@ -149,6 +149,22 @@ Review these outputs:
 Do not infer successful contact from this video. The controller must eventually
 reinspect after every pickup, placement, and press before it can claim repair.
 
+### Compliant black-and-silver fixture simulation
+
+For the fracture-aware compliant simulation, use the canonical shared fixture.
+The scene argument is optional because the Slurm script selects it by default:
+
+```bash
+sbatch scripts/run_compliant_breakable_pipeline.slurm \
+  shared/inspection_models/remediation_yolo_best.pt \
+  shared/runs/$(date +%F)_compliant_remediation
+```
+
+To run a deliberate alternate scene, supply it as the first argument before the
+checkpoint. The canonical scene is
+`shared/scenes/black_silver_remediation_qualified_v3.usda`; do not substitute
+`shared/scenes/remediation_dataset1_v2_cad.usda` for the black-and-silver test.
+
 ## 5. Physical-workcell preparation
 
 Before any physical motion, complete
