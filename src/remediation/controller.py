@@ -121,7 +121,12 @@ class RemediationController:
                 self.events.append({'event':'repair_not_verified','target':target.tolist()})
                 self.state='inspect'; self.pending=None
             return self.hold(obs)
-        eligible=[d for d in detections if d.get('contact_qualified') and d['confidence']>=.9]
+        # Full-contact motion is only allowed from the calibrated RGB-D point.
+        # A plane-projected RGB box can be useful for inspection, but the real
+        # camera and depth image have different optics and it must never drive
+        # a physical press or grasp when that correspondence was unavailable.
+        eligible=[d for d in detections if (d.get('contact_qualified') and
+                  d.get('depth_available') is True and d['confidence']>=.9)]
         defects=[d for d in eligible if d['class_name'] in ['crooked_cap','missing_cap']]
         spares=[d for d in eligible if d['class_name']=='table_cap']
         for target in defects:
