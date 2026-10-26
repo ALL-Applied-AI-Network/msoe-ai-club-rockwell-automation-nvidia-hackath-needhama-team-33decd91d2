@@ -252,6 +252,45 @@ custom-tool TCP is aligned to the CAD contact point, so the pickup, placement,
 and press offsets are provisional zero offsets. Keep the operator ready to
 stop the arm during the first descent.
 
+### Review local decision evidence
+
+Every physical-policy process prints a local trace directory when it starts.
+By default it is a new directory under `runs/archive/` named
+`YYYY-MM-DD_HH-MM-SS_physical_policy`. To choose an explicit directory for a
+scheduled run, set `REMEDIATION_TRACE_DIR` before starting the client:
+
+```bash
+export REMEDIATION_TRACE_DIR="$PWD/../runs/archive/$(date +%F)_physical_remediation"
+REMEDIATION_MODE=full uv run run.py
+```
+
+The trace directory contains:
+
+- `tablecam_raw/` — the TableCam RGB image used for each saved decision.
+- `tablecam_annotated/` — the same image with YOLO boxes, classes, and confidence.
+- `depth/` — aligned TableCam depth PNGs.
+- `trace.jsonl` — one JSON record per TCP command: timestamp, controller state,
+  current TCP pose, command, detections, and the corresponding frame name.
+
+The trace saves image/depth triplets only when the commanded target or
+controller state changes. It is capped at 600 decision frames so an unattended
+run cannot fill the shared filesystem. Every command remains in `trace.jsonl`
+after the image cap is reached.
+
+To encode the labelled frames into an H.264 video after the run, execute this
+from the repository root, replacing `TRACE_DIR` with the printed directory:
+
+```bash
+TRACE_DIR="runs/archive/YYYY-MM-DD_HH-MM-SS_physical_policy"
+FFMPEG_BIN=$(./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
+"$FFMPEG_BIN" -y -framerate 20 -i "$TRACE_DIR/tablecam_annotated/%04d.png" \
+  -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$TRACE_DIR/tablecam_yolo_trace.mp4"
+```
+
+Compare this video with the hackathon portal's physical-cell recording and use
+matching timestamps in `trace.jsonl` to identify the detection and command
+that preceded any unexpected motion.
+
 ## 7. What to preserve outside Git
 
 Because `runs/` is not tracked, retain or publish the following for each review:

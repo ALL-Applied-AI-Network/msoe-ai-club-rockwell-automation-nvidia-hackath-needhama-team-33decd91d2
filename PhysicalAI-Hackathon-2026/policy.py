@@ -7,9 +7,12 @@ gripper, touches a cap, presses a vial, or uses stored tray coordinates.
 from __future__ import annotations
 
 import os
+import json
+from datetime import datetime
 from pathlib import Path
 import sys
 
+import cv2
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +51,17 @@ class Policy:
         self.detector = RemediationVisionDetector(weights, confidence=0.80)
         self.full_remediation = os.environ.get("REMEDIATION_MODE", "hover").lower() == "full"
         self.controller = RemediationController(UNMEASURED_CONTACT_TOOL) if self.full_remediation else None
+        label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
+        self.trace_dir = Path(os.environ.get("REMEDIATION_TRACE_DIR", ROOT / "runs/archive" / label))
+        self.trace_dir.mkdir(parents=True, exist_ok=True)
+        (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
+        (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
+        (self.trace_dir / "depth").mkdir(exist_ok=True)
+        self.trace_file = self.trace_dir / "trace.jsonl"
+        self.frame_count = 0
+        self.last_saved_action = None
+        self.last_saved_controller_state = None
+        print(f"[remediation-policy] local trace: {self.trace_dir}", flush=True)
         self.reset()
 
     def reset(self):
@@ -88,6 +102,53 @@ class Policy:
             return None
         return max(candidates, key=lambda d: d["confidence"])
 
+    @staticmethod
+    def _json(value):
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+        raise TypeError(f"cannot encode {type(value).__name__}")
+
+    def _write_trace(self, record):
+        with self.trace_file.open("a") as f:
+            f.write(json.dumps(record, default=self._json) + "\n")
+
+    def _record_snapshot(self, obs, image, detections, action):
+        """Persist compact, inspectable evidence for the decision that sent an action."""
+        stamp = obs.get("t")
+        state = self.controller.state if self.controller else self.state
+        changed_action = (self.last_saved_action is None or
+                          not np.allclose(np.asarray(action, dtype=float), self.last_saved_action, atol=1e-6))
+        is_decision = changed_action or state != self.last_saved_controller_state
+        # Limit an unattended 30-minute run to 600 decision image/depth
+        # triplets while retaining every TCP command in trace.jsonl.
+        if self.frame_count >= 600 or not is_decision:
+            self._write_trace({"t": stamp, "controller_state": state,
+                               "action_tcp": action, "detections": detections, "frame": None})
+            return
+        index = self.frame_count
+        self.frame_count += 1
+        self.last_saved_action = np.asarray(action, dtype=float)
+        self.last_saved_controller_state = state
+        raw_name = f"{index:04d}.png"
+        annotated = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        for item in detections:
+            x0, y0, x1, y1 = (int(round(v)) for v in item["bbox_xyxy"])
+            color = {"table_cap": (255, 200, 0), "missing_cap": (0, 80, 255),
+                     "crooked_cap": (0, 0, 255), "good_cap": (0, 220, 0)}.get(item["class_name"], (255, 255, 255))
+            cv2.rectangle(annotated, (x0, y0), (x1, y1), color, 2)
+            cv2.putText(annotated, f'{item["class_name"]} {item["confidence"]:.2f}', (x0, max(18, y0 - 5)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        cv2.imwrite(str(self.trace_dir / "tablecam_raw" / raw_name), cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+        cv2.imwrite(str(self.trace_dir / "tablecam_annotated" / raw_name), annotated)
+        depth = obs.get("depth", {}).get("table")
+        if depth is not None:
+            cv2.imwrite(str(self.trace_dir / "depth" / raw_name), np.asarray(depth))
+        self._write_trace({"t": stamp, "controller_state": state,
+                           "action_tcp": action, "tcp_pose_before": obs.get("tcp_pose"),
+                           "detections": detections, "frame": raw_name})
+
     def _snapshot_detections(self, image, stamp):
         """Use one fresh TableCam snapshot to update a complete repair decision."""
         detections = self.detector.detect(image, timestamp=stamp)
@@ -125,6 +186,7 @@ class Policy:
                                 "verified": observed["grasp_verified"]})
         action = self.controller.act(observed, detections)
         self.events[:] = self.controller.events[-20:]
+        self._record_snapshot(observed, image, detections, action)
         return action
 
     def act(self, obs):
