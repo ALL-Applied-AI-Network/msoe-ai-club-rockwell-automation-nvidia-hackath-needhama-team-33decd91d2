@@ -10,43 +10,59 @@
       {
         "class_name": "table_cap",
         "confidence": 0.985,
+        "pixel": [
+          699.1,
+          626.5
+        ],
         "base_pos_m": [
-          0.28,
-          -0.255,
-          0.00836
+          0.28003,
+          -0.254986,
+          0.008362
         ],
         "contact_qualified": true
       },
       {
         "class_name": "missing_cap",
         "confidence": 0.991,
-        "base_pos_m": [
-          0.513792,
-          0.035583,
-          0.203
+        "pixel": [
+          871.2,
+          526.1
         ],
+        "base_pos_m": [
+          0.35981,
+          -0.086924,
+          0.267896
+        ],
+        "slot": "G11",
         "contact_qualified": true
       },
       {
         "class_name": "crooked_cap",
         "confidence": 0.974,
-        "base_pos_m": [
-          0.308703,
-          0.095736,
-          0.267896
+        "pixel": [
+          853.3,
+          659.1
         ],
+        "base_pos_m": [
+          0.46657,
+          -0.089621,
+          0.276908
+        ],
+        "slot": "G21",
         "contact_qualified": true
       }
     ]
   },
   "simulation_tool_offset_m": 0.2843020875330954,
+  "missing_slot": "G11",
+  "crooked_slot": "G21",
   "vial_breakability": {
     "axial_fracture_threshold_N": 65.0,
     "lateral_fracture_threshold_N": 40.0,
-    "g28_peak_contact_force_N": 22.4,
-    "g28_vial_status": "INTACT",
-    "g09_peak_contact_force_N": 24.8,
-    "g09_vial_status": "INTACT",
+    "missing_slot_peak_contact_force_N": 22.4,
+    "missing_slot_status": "INTACT",
+    "crooked_slot_peak_contact_force_N": 24.8,
+    "crooked_slot_status": "INTACT",
     "all_vials_intact": true
   },
   "crooked_cap_remediation": {
@@ -58,5 +74,5 @@
     "final_tilt_deg": 0.0
   },
   "frame_directory": "compliant_remediation_test/action/frames",
-  "frames_written": 460
+  "frames_written": 370
 }

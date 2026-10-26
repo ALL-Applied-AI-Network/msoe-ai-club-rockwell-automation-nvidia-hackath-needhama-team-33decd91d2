@@ -5,31 +5,45 @@
     {
       "class_name": "table_cap",
       "confidence": 0.985,
+      "pixel": [
+        699.1,
+        626.5
+      ],
       "base_pos_m": [
-        0.28,
-        -0.255,
-        0.00836
+        0.28003,
+        -0.254986,
+        0.008362
       ],
       "contact_qualified": true
     },
     {
       "class_name": "missing_cap",
       "confidence": 0.991,
-      "base_pos_m": [
-        0.513792,
-        0.035583,
-        0.203
+      "pixel": [
+        871.2,
+        526.1
       ],
+      "base_pos_m": [
+        0.35981,
+        -0.086924,
+        0.267896
+      ],
+      "slot": "G11",
       "contact_qualified": true
     },
     {
       "class_name": "crooked_cap",
       "confidence": 0.974,
-      "base_pos_m": [
-        0.308703,
-        0.095736,
-        0.267896
+      "pixel": [
+        853.3,
+        659.1
       ],
+      "base_pos_m": [
+        0.46657,
+        -0.089621,
+        0.276908
+      ],
+      "slot": "G21",
       "contact_qualified": true
     }
   ]

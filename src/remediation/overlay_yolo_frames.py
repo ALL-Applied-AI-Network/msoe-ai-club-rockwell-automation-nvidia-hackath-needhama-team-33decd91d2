@@ -26,7 +26,7 @@ def main():
         image = cv2.imread(str(path))
         result = model.predict(image, conf=.6, imgsz=1280, device=args.device, verbose=False)[0]
         for box, confidence, class_id in zip(result.boxes.xyxy.cpu().numpy(), result.boxes.conf.cpu().numpy(), result.boxes.cls.cpu().numpy()):
-            name = model.names[int(class_id)]; color = COLORS[name]
+            name = model.names[int(class_id)]; color = COLORS.get(name, (200, 200, 200))
             x0, y0, x1, y1 = box.round().astype(int)
             cv2.rectangle(image, (x0,y0), (x1,y1), color, 2)
             cv2.putText(image, f'{name} {confidence:.2f}', (x0, max(22,y0-6)), cv2.FONT_HERSHEY_SIMPLEX, .45, color, 2, cv2.LINE_AA)

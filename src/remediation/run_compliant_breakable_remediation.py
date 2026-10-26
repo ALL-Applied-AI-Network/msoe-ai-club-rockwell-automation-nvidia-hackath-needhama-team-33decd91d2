@@ -95,7 +95,10 @@ def staged_z_profile(z_start, z_end, count=25):
 
 
 def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, tool_offset_m):
-    """Solve IK paths for complete tilted wrist pick, mid-air orientation correction, and staged insertion."""
+    """Solve IK paths for complete pick-and-place spare remediation and compliant press-reseat.
+    
+    Dynamically maps missing and crooked cap perceptions to fixture layout apertures.
+    """
     import fk
     import ik
     import scene_config as C
@@ -105,49 +108,37 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     ik.set_tool_axis(C.TOOL_AXIS)
     ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
     down = np.array([0., 0., -1.])
-    tool_offset = tuple(np.asarray(C.TOOL_AXIS) * tool_offset_m)
+    tool_offset = (tool_offset_m, 0.0, -0.0243)
 
-    transit_z = 0.240
+    transit_z = 0.285
     start = np.array([.24, .25, transit_z])
 
     tray_center_base = np.array([0.385, 0.035])
     layout = load_layout()
+    slots_base_xy = {slot: tray_center_base + np.array(pos[:2]) for slot, pos in layout['slots_m'].items()}
 
     # 1. Spare cap waypoints (Table_00)
     p_sp = np.asarray(spare['base_pos_m'])
     high_sp = np.array([p_sp[0], p_sp[1], transit_z])
-    app_sp = np.array([p_sp[0], p_sp[1], 0.035])
-    contact_sp = np.array([p_sp[0], p_sp[1], 0.002])
+    app_sp = np.array([p_sp[0], p_sp[1], 0.040])
+    contact_sp = np.array([p_sp[0], p_sp[1], 0.000])
 
-    # 2. Missing cap waypoints (Slot G28)
-    p_g28_bore = tray_center_base + np.array(layout['slots_m']['G28'])[:2]
-    high_mi = np.array([p_g28_bore[0], p_g28_bore[1], transit_z])
-    engage_mi = np.array([p_g28_bore[0], p_g28_bore[1], 0.230])
-    seat_mi = np.array([p_g28_bore[0], p_g28_bore[1], rim_base_z() + SPEC.flange_thickness])
+    # 2. Missing cap waypoints (dynamically matched from TableCam detection)
+    p_mi = np.asarray(missing['base_pos_m'])
+    missing_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_mi[:2]))
+    p_mi_bore = slots_base_xy[missing_slot]
+    high_mi = np.array([p_mi_bore[0], p_mi_bore[1], transit_z])
+    engage_mi = np.array([p_mi_bore[0], p_mi_bore[1], 0.275])
+    seat_mi = np.array([p_mi_bore[0], p_mi_bore[1], 0.25934])
 
-    # 3. Crooked cap waypoints (Slot G09)
+    # 3. Crooked cap waypoints (dynamically matched from TableCam detection)
     p_cr_init = np.array([crooked_init_pos[0], crooked_init_pos[1]])
-    p_cr_base = np.array([crooked_init_pos[0], crooked_init_pos[1], crooked_init_pos[2] - SPEC.world_base_z])
-    p_g09_bore = tray_center_base + np.array(layout['slots_m']['G09'])[:2]
-
-    # Crooked cap normal and tilted approach direction
-    w, x, y, z = -0.55831385, -0.22988324, 0.29683563, 0.7398162
-    rot_cap = ScipyRot.from_quat([x, y, z, w])
-    cap_normal = rot_cap.apply([0, 0, 1])
-    tool_tilted_dir = -cap_normal
-
-    GRASP_ADVANCE_M = 0.008  # 8 mm advance along tilted axis securely envelopes flange without colliding into tray
-
-    high_cr_vert = np.array([p_cr_init[0], p_cr_init[1], transit_z])
-    p_tilt_grasp = p_cr_base + GRASP_ADVANCE_M * tool_tilted_dir
-    p_tilt_standoff = p_tilt_grasp - 0.035 * tool_tilted_dir
-    p_tilt_extract = p_tilt_grasp - 0.045 * tool_tilted_dir
-    p_upright_extract = np.array([p_tilt_extract[0], p_tilt_extract[1], 0.285])
-
-    align_cr_bore = np.array([p_g09_bore[0], p_g09_bore[1], 0.285])
-    engage_cr = np.array([p_g09_bore[0], p_g09_bore[1], 0.230 - GRASP_ADVANCE_M])
-    seat_cr = np.array([p_g09_bore[0], p_g09_bore[1], rim_base_z() + SPEC.flange_thickness - GRASP_ADVANCE_M])
-    high_cr_bore = np.array([p_g09_bore[0], p_g09_bore[1], transit_z])
+    crooked_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_cr_init[:2]))
+    p_cr_bore = slots_base_xy[crooked_slot]
+    high_cr_vert = np.array([p_cr_bore[0], p_cr_bore[1], transit_z])
+    app_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.285])
+    engage_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.275])
+    seat_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.25934])
 
     q_home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
     q_cur, ok = ik.solve(q_home, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
@@ -202,54 +193,25 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     paths['transit_to_crooked'] = s_curve_joints(q_cur, q_target_cr, 20)
     q_cur = q_target_cr.copy()
 
-    # 8. wrist_tilt_align: high_cr_vert -> p_tilt_standoff = 15 steps (smooth joint S-curve)
-    q_target_standoff, ok = ik.solve(q_cur, p_tilt_standoff, tool_tilted_dir, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    if not ok:
-        q_target_standoff, _ = ik.solve(q_home, p_tilt_standoff, tool_tilted_dir, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['wrist_tilt_align'] = s_curve_joints(q_cur, q_target_standoff, 15)
-    q_cur = q_target_standoff.copy()
+    # 8. approach_crooked: high_cr_vert -> app_cr (15) -> engage_cr (10) = 25 steps
+    p_app_cr1, q_tmp = solve_cartesian(q_cur, s_curve_pts(high_cr_vert, app_cr, 15), [down]*15)
+    p_app_cr2, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_cr, engage_cr, 10), [down]*10)
+    paths['approach_crooked'] = p_app_cr1 + p_app_cr2
 
-    # 9. tilted_approach_crooked: p_tilt_standoff -> p_tilt_grasp = 15 steps
-    pts_app_cr = s_curve_pts(p_tilt_standoff, p_tilt_grasp, 15)
-    paths['tilted_approach_crooked'], q_cur = solve_cartesian(q_cur, pts_app_cr, [tool_tilted_dir]*15)
-
-    # 10. tilted_extract_crooked: p_tilt_grasp -> p_tilt_extract = 20 steps
-    pts_ext_cr = s_curve_pts(p_tilt_grasp, p_tilt_extract, 20)
-    paths['tilted_extract_crooked'], q_cur = solve_cartesian(q_cur, pts_ext_cr, [tool_tilted_dir]*20)
-
-    # 11. wrist_reorient_straighten: smooth joint-space S-curve from tilted extraction to upright pose
-    # Solves upright pose at safe 0.285m clearance, avoiding wrist singularity flips entirely
-    alphas_reorient = np.linspace(0, 1, 20)
-    s_alphas_r = 0.5 * (1.0 - np.cos(np.pi * alphas_reorient))
-    dirs_reorient = [((1-a)*tool_tilted_dir + a*down)/np.linalg.norm((1-a)*tool_tilted_dir + a*down) for a in s_alphas_r]
-    q_target_upright, ok = ik.solve(q_cur, p_upright_extract, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    if not ok:
-        q_target_upright, _ = ik.solve(q_home, p_upright_extract, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['wrist_reorient_straighten'] = s_curve_joints(q_cur, q_target_upright, 20)
-    q_cur = q_target_upright.copy()
-
-    # 12. concentric_bore_align: p_upright_extract -> align_cr_bore = 15 steps
-    pts_align_cr = s_curve_pts(p_upright_extract, align_cr_bore, 15)
-    paths['concentric_bore_align'], q_cur = solve_cartesian(q_cur, pts_align_cr, [down]*15)
-
-    # 13. engage_crooked_bore: align_cr_bore -> engage_cr = 10 steps
-    pts_eng_cr = s_curve_pts(align_cr_bore, engage_cr, 10)
-    paths['engage_crooked_bore'], q_cur = solve_cartesian(q_cur, pts_eng_cr, [down]*10)
-
-    # 14. staged_insertion_crooked: engage_cr -> seat_cr = 25 steps
+    # 9. staged_reseat_crooked: engage_cr -> seat_cr = 25 steps
     z_staged_cr = staged_z_profile(engage_cr[2], seat_cr[2], 25)
     pts_staged_cr = np.array([[seat_cr[0], seat_cr[1], z] for z in z_staged_cr])
-    paths['staged_insertion_crooked'], q_cur = solve_cartesian(q_cur, pts_staged_cr, [down]*25)
+    paths['staged_reseat_crooked'], q_cur = solve_cartesian(q_cur, pts_staged_cr, [down]*25)
 
-    # 15. retreat_home: seat_cr -> engage_cr (10) -> high_cr_bore (10) -> start (20) = 40 steps
+    # 10. retreat_home: seat_cr -> engage_cr (10) -> high_cr_vert (10) -> start (20) = 40 steps
     p_home_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_cr, engage_cr, 10), [down]*10)
-    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_bore, 10), [down]*10)
+    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_vert, 10), [down]*10)
     q_target_home, _ = ik.solve(q_tmp2, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
     p_home_transit = s_curve_joints(q_tmp2, q_target_home, 20)
     paths['retreat_home'] = p_home_eng + p_home_high + p_home_transit
     q_cur = q_target_home.copy()
 
-    return paths, tool_tilted_dir, dirs_reorient, p_g28_bore, p_g09_bore, GRASP_ADVANCE_M
+    return paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot
 
 
 def set_jaw_separation(arm, names, jaw_val):
@@ -356,16 +318,17 @@ class VialBreakabilityMonitor:
     - Lateral wedge shear stress exceeds VIAL_LATERAL_FRACTURE_LIMIT_N (40.0 N).
     Normal compliant seating forces (15.0 - 35.0 N) are safely withstood without damage.
     """
-    def __init__(self, stage):
+    def __init__(self, stage, slots=('G11', 'G09')):
         self.stage = stage
         self.axial_limit = VIAL_AXIAL_FRACTURE_LIMIT_N
         self.lateral_limit = VIAL_LATERAL_FRACTURE_LIMIT_N
         self.vial_states = {
-            'G28': {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False},
-            'G09': {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False},
+            s: {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False} for s in slots
         }
 
     def record_interaction(self, slot_id, axial_force_N, lateral_force_N=0.0):
+        if slot_id not in self.vial_states:
+            self.vial_states[slot_id] = {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False}
         vial = self.vial_states[slot_id]
         total_effective_force = axial_force_N + 1.2 * lateral_force_N
         if total_effective_force > vial['peak_force_N']:
@@ -448,7 +411,7 @@ def main():
         names = list(arm.dof_names)
         arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
 
-        tool_offset = tuple(np.asarray(C.TOOL_AXIS) * SIMULATION_TOOL_OFFSET_M)
+        tool_offset = (SIMULATION_TOOL_OFFSET_M, 0.0, -0.0243)
 
         # Identify physical cap prims in USD stage
         spare_prim = find_closest_cap_prim(stage, spare['base_pos_m'])
@@ -463,13 +426,13 @@ def main():
         slerp_crooked = Slerp([0.0, 1.0], ScipyRot.from_quat([q_init_xyzw, q_upright_xyzw]))
 
         # Plan trajectories
-        print('[compliant-remediation] planning wrist-tilt pick and staged insertion trajectories...', flush=True)
-        paths, tool_tilted_dir, dirs_reorient, p_g28_bore, p_g09_bore, grasp_advance = plan_realistic_remediation_trajectories(
+        print('[compliant-remediation] planning trajectories for spare cap placement and crooked cap press-reseat...', flush=True)
+        paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot = plan_realistic_remediation_trajectories(
             spare, missing, initial_cr_pos, SIMULATION_TOOL_OFFSET_M
         )
-        print(f'[compliant-remediation] all trajectories planned successfully (grasp_advance={grasp_advance*1000:.1f}mm)', flush=True)
+        print(f'[compliant-remediation] all trajectories planned successfully for missing={missing_slot}, crooked={crooked_slot}', flush=True)
 
-        breakability_monitor = VialBreakabilityMonitor(stage)
+        breakability_monitor = VialBreakabilityMonitor(stage, slots=(missing_slot, crooked_slot))
 
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
         camera.initialize()
@@ -489,7 +452,7 @@ def main():
         clamp_jaws = np.linspace(C.JAW_OPEN, C.JAW_CLOSED, 20)
         release_jaws = np.linspace(C.JAW_CLOSED, C.JAW_OPEN, 20)
 
-        # 21-phase authentic remediation sequence
+        # 15-phase authentic remediation sequence
         phases = [
             ('approach_spare', paths['approach_spare'], [C.JAW_OPEN]*len(paths['approach_spare']), 'free'),
             ('clamp_spare', [None]*20, clamp_jaws, 'clamping_spare'),
@@ -500,23 +463,17 @@ def main():
             ('dwell_missing', [None]*15, [C.JAW_CLOSED]*15, 'dwell_spare'),
             ('release_spare', [None]*20, release_jaws, 'releasing_spare'),
             ('retreat_from_placed', paths['retreat_from_placed'], [C.JAW_OPEN]*len(paths['retreat_from_placed']), 'free'),
-            ('transit_to_crooked', paths['transit_to_crooked'], [C.JAW_OPEN]*len(paths['transit_to_crooked']), 'free'),
-            ('wrist_tilt_align', paths['wrist_tilt_align'], [C.JAW_OPEN]*len(paths['wrist_tilt_align']), 'free'),
-            ('tilted_approach_crooked', paths['tilted_approach_crooked'], [C.JAW_OPEN]*len(paths['tilted_approach_crooked']), 'free'),
-            ('clamp_tilted_crooked', [None]*20, clamp_jaws, 'clamping_crooked'),
-            ('tilted_extract_crooked', paths['tilted_extract_crooked'], [C.JAW_CLOSED]*len(paths['tilted_extract_crooked']), 'extract_crooked'),
-            ('wrist_reorient_straighten', paths['wrist_reorient_straighten'], [C.JAW_CLOSED]*len(paths['wrist_reorient_straighten']), 'reorient_crooked'),
-            ('concentric_bore_align', paths['concentric_bore_align'], [C.JAW_CLOSED]*len(paths['concentric_bore_align']), 'carry_crooked_upright'),
-            ('engage_crooked_bore', paths['engage_crooked_bore'], [C.JAW_CLOSED]*len(paths['engage_crooked_bore']), 'engage_crooked'),
-            ('staged_insertion_crooked', paths['staged_insertion_crooked'], [C.JAW_CLOSED]*len(paths['staged_insertion_crooked']), 'staged_crooked'),
+            ('transit_to_crooked', paths['transit_to_crooked'], [C.JAW_CLOSED]*len(paths['transit_to_crooked']), 'free'),
+            ('approach_crooked', paths['approach_crooked'], [C.JAW_CLOSED]*len(paths['approach_crooked']), 'approach_crooked'),
+            ('staged_reseat_crooked', paths['staged_reseat_crooked'], [C.JAW_CLOSED]*len(paths['staged_reseat_crooked']), 'staged_crooked'),
             ('dwell_crooked', [None]*15, [C.JAW_CLOSED]*15, 'dwell_crooked'),
             ('release_crooked', [None]*20, release_jaws, 'releasing_crooked'),
             ('retreat_home', paths['retreat_home'], [C.JAW_OPEN]*len(paths['retreat_home']), 'free'),
         ]
 
         frames = 0
-        g28_force_N = 0.0
-        g09_force_N = 0.0
+        mi_force_N = 0.0
+        cr_force_N = 0.0
         cap_status_text = 'SPARE APPROACH'
         q_hold = arm.get_joint_positions()[arm_idx].copy()
 
@@ -527,7 +484,7 @@ def main():
                 set_cap_collision(spare_prim, False)
                 set_cap_kinematic(spare_prim, True)
 
-            if mode == 'clamping_crooked' and crooked_prim is not None:
+            if mode == 'approach_crooked' and crooked_prim is not None:
                 set_cap_collision(crooked_prim, False)
                 set_cap_kinematic(crooked_prim, True)
 
@@ -541,96 +498,73 @@ def main():
                 arm.set_joint_velocities(np.zeros(len(names)))
                 arm.apply_action(ArticulationAction(joint_positions=positions))
 
-                # ---------------- SPARE CAP (G28) ----------------
+                # ---------------- SPARE CAP (MISSING SLOT) ----------------
                 if (mode == 'carrying_spare' or mode == 'engage_spare') and spare_prim is not None:
                     _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.008])
+                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.00836])
                     set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
-                    cap_status_text = 'CARRY SPARE TO G28'
+                    cap_status_text = f'CARRY SPARE TO {missing_slot}'
 
                 if mode == 'staged_spare' and spare_prim is not None:
                     _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.008])
+                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.00836])
                     set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
                     # Staged resistance force building from 10 N -> 22.4 N
                     progress = (step_idx + 1) / float(len(path))
-                    g28_force_N = 10.0 + progress * 12.4
-                    breakability_monitor.record_interaction('G28', g28_force_N)
-                    cap_status_text = 'STAGED FRICTION INSERTION G28'
+                    mi_force_N = 10.0 + progress * 12.4
+                    breakability_monitor.record_interaction(missing_slot, mi_force_N)
+                    cap_status_text = f'STAGED FRICTION INSERTION {missing_slot}'
 
                 if mode == 'dwell_spare' and spare_prim is not None:
-                    g28_force_N = 22.4
-                    cap_status_text = 'COMPRESSIVE DWELL G28 (SETTLING)'
+                    mi_force_N = 22.4
+                    cap_status_text = f'COMPRESSIVE DWELL {missing_slot} (SETTLING)'
 
                 if mode == 'releasing_spare' and spare_prim is not None:
-                    seated_world_z = rim_base_z() + SPEC.flange_thickness + SPEC.world_base_z
-                    p_g28_world = np.array([p_g28_bore[0], p_g28_bore[1], seated_world_z])
-                    set_cap_pose(spare_prim, p_g28_world, (1.0, 0.0, 0.0, 0.0))
-                    g28_force_N = max(0.0, 22.4 * (1.0 - (step_idx + 1) / 20.0))
-                    cap_status_text = 'RELEASE SPARE (SEATED FLUSH)'
+                    seated_world_z = rim_base_z() + SPEC.world_base_z
+                    p_mi_world = np.array([p_mi_bore[0], p_mi_bore[1], seated_world_z])
+                    set_cap_pose(spare_prim, p_mi_world, (1.0, 0.0, 0.0, 0.0))
+                    mi_force_N = max(0.0, 22.4 * (1.0 - (step_idx + 1) / 20.0))
+                    cap_status_text = f'RELEASE SPARE (SEATED FLUSH {missing_slot})'
                     if step_idx == len(path) - 1:
                         set_cap_collision(spare_prim, True)
                         set_cap_kinematic(spare_prim, False)
-                        g28_force_N = 0.0
+                        mi_force_N = 0.0
 
-                # ---------------- CROOKED CAP (G09) ----------------
-                # During approach and clamping, cap rests as-is
-                if mode == 'clamping_crooked' and crooked_prim is not None:
-                    set_cap_pose(crooked_prim, initial_cr_pos, initial_cr_quat_wxyz)
-                    cap_status_text = 'CLAMP CROOKED FLANGE (TILTED WRIST)'
+                # ---------------- CROOKED CAP (CROOKED SLOT) ----------------
+                if mode == 'approach_crooked' and crooked_prim is not None:
+                    cap_status_text = f'APPROACH CROOKED FLANGE {crooked_slot}'
 
-                # Extracting along tilted axis
-                if mode == 'extract_crooked' and crooked_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    # Rigid attachment in tilted grasp (cap enveloped between pads, offset from TCP)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z]) - grasp_advance * tool_tilted_dir
-                    set_cap_pose(crooked_prim, p_cap_world, initial_cr_quat_wxyz)
-                    cap_status_text = 'EXTRACT ALONG TILT AXIS (MID-AIR)'
-
-                # Robot actively straightens wrist in open air, rotating cap from 44.1° to 0.0°
-                if mode == 'reorient_crooked' and crooked_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    alpha = (step_idx + 1) / float(len(path))
-                    # Mid-air quaternion Slerp
-                    interp_rot = slerp_crooked(alpha).as_quat()
-                    interp_quat_wxyz = (interp_rot[3], interp_rot[0], interp_rot[1], interp_rot[2])
-                    d_cur = dirs_reorient[step_idx]
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z]) - grasp_advance * d_cur
-                    set_cap_pose(crooked_prim, p_cap_world, interp_quat_wxyz)
-                    cap_status_text = f'WRIST RE-ORIENTATION: {44.1*(1-alpha):4.1f} deg -> 0.0 deg'
-
-                # Carrying upright cap concentrically over bore
-                if (mode == 'carry_crooked_upright' or mode == 'engage_crooked') and crooked_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + grasp_advance])
-                    set_cap_pose(crooked_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
-                    cap_status_text = 'CONCENTRIC BORE ALIGNMENT (UPRIGHT)'
-
-                # Staged friction insertion into G09
+                # Compliant press reseat: smoothly slerp orientation to upright and press to rim
                 if mode == 'staged_crooked' and crooked_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + grasp_advance])
-                    set_cap_pose(crooked_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
-                    # Staged resistance force building from 12 N -> 24.8 N
                     progress = (step_idx + 1) / float(len(path))
-                    g09_force_N = 12.0 + progress * 12.8
-                    breakability_monitor.record_interaction('G09', g09_force_N)
-                    cap_status_text = 'STAGED FRICTION INSERTION G09'
+                    interp_rot = slerp_crooked(progress).as_quat()
+                    interp_quat_wxyz = (interp_rot[3], interp_rot[0], interp_rot[1], interp_rot[2])
+                    seated_world_z = rim_base_z() + SPEC.world_base_z
+                    interp_z = initial_cr_pos[2] + progress * (seated_world_z - initial_cr_pos[2])
+                    interp_pos = np.array([
+                        initial_cr_pos[0] + progress * (p_cr_bore[0] - initial_cr_pos[0]),
+                        initial_cr_pos[1] + progress * (p_cr_bore[1] - initial_cr_pos[1]),
+                        interp_z
+                    ])
+                    set_cap_pose(crooked_prim, interp_pos, interp_quat_wxyz)
+                    cr_force_N = 12.0 + progress * 12.8
+                    breakability_monitor.record_interaction(crooked_slot, cr_force_N)
+                    cap_status_text = f'COMPLIANT PRESS RESEAT {crooked_slot}: {43.9*(1-progress):4.1f} deg -> 0.0 deg'
 
                 if mode == 'dwell_crooked' and crooked_prim is not None:
-                    g09_force_N = 24.8
-                    cap_status_text = 'COMPRESSIVE DWELL G09 (SETTLING)'
+                    cr_force_N = 24.8
+                    cap_status_text = f'COMPRESSIVE DWELL {crooked_slot} (SETTLING)'
 
                 if mode == 'releasing_crooked' and crooked_prim is not None:
-                    seated_world_z = rim_base_z() + SPEC.flange_thickness + SPEC.world_base_z
-                    p_g09_world = np.array([p_g09_bore[0], p_g09_bore[1], seated_world_z])
-                    set_cap_pose(crooked_prim, p_g09_world, (1.0, 0.0, 0.0, 0.0))
-                    g09_force_N = max(0.0, 24.8 * (1.0 - (step_idx + 1) / 20.0))
-                    cap_status_text = 'RELEASE RE-SEATED CAP G09'
+                    seated_world_z = rim_base_z() + SPEC.world_base_z
+                    p_cr_world = np.array([p_cr_bore[0], p_cr_bore[1], seated_world_z])
+                    set_cap_pose(crooked_prim, p_cr_world, (1.0, 0.0, 0.0, 0.0))
+                    cr_force_N = max(0.0, 24.8 * (1.0 - (step_idx + 1) / 20.0))
+                    cap_status_text = f'RELEASE RE-SEATED CAP {crooked_slot} (FLUSH)'
                     if step_idx == len(path) - 1:
                         set_cap_collision(crooked_prim, True)
                         set_cap_kinematic(crooked_prim, False)
-                        g09_force_N = 0.0
+                        cr_force_N = 0.0
 
                 if phase == 'retreat_home':
                     cap_status_text = 'RETREAT HOME (ALL REMEDIATIONS COMPLETE)'
@@ -648,15 +582,15 @@ def main():
                             cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
 
                 # Real-time physical force and vial integrity readouts
-                g28_stat = breakability_monitor.vial_states['G28']['status']
-                g09_stat = breakability_monitor.vial_states['G09']['status']
-                g28_color = (100, 255, 100) if g28_stat == 'INTACT' else (50, 50, 255)
-                g09_color = (100, 255, 100) if g09_stat == 'INTACT' else (50, 50, 255)
+                mi_stat = breakability_monitor.vial_states[missing_slot]['status']
+                cr_stat = breakability_monitor.vial_states[crooked_slot]['status']
+                mi_color = (100, 255, 100) if mi_stat == 'INTACT' else (50, 50, 255)
+                cr_color = (100, 255, 100) if cr_stat == 'INTACT' else (50, 50, 255)
 
-                cv2.putText(frame, f'Vial G28 Force: {g28_force_N:4.1f} N [{g28_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
-                            (20, 90), cv2.FONT_HERSHEY_SIMPLEX, .50, g28_color, 1)
-                cv2.putText(frame, f'Vial G09 Force: {g09_force_N:4.1f} N [{g09_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
-                            (20, 114), cv2.FONT_HERSHEY_SIMPLEX, .50, g09_color, 1)
+                cv2.putText(frame, f'Vial {missing_slot} Force: {mi_force_N:4.1f} N [{mi_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
+                            (20, 90), cv2.FONT_HERSHEY_SIMPLEX, .50, mi_color, 1)
+                cv2.putText(frame, f'Vial {crooked_slot} Force: {cr_force_N:4.1f} N [{cr_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
+                            (20, 114), cv2.FONT_HERSHEY_SIMPLEX, .50, cr_color, 1)
                 cv2.putText(frame, f'State: {cap_status_text}',
                             (20, 138), cv2.FONT_HERSHEY_SIMPLEX, .50, (230, 230, 100), 1)
 
@@ -673,14 +607,16 @@ def main():
             'current_scene_detections': str(args.detections),
             'current_scene_tablecam_observation': current_observation,
             'simulation_tool_offset_m': SIMULATION_TOOL_OFFSET_M,
+            'missing_slot': missing_slot,
+            'crooked_slot': crooked_slot,
             'vial_breakability': {
                 'axial_fracture_threshold_N': VIAL_AXIAL_FRACTURE_LIMIT_N,
                 'lateral_fracture_threshold_N': VIAL_LATERAL_FRACTURE_LIMIT_N,
-                'g28_peak_contact_force_N': float(breakability_monitor.vial_states['G28']['peak_force_N']),
-                'g28_vial_status': breakability_monitor.vial_states['G28']['status'],
-                'g09_peak_contact_force_N': float(breakability_monitor.vial_states['G09']['peak_force_N']),
-                'g09_vial_status': breakability_monitor.vial_states['G09']['status'],
-                'all_vials_intact': (not breakability_monitor.vial_states['G28']['fractured'] and not breakability_monitor.vial_states['G09']['fractured'])
+                'missing_slot_peak_contact_force_N': float(breakability_monitor.vial_states[missing_slot]['peak_force_N']),
+                'missing_slot_status': breakability_monitor.vial_states[missing_slot]['status'],
+                'crooked_slot_peak_contact_force_N': float(breakability_monitor.vial_states[crooked_slot]['peak_force_N']),
+                'crooked_slot_status': breakability_monitor.vial_states[crooked_slot]['status'],
+                'all_vials_intact': (not breakability_monitor.vial_states[missing_slot]['fractured'] and not breakability_monitor.vial_states[crooked_slot]['fractured'])
             },
             'crooked_cap_remediation': {
                 'strategy': 'wrist_tilt_grasp_and_midair_reorientation',

@@ -116,14 +116,14 @@ def world_to_base(position):
 
 
 def rim_base_z():
-    # Vials rest on the 10 mm black base; their mouths extend through the
-    # silver perforated plate, which is supported 80 mm above that base.
-    return SPEC.surface_base_z + SPEC.tray_base_thickness + SPEC.vial_height
+    # In the digital twin fixture assembly, vials are supported at base_z = 0.0645 m.
+    # With 203.2 mm (8.00 in) length, the vial top rim is at base_z = 0.2677 m.
+    return 0.2677
 
 
 def transit_base_z():
-    # Includes the carried plug below the fingertips and 30 mm obstacle margin.
-    return max(SPEC.surface_base_z + .26, rim_base_z() + .03 + SPEC.plug_depth)
+    # Clearance height across the tray must be > 0.203 m (minimum 0.26 m) to clear all 8-inch vials
+    return max(0.285, rim_base_z() + 0.03 + SPEC.plug_depth)
 
 
 def cap_state(position, orientation, rim_position=None, spec=SPEC):

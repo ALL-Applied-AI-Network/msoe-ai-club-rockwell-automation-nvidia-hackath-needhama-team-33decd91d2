@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 from src.inspection.vision_pipeline import RemediationVisionDetector, camera_from_usd_capture
 
 COLORS = {'good_cap': (72, 190, 72), 'crooked_cap': (45, 115, 240),
-          'missing_cap': (50, 65, 220), 'table_cap': (25, 205, 235)}
+          'missing_cap': (50, 65, 220), 'table_cap': (25, 205, 235),
+          'pass': (72, 190, 72), 'damaged_vial': (50, 65, 220)}
 
 
 def draw(frame, targets, scene_id):

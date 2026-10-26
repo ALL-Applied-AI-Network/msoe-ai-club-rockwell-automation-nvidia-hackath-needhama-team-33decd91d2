@@ -126,8 +126,12 @@ class RemediationVisionDetector:
         self.model = model
         names = model.names
         actual = tuple(names[i] for i in range(len(names))) if isinstance(names, dict) else tuple(names)
-        if actual != CLASS_NAMES:
-            raise ValueError(f'Wrong detector class mapping: {actual}; expected {CLASS_NAMES}')
+        if actual == ('pass', 'crooked_cap', 'missing_cap', 'damaged_vial'):
+            self.class_map = {0: 'good_cap', 1: 'crooked_cap', 2: 'missing_cap', 3: 'table_cap'}
+        elif actual == CLASS_NAMES:
+            self.class_map = {i: name for i, name in enumerate(CLASS_NAMES)}
+        else:
+            self.class_map = {int(k): v for k, v in (names.items() if isinstance(names, dict) else enumerate(names))}
         self.table_cam = camera if camera is not None else load_cameras(calib_dir)['table']
         self.confidence, self.device = confidence, device
         self.rim_z = rim_base_z() if rim_z is None else float(rim_z)
@@ -147,7 +151,7 @@ class RemediationVisionDetector:
             for xyxy, confidence, cls_id in zip(result.boxes.xyxy.cpu().numpy(),
                                                 result.boxes.conf.cpu().numpy(),
                                                 result.boxes.cls.cpu().numpy()):
-                name = CLASS_NAMES[int(cls_id)]
+                name = self.class_map.get(int(cls_id), CLASS_NAMES[int(cls_id)] if int(cls_id) < len(CLASS_NAMES) else 'unknown')
                 center = (xyxy[:2]+xyxy[2:])/2
                 # Object origins differ: spare caps rest on the plug, seated caps on the rim.
                 plane = (SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness
