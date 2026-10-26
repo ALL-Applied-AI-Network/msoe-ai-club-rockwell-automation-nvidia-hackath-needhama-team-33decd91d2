@@ -1,0 +1,62 @@
+{
+  "mode": "wrist_reorientation_staged_insertion_remediation",
+  "physical_robot_authorized": false,
+  "scene": "shared/scenes/remediation_dataset1_v1.usda",
+  "current_scene_detections": "runs/compliant_remediation_test/perception/current_scene_detections.json",
+  "current_scene_tablecam_observation": {
+    "source": "current_loaded_scene_tablecam",
+    "scene": "shared/scenes/remediation_dataset1_v1.usda",
+    "targets": [
+      {
+        "class_name": "table_cap",
+        "confidence": 0.985,
+        "base_pos_m": [
+          0.28,
+          -0.255,
+          0.00836
+        ],
+        "contact_qualified": true
+      },
+      {
+        "class_name": "missing_cap",
+        "confidence": 0.991,
+        "base_pos_m": [
+          0.513792,
+          0.035583,
+          0.203
+        ],
+        "contact_qualified": true
+      },
+      {
+        "class_name": "crooked_cap",
+        "confidence": 0.974,
+        "base_pos_m": [
+          0.308703,
+          0.095736,
+          0.267896
+        ],
+        "contact_qualified": true
+      }
+    ]
+  },
+  "simulation_tool_offset_m": 0.2843020875330954,
+  "vial_breakability": {
+    "axial_fracture_threshold_N": 65.0,
+    "lateral_fracture_threshold_N": 40.0,
+    "g28_peak_contact_force_N": 22.4,
+    "g28_vial_status": "INTACT",
+    "g09_peak_contact_force_N": 24.8,
+    "g09_vial_status": "INTACT",
+    "all_vials_intact": true
+  },
+  "crooked_cap_remediation": {
+    "strategy": "wrist_tilt_grasp_and_midair_reorientation",
+    "tilted_grasp_angle_deg": 44.1,
+    "wrist_correction": "active_j4_j5_j6_reorientation",
+    "insertion_dynamics": "staged_friction_resistance",
+    "teleportation": false,
+    "final_tilt_deg": 0.0
+  },
+  "frame_directory": "runs/compliant_remediation_test/action/frames",
+  "frames_written": 460
+}
