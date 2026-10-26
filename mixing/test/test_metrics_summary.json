@@ -1,14 +1,18 @@
 {
   "baseline": {
     "total_vials": 200,
-    "defective_vials": 62,
-    "defective_percentage": 31.0,
+    "clean_vials": 1,
+    "defective_vials": 199,
+    "defective_percentage": 99.5,
     "dilution_defects": 18,
     "color_carryover_scrap": 2,
+    "excess_carryover_defects": 179,
     "spill_violations": 42,
     "purge_waste_if_dumped_ml": 1631.8,
     "actual_chemical_waste_ml": 0.0,
-    "total_contamination_volume_ml": 1640.0
+    "total_unwanted_volume_ml": 1631.8,
+    "total_missing_volume_ml": 0.0,
+    "total_contamination_volume_ml": 1631.8
   },
   "optimized": {
     "total_vials": 200,

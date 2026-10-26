@@ -9,14 +9,18 @@
   },
   "summary": {
     "total_vials": 200,
-    "defective_vials": 62,
-    "defective_percentage": 31.0,
+    "clean_vials": 1,
+    "defective_vials": 199,
+    "defective_percentage": 99.5,
     "dilution_defects": 18,
     "color_carryover_scrap": 2,
+    "excess_carryover_defects": 179,
     "spill_violations": 42,
     "purge_waste_if_dumped_ml": 1631.8,
     "actual_chemical_waste_ml": 0.0,
-    "total_contamination_volume_ml": 1640.0
+    "total_unwanted_volume_ml": 1631.8,
+    "total_missing_volume_ml": 0.0,
+    "total_contamination_volume_ml": 1631.8
   },
   "schedule": [
     {
@@ -35,30 +39,28 @@
         "T100": 30.0
       },
       "delivered_amounts": {
-        "T100": 38.2,
+        "T100": 30.0,
         "T200": 10.0,
         "T400": 0.0
       },
-      "total_volume": 48.2,
+      "total_volume": 40.0,
       "target_volume": 40.0,
-      "resident_fluid_inherited": "T100",
+      "resident_fluid_inherited": "PRIMED_T100",
       "resident_fluid_passed": "T100",
       "dispense_order": [
         "T200",
         "T100"
       ],
       "waste_ml": 0.0,
-      "unwanted_product": {
-        "T100": 8.2
-      },
+      "unwanted_product": {},
       "missing_product": {},
-      "contamination_volume": 8.2,
+      "contamination_volume": 0.0,
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
       "has_defect": false,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "CLEAN_PASS (First Vial, Exact Target)"
       ],
       "rgb_color": [
         0.95,
@@ -105,9 +107,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -156,6 +158,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -203,9 +206,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -252,9 +255,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -299,9 +302,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -346,9 +349,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -487,9 +490,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -536,9 +539,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -585,9 +588,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -634,9 +637,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -681,9 +684,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -730,9 +733,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -779,9 +782,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -873,9 +876,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -922,9 +925,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -1018,9 +1021,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.237,
@@ -1114,9 +1117,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.116,
@@ -1163,9 +1166,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -1212,9 +1215,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -1259,9 +1262,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -1310,6 +1313,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -1357,9 +1361,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -1404,9 +1408,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -1453,9 +1457,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -1504,6 +1508,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -1553,6 +1558,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -1598,9 +1604,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -1647,9 +1653,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -1698,6 +1704,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -1743,9 +1750,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -1790,9 +1797,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -1839,9 +1846,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -1886,9 +1893,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -1937,6 +1944,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -1986,6 +1994,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -2031,9 +2040,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -2082,6 +2091,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -2129,9 +2139,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -2178,9 +2188,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -2321,9 +2331,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -2368,9 +2378,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -2466,6 +2476,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -2511,9 +2522,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -2562,6 +2573,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -2607,9 +2619,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -2656,9 +2668,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -2703,9 +2715,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -2752,9 +2764,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -2801,9 +2813,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -2852,6 +2864,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -2897,9 +2910,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -2946,9 +2959,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -2993,9 +3006,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -3042,9 +3055,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -3093,6 +3106,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3140,9 +3154,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -3191,6 +3205,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3236,9 +3251,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -3287,6 +3302,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3336,6 +3352,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3383,9 +3400,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -3434,6 +3451,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3479,9 +3497,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -3526,9 +3544,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -3573,9 +3591,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -3669,9 +3687,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.237,
@@ -3716,9 +3734,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -3765,9 +3783,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -3814,9 +3832,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -3865,6 +3883,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -3959,9 +3978,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.237,
@@ -4010,6 +4029,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -4057,9 +4077,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -4106,9 +4126,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -4155,9 +4175,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -4206,6 +4226,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -4253,9 +4274,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -4304,6 +4325,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -4349,9 +4371,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -4398,9 +4420,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -4445,9 +4467,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -4496,6 +4518,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -4543,9 +4566,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -4592,9 +4615,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -4641,9 +4664,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -4690,9 +4713,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -4737,9 +4760,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -4788,6 +4811,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -4833,9 +4857,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -4882,9 +4906,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -4931,9 +4955,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -4980,9 +5004,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5031,6 +5055,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -5076,9 +5101,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -5123,9 +5148,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -5172,9 +5197,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5219,9 +5244,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -5317,6 +5342,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -5364,9 +5390,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5411,9 +5437,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -5460,9 +5486,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -5509,9 +5535,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -5558,9 +5584,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5609,6 +5635,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -5654,9 +5681,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -5701,9 +5728,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -5799,6 +5826,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -5846,9 +5874,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5895,9 +5923,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -5944,9 +5972,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -5991,9 +6019,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -6042,6 +6070,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -6089,9 +6118,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -6136,9 +6165,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -6183,9 +6212,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -6281,6 +6310,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -6326,9 +6356,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -6375,9 +6405,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -6424,9 +6454,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -6473,9 +6503,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -6524,6 +6554,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -6571,9 +6602,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -6618,9 +6649,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -6665,9 +6696,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -6763,6 +6794,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -6810,9 +6842,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -6859,9 +6891,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -6906,9 +6938,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -6957,6 +6989,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -7004,9 +7037,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -7053,9 +7086,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -7100,9 +7133,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -7147,9 +7180,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -7245,6 +7278,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -7292,9 +7326,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -7341,9 +7375,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -7388,9 +7422,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -7437,9 +7471,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -7488,6 +7522,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -7535,9 +7570,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -7582,9 +7617,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -7629,9 +7664,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -7727,6 +7762,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -7772,9 +7808,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -7821,9 +7857,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -7870,9 +7906,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -7921,6 +7957,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -7968,9 +8005,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -8017,9 +8054,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -8064,9 +8101,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -8111,9 +8148,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -8209,6 +8246,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -8256,9 +8294,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -8303,9 +8341,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -8352,9 +8390,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -8401,9 +8439,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -8452,6 +8490,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -8499,9 +8538,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -8546,9 +8585,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -8593,9 +8632,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -8691,6 +8730,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -8738,9 +8778,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -8787,9 +8827,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -8834,9 +8874,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -8885,6 +8925,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -8932,9 +8973,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -8981,9 +9022,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -9028,9 +9069,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -9075,9 +9116,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -9173,6 +9214,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -9218,9 +9260,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -9267,9 +9309,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.125,
@@ -9316,9 +9358,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -9365,9 +9407,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.275,
@@ -9416,6 +9458,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)",
         "SPILL_RISK (88.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [
@@ -9463,9 +9506,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.425,
@@ -9510,9 +9553,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.95,
@@ -9557,9 +9600,9 @@
       "is_dilution": false,
       "is_color_defect": false,
       "spill_risk": false,
-      "has_defect": false,
+      "has_defect": true,
       "defect_reasons": [
-        "CLEAN_PASS"
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T100 hold-up from prior vial)"
       ],
       "rgb_color": [
         0.05,
@@ -9655,6 +9698,7 @@
       "spill_risk": true,
       "has_defect": true,
       "defect_reasons": [
+        "EXCESS_REAGENT_CARRYOVER (+8.2mL uncompensated T400 hold-up from prior vial)",
         "SPILL_RISK (83.2mL > 80mL MagneMover transit limit)"
       ],
       "rgb_color": [

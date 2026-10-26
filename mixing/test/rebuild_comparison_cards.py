@@ -53,7 +53,7 @@ def create_aligned_card(img_base_path, img_pcmc_path, b_step: dict, o_step: dict
     b_spill = b_step.get("spill_risk", False)
     b_dilution = b_step.get("is_dilution", False)
     b_color_scrap = b_step.get("is_color_defect", False)
-    has_defect = b_step.get("has_defect", False) or (b_contam > 0 or b_spill or b_dilution or b_color_scrap)
+    has_defect = b_step.get("has_defect", False)
 
     b_color = (180, 25, 25) if has_defect else (45, 55, 72)
     draw.rectangle([(10, 10), (630, 65)], fill=b_color)
@@ -67,9 +67,9 @@ def create_aligned_card(img_base_path, img_pcmc_path, b_step: dict, o_step: dict
     elif b_spill:
         parts.append(f"SPILL RISK ({b_vol:.1f}mL > 80mL)")
     elif b_contam > 0:
-        parts.append(f"Contam: {b_contam:.1f}mL")
+        parts.append(f"DEFECT (+{b_contam:.1f}mL Carryover)")
     else:
-        parts.append("0.0mL Contam (Clean)")
+        parts.append("0.0mL Contam (Clean Pass)")
 
     draw.text((20, 38), " | ".join(parts), fill=(255, 235, 235), font=font_sub)
 

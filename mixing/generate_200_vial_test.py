@@ -89,13 +89,16 @@ def build_schedules(v_tube: float = 8.2):
     # 1. BUILD TEST 1: UNMODIFIED BASELINE (FIFO SEQUENTIAL)
     # =========================================================================
     # Task starts with list1. At vial 50, list2 is added to queue (FIFO: runs after list1).
-    baseline_seq = list1_ids[:50] + list1_ids[50:] + list2_ids
+    base_seq = list1_ids[:50] + list1_ids[50:] + list2_ids
+    baseline_seq = base_seq
     current_tube = "T100"
     base_schedule = []
 
-    total_base_contamination = 0.0
+    total_base_unwanted = 0.0
+    total_base_missing = 0.0
     base_dilution_count = 0
     base_color_defect_count = 0
+    base_excess_defect_count = 0
     base_spill_count = 0
     base_defective_count = 0
 
@@ -105,46 +108,56 @@ def build_schedules(v_tube: float = 8.2):
         active = [m for m in ["T200", "T400", "T100"] if target_dict[m] > 0]
         disp_order = [m for m in ["T200", "T400", "T100"] if m in active]
         last_m = disp_order[-1]
+        target_vol = round(sum(target_dict.values()), 2)
 
-        pushed = current_tube
-        delivered = {m: target_dict[m] for m in ["T100", "T200", "T400"]}
-        delivered[pushed] = round(delivered[pushed] + v_tube, 2)
-        total_vol = round(sum(delivered.values()), 2)
-        target_vol = sum(target_dict.values())
+        if idx == 0:
+            # Vial 001: First vial of production run; line is cleanly primed, exact target delivered
+            delivered = {m: target_dict[m] for m in ["T100", "T200", "T400"]}
+            total_vol = target_vol
+            unwanted = {}
+            missing = {}
+            has_defect = False
+            defect_types = ["CLEAN_PASS (First Vial, Exact Target)"]
+            is_dilution = False
+            is_color = False
+            is_spill = False
+            vial_unwanted = 0.0
+        else:
+            # Vials 002+: Unmodified baseline has no compensation or purge between vials.
+            # Pumps pump nominal recipe amounts, and the 8.2mL residual hold-up from the
+            # previous vial is pushed into the vial on top of the recipe, making it defective.
+            pushed = current_tube
+            delivered = {m: target_dict[m] for m in ["T100", "T200", "T400"]}
+            delivered[pushed] = round(delivered[pushed] + v_tube, 2)
+            total_vol = round(sum(delivered.values()), 2)
 
-        is_dilution = (pushed == "T100" and target_dict.get("T100", 0.0) == 0.0)
-        is_color = (pushed != "T100" and target_dict.get(pushed, 0.0) == 0.0)
-        is_spill = (total_vol > 80.0)
-        has_defect = (is_dilution or is_color or is_spill)
+            is_dilution = (pushed == "T100" and target_dict.get("T100", 0.0) == 0.0)
+            is_color = (pushed != "T100" and target_dict.get(pushed, 0.0) == 0.0)
+            is_spill = (total_vol > 80.0)
+            is_excess = (not is_dilution and not is_color)
 
-        if is_dilution:
-            base_dilution_count += 1
-        if is_color:
-            base_color_defect_count += 1
-        if is_spill:
-            base_spill_count += 1
-        if has_defect:
+            defect_types = []
+            if is_dilution:
+                base_dilution_count += 1
+                defect_types.append(f"DILUTION_DEFECT (+{v_tube}mL T100 water in dye-only recipe, -11.7% concentration)")
+            elif is_color:
+                base_color_defect_count += 1
+                defect_types.append(f"COLOR_CARRYOVER_SCRAP (+{v_tube}mL foreign {pushed} dye turns vial murky)")
+            elif is_excess:
+                base_excess_defect_count += 1
+                defect_types.append(f"EXCESS_REAGENT_CARRYOVER (+{v_tube}mL uncompensated {pushed} hold-up from prior vial)")
+
+            if is_spill:
+                base_spill_count += 1
+                defect_types.append(f"SPILL_RISK ({total_vol}mL > 80mL MagneMover transit limit)")
+
+            has_defect = True
             base_defective_count += 1
+            unwanted = {pushed: v_tube}
+            missing = {}
+            vial_unwanted = v_tube
 
-        unwanted = {}
-        for m in ["T100", "T200", "T400"]:
-            diff = round(delivered[m] - target_dict.get(m, 0.0), 2)
-            if diff > 0.01:
-                unwanted[m] = diff
-
-        missing = {}
-        for m in ["T100", "T200", "T400"]:
-            diff = round(target_dict.get(m, 0.0) - delivered[m], 2)
-            if diff > 0.01:
-                missing[m] = diff
-
-        defect_types = []
-        if is_dilution:
-            defect_types.append(f"DILUTION_DEFECT (+{v_tube}mL T100 water in dye-only recipe, -11.7% concentration)")
-        if is_color:
-            defect_types.append(f"COLOR_CARRYOVER_SCRAP (+{v_tube}mL foreign {pushed} dye turns vial murky)")
-        if is_spill:
-            defect_types.append(f"SPILL_RISK ({total_vol}mL > 80mL MagneMover transit limit)")
+        total_base_unwanted += vial_unwanted
 
         pumped_nominal = {m: round(target_dict.get(m, 0.0), 2) for m in disp_order}
 
@@ -159,18 +172,18 @@ def build_schedules(v_tube: float = 8.2):
             "delivered_amounts": delivered,
             "total_volume": total_vol,
             "target_volume": target_vol,
-            "resident_fluid_inherited": pushed,
+            "resident_fluid_inherited": current_tube if idx > 0 else "PRIMED_T100",
             "resident_fluid_passed": last_m,
             "dispense_order": disp_order,
             "waste_ml": 0.0,
             "unwanted_product": unwanted,
             "missing_product": missing,
-            "contamination_volume": v_tube,
+            "contamination_volume": round(vial_unwanted, 2),
             "is_dilution": is_dilution,
             "is_color_defect": is_color,
             "spill_risk": is_spill,
             "has_defect": has_defect,
-            "defect_reasons": defect_types if defect_types else ["CLEAN_PASS"],
+            "defect_reasons": defect_types,
             "rgb_color": compute_delivered_rgb(delivered),
         })
         current_tube = last_m
@@ -317,14 +330,18 @@ def build_schedules(v_tube: float = 8.2):
         "summary": {
             "baseline": {
                 "total_vials": 200,
+                "clean_vials": 200 - base_defective_count,
                 "defective_vials": base_defective_count,
                 "defective_percentage": round(base_defective_count / 200 * 100, 1),
                 "dilution_defects": base_dilution_count,
                 "color_carryover_scrap": base_color_defect_count,
+                "excess_carryover_defects": base_excess_defect_count,
                 "spill_violations": base_spill_count,
                 "purge_waste_if_dumped_ml": round(199 * v_tube, 1),
                 "actual_chemical_waste_ml": 0.0,
-                "total_contamination_volume_ml": round(200 * v_tube, 1),
+                "total_unwanted_volume_ml": round(total_base_unwanted, 1),
+                "total_missing_volume_ml": 0.0,
+                "total_contamination_volume_ml": round(total_base_unwanted, 1),
             },
             "optimized": {
                 "total_vials": 200,
