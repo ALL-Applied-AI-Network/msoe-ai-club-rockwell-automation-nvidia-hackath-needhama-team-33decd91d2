@@ -172,7 +172,8 @@ def _cap_dynamics(prim,dynamic):
         phys.CreateEnableCCDAttr(True)
 
 
-def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True, paper_color=None):
+def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
+                paper_color=None, tray_center_xy=None):
     import cell
     if min(crooked,missing,table_caps)<0 or crooked+missing>30 or table_caps>10:
         raise ValueError('Invalid scene inventory (30 vials, at most 10 separated spares)')
@@ -196,7 +197,11 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     pm=UsdPhysics.MaterialAPI.Apply(physics_mat.GetPrim())
     pm.CreateStaticFrictionAttr(SPEC.friction_static); pm.CreateDynamicFrictionAttr(SPEC.friction_dynamic); pm.CreateRestitutionAttr(0.)
     layout=load_layout()
-    center=np.array([.385,.035,SPEC.surface_world_z])
+    # The reachable fixture pose is 80 mm closer to the robot than the legacy
+    # scene. This is scene-construction data only, never a robot target.
+    if tray_center_xy is None:
+        tray_center_xy=(.305,.035)
+    center=np.array([float(tray_center_xy[0]),float(tray_center_xy[1]),SPEC.surface_world_z])
     yaw=float(rng.uniform(-2,2)) if randomize else 0.
     if randomize: center[:2]+=rng.uniform(-.008,.008,2)
     R=rotation(0,yaw)

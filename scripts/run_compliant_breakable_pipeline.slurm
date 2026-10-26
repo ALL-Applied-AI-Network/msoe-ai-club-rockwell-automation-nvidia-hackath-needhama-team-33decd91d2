@@ -57,6 +57,15 @@ echo "[pipeline] 3/4: Running compliant, breakable digital twin simulation..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action"
 
+if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
+    echo "[pipeline] compliant simulation produced no frames; refusing to run overlay" >&2
+    if [[ -f "$action/failure_report.json" ]]; then
+        echo "[pipeline] planning failure report:" >&2
+        cat "$action/failure_report.json" >&2
+    fi
+    exit 1
+fi
+
 echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
 ./.conda_env/bin/python src/remediation/overlay_yolo_frames.py \
     --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0

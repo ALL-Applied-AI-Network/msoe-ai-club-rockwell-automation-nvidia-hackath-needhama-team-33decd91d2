@@ -61,7 +61,8 @@ def run(args):
         paper_color=tuple(float(x) for x in args.paper_color.split(',')) if args.paper_color else None
         if paper_color is not None and (len(paper_color) != 3 or any(x < 0 or x > 1 for x in paper_color)):
             raise ValueError('--paper-color must be r,g,b with values in [0,1]')
-        inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,paper_color)
+        inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
+                              paper_color,(args.tray_center_x,args.tray_center_y))
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -148,6 +149,10 @@ def parser():
     p.add_argument('--crooked',type=int,default=1); p.add_argument('--missing',type=int,default=1)
     p.add_argument('--table-caps',type=int,default=1); p.add_argument('--steps',type=int,default=360)
     p.add_argument('--paper-color', help='Optional colored paper under the table-cap area, as r,g,b in [0,1]')
+    p.add_argument('--tray-center-x',type=float,default=.305,
+                   help='Fixture center X in metres for scene construction (default: 0.305).')
+    p.add_argument('--tray-center-y',type=float,default=.035,
+                   help='Fixture center Y in metres for scene construction (default: 0.035).')
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
     return p
 

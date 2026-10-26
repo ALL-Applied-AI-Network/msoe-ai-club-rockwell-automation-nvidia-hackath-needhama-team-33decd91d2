@@ -438,9 +438,28 @@ def main():
 
         # Plan trajectories
         print('[compliant-remediation] planning trajectories for spare cap placement and crooked cap press-reseat...', flush=True)
-        paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot = plan_realistic_remediation_trajectories(
-            spare, missing, initial_cr_pos, tool_offset
-        )
+        try:
+            paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot = plan_realistic_remediation_trajectories(
+                spare, missing, initial_cr_pos, tool_offset
+            )
+        except BaseException as exc:
+            # Isaac can otherwise close cleanly for SystemExit-like failures,
+            # leaving the pipeline to fail later with an empty frame directory.
+            failure = {
+                'stage': 'trajectory_planning',
+                'scene': str(args.scene),
+                'error_type': type(exc).__name__,
+                'error': str(exc),
+                'selected_targets': {
+                    'table_cap': spare,
+                    'missing_cap': missing,
+                    'crooked_cap': crooked,
+                },
+            }
+            (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2) + '\n')
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise RuntimeError('trajectory planning exited before producing a path') from exc
+            raise
         print(f'[compliant-remediation] all trajectories planned successfully for missing={missing_slot}, crooked={crooked_slot}', flush=True)
 
         breakability_monitor = VialBreakabilityMonitor(stage, slots=(missing_slot, crooked_slot))

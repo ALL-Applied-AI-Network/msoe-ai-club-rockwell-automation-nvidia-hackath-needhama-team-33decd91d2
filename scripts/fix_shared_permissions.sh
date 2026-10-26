@@ -8,6 +8,7 @@ TEAM_DIR="/data/ai_club/team_14_2026"
 SHARED_SCENES="${TEAM_DIR}/scenes"
 SHARED_DATA="${TEAM_DIR}/data"
 SHARED_CACHE="${TEAM_DIR}/cache"
+SHARED_RUNS="${TEAM_DIR}/runs"
 
 echo "=== Configuring permissions for ${TEAM_DIR} ==="
 
@@ -16,16 +17,16 @@ if [ ! -d "${TEAM_DIR}" ]; then
     exit 0
 fi
 
-# 1. Enable user + group read/write/execute on team root
-chmod u+rwx,g+rwxs "${TEAM_DIR}" 2>/dev/null || true
-chgrp ai_club "${TEAM_DIR}" 2>/dev/null || true
+# 1. Create the collaboration directories before applying the workspace policy.
+mkdir -p "${SHARED_SCENES}" "${SHARED_CACHE}" "${SHARED_RUNS}"
 
-# 2. Create and configure scenes directory for team collaboration
-mkdir -p "${SHARED_SCENES}" "${SHARED_CACHE}"
-chgrp -R ai_club "${SHARED_SCENES}" "${SHARED_CACHE}" 2>/dev/null || true
-chmod -R g+rwxs "${SHARED_SCENES}" "${SHARED_CACHE}" 2>/dev/null || true
+# 2. Make the entire team workspace owner/group-readable, writable, and
+# executable recursively.  The set-group-ID bit keeps newly created entries in
+# the ai_club group.  Raw data is made read-only again immediately below.
+chgrp -R ai_club "${TEAM_DIR}" 2>/dev/null || true
+chmod -R u+rwx,g+rwxs "${TEAM_DIR}" 2>/dev/null || true
 
-# 3. Enforce strictly Read-Only on raw competition data (extracted from zip)
+# 3. Enforce strictly read-only raw competition data (extracted from zip).
 if [ -d "${SHARED_DATA}" ]; then
     echo "Enforcing strictly Read-Only permissions on raw competition data (${SHARED_DATA})..."
     chmod -R a-w "${SHARED_DATA}" 2>/dev/null || true
@@ -33,4 +34,4 @@ if [ -d "${SHARED_DATA}" ]; then
 fi
 
 echo "=== Shared directory permissions successfully configured ==="
-ls -ld "${TEAM_DIR}" "${SHARED_SCENES}" "${SHARED_DATA}"
+ls -ld "${TEAM_DIR}" "${SHARED_SCENES}" "${SHARED_RUNS}" "${SHARED_DATA}"
