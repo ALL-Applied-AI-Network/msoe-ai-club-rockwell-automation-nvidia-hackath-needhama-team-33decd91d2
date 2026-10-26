@@ -15,7 +15,7 @@ model_type: Hybrid
 
 # --- Task ---
 task_id: tray-remediation-14
-task: Inspect vial tray, reseat crooked caps, and replace missing caps from loose caps on the table.
+task: "TableCam-guided supervised vial-cap remediation: replace a missing cap from a loose cap and reseat a crooked cap."
 
 # --- Test Setup ---
 # Tell us how to prepare the workspace for each rollout.
@@ -30,7 +30,7 @@ layout: different
 # different: May change object positions across rollouts.
 
 # --- Evaluation ---
-rollouts: 10                      # Number of attempts in this test
+rollouts: 1                       # One supervised calibration/motion-validation attempt
                                   # Each attempt is scored success or failure
 
 # --- Hardware ---

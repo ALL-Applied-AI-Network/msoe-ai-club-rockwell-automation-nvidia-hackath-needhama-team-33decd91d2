@@ -105,7 +105,11 @@ Required checks:
 2. `data.yaml` names exactly the four classes above.
 3. Evaluation reports per-class results; synthetic metrics are not evidence of
    performance on physical TableCam images.
-4. The checkpoint exists at `training/weights/best.pt`.
+4. The checkpoint exists at `training/weights/best.pt`. For a checkpoint that
+   has passed team review, copy it to `shared/inspection_models/` and record
+   its source path and SHA-256 checksum in
+   [SHARED_MODEL_REGISTRY.md](SHARED_MODEL_REGISTRY.md). Do not put models in
+   the read-only `shared/data/` directory.
 
 ## 4. Run the current full TableCam-to-action simulation sequence
 
@@ -174,24 +178,79 @@ observe TableCam → run YOLO → choose one safe action → execute a short chu
 ```
 
 The required implementation location is `PhysicalAI-Hackathon-2026/policy.py`.
-It must load the approved checkpoint, request TableCam colour/depth, use the
+It loads the approved checkpoint, requests TableCam colour/depth, uses the
 real-cell camera calibration in `PhysicalAI-Hackathon-2026/calibration/`, and
-return short, fixed-down TCP action chunks. The present policy remains a safe
-hold policy until this integration and physical calibration are complete.
+returns short, fixed-down TCP action chunks. Its default `hover` mode moves
+only to 75 mm above a detected loose cap. `full` mode runs the supervised
+pick/place/press sequence described below.
 
 Validate the client contract locally before requesting a physical run:
 
 ```bash
 cd PhysicalAI-Hackathon-2026
 uv sync
-uv run run.py --mock
+REMEDIATION_MODE=full uv run run.py --mock --trials 1 --trial-s 25
+```
+
+The current reviewed checkpoint is
+`shared/inspection_models/remediation_yolo_best.pt`. The physical policy uses
+it by default. To override it for an experiment, pass an explicit checkpoint:
+
+```bash
+uv run run.py --checkpoint /absolute/path/to/other.pt
 ```
 
 The mock validates client/API action formatting and limits. It does not validate
 the camera, localization, gripper, pickup, seating, or safety around the actual
-tray. Do not use `uv run run.py --submit` until the policy has passed supervised
-physical single-action trials and the submission files describe the actual
-fixture and custom fingers.
+tray.
+
+### Request a physical-test slot
+
+Use the reviewed files `PhysicalAI-Hackathon-2026/submission/submission.yaml`
+and `PhysicalAI-Hackathon-2026/submission/placement.yaml`. The current request
+describes one supervised rollout: one loose replacement cap on the table, one
+missing tray cap, and one visibly crooked tray cap. Prepare that arrangement
+with the operator before the rollout.
+
+From `PhysicalAI-Hackathon-2026`, send the request:
+
+```bash
+uv run run.py --submit
+```
+
+The client prints a request ID and writes its private request secret to
+`.request.json`. Do not commit, delete, or share that file. Book a 30-minute
+slot with the request ID at <https://hackathon.sidclab.org/#calendar>, then
+check whether the request has been approved:
+
+```bash
+uv run run.py --status
+```
+
+### Run the approved physical test from a compute node
+
+Do not keep the live client on a management node. Before the scheduled slot,
+open an interactive compute-node shell that lasts longer than the reservation:
+
+```bash
+srun --partition=teaching --cpus-per-task=4 --mem=8G --time=00:45:00 --pty bash
+cd ~/Documents/GitHub/innovation-lab-fall-2026/PhysicalAI-Hackathon-2026
+```
+
+Run the approved supervised remediation policy and leave that terminal open for
+the full slot:
+
+```bash
+REMEDIATION_MODE=full uv run run.py
+```
+
+The policy takes a fresh TableCam snapshot, chooses predicted defects, raises
+to the transit height, moves horizontally, picks a loose cap, places it on a
+missing vial, then presses a crooked cap. It re-observes after pickup and after
+each repair. It keeps the fingers straight down. It currently assumes the
+custom-tool TCP is aligned to the CAD contact point, so the pickup, placement,
+and press offsets are provisional zero offsets. Keep the operator ready to
+stop the arm during the first descent.
 
 ## 7. What to preserve outside Git
 
