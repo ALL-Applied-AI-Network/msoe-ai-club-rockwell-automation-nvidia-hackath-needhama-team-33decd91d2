@@ -114,6 +114,14 @@ def make_cap(stage,path,position,R,mat,cavity_mat,physics_mat,dynamic=True):
     # USD matrices use row vectors.
     quat=Gf.Matrix3d(*np.asarray(R).T.reshape(-1).tolist()).ExtractRotation().GetQuat()
     xf.AddOrientOp().Set(Gf.Quatf(quat))
+    cap_geometry(stage,path,mat,cavity_mat)
+    UsdShade.MaterialBindingAPI.Apply(prim).Bind(physics_mat,materialPurpose='physics')
+    _cap_dynamics(prim,dynamic)
+    return prim
+
+
+def cap_geometry(stage,path,mat,cavity_mat):
+    """Child geometry of a cap rooted at its CAD origin (flange underside on the axis)."""
     # Hollow tapered plug and flange.  The cavity is deliberately open through
     # the top flange: it is a uniform-wall sleeve, not a solid-topped stopper.
     # Convex sectors preserve that void for dynamic PhysX contact.
@@ -152,7 +160,9 @@ def make_cap(stage,path,position,R,mat,cavity_mat,physics_mat,dynamic=True):
     bottom.AddTranslateOp().Set(Gf.Vec3d(0,0,-SPEC.plug_depth+SPEC.plug_bottom_face_thickness/2))
     collision(bottom.GetPrim())
     UsdShade.MaterialBindingAPI.Apply(bottom.GetPrim()).Bind(mat)
-    UsdShade.MaterialBindingAPI.Apply(prim).Bind(physics_mat,materialPurpose='physics')
+
+
+def _cap_dynamics(prim,dynamic):
     if dynamic:
         UsdPhysics.RigidBodyAPI.Apply(prim).CreateRigidBodyEnabledAttr(True)
         UsdPhysics.MassAPI.Apply(prim).CreateMassAttr(.005)
@@ -160,7 +170,6 @@ def make_cap(stage,path,position,R,mat,cavity_mat,physics_mat,dynamic=True):
         phys.CreateLinearDampingAttr(1.2); phys.CreateAngularDampingAttr(2.)
         phys.CreateSolverPositionIterationCountAttr(32); phys.CreateSolverVelocityIterationCountAttr(8)
         phys.CreateEnableCCDAttr(True)
-    return prim
 
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True):

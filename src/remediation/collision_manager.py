@@ -187,23 +187,25 @@ class CollisionSubAgent:
                 PhysxSchema.PhysxRigidBodyAPI.Apply(jaw_prim).CreateEnableCCDAttr().Set(True)
 
             proxy_path = f"{jaw_path}/CustomFingerCollisionProxy"
-            prim = stage.GetPrimAtPath(proxy_path)
-            if not prim.IsValid():
+            root = stage.GetPrimAtPath(proxy_path)
+            if not root.IsValid():
                 continue
 
-            # Ensure collision is ENABLED
-            col_api = UsdPhysics.CollisionAPI.Apply(prim)
-            col_api.CreateCollisionEnabledAttr().Set(True)
+            # The proxy is an Xform of convex pieces that keep the CAD pockets open.
+            for prim in Usd.PrimRange(root):
+                if not prim.HasAPI(UsdPhysics.CollisionAPI):
+                    continue
+                UsdPhysics.CollisionAPI(prim).CreateCollisionEnabledAttr().Set(True)
 
-            # PhysX sub-millimeter contact offset
-            physx_col = PhysxSchema.PhysxCollisionAPI.Apply(prim)
-            physx_col.CreateContactOffsetAttr().Set(self.cfg.finger_contact_offset_m)
-            physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
+                # PhysX sub-millimeter contact offset
+                physx_col = PhysxSchema.PhysxCollisionAPI.Apply(prim)
+                physx_col.CreateContactOffsetAttr().Set(self.cfg.finger_contact_offset_m)
+                physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
 
-            # Bind viscoelastic high-friction pad material with physics purpose
-            UsdShade.MaterialBindingAPI.Apply(prim).Bind(
-                pad_material, materialPurpose="physics"
-            )
+                # Bind viscoelastic high-friction pad material with physics purpose
+                UsdShade.MaterialBindingAPI.Apply(prim).Bind(
+                    pad_material, materialPurpose="physics"
+                )
             configured.append(proxy_path)
 
         return configured

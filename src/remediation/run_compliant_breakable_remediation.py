@@ -42,9 +42,10 @@ sys.path[:0] = [
     str(ROOT / 'shared/data/fanuc_er4ia_sim'),
 ]
 
-# Physical CAD-measured grasp tip offset for the custom 3D-printed conformal gripper
-# (derived from custom_gripper_tcp_metrology.json).
-SIMULATION_TOOL_OFFSET_M = 0.2843020875330954
+# Tool point: the held cap's CAD origin (flange underside on the pocket axis),
+# derived from data/gripper.step + SMC-MHZL2-16D2.step by custom_gripper.
+# None = use the mounted CAD value; the CLI flag only overrides the axial distance.
+SIMULATION_TOOL_OFFSET_M = None
 
 # Physical glass vial fracture threshold parameters
 VIAL_AXIAL_FRACTURE_LIMIT_N = 65.0
@@ -94,23 +95,28 @@ def staged_z_profile(z_start, z_end, count=25):
     return zs
 
 
-def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, tool_offset_m):
+def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, tool_offset):
     """Solve IK paths for complete pick-and-place spare remediation and compliant press-reseat.
     
     Dynamically maps missing and crooked cap perceptions to fixture layout apertures.
+    `tool_offset` is the J6-frame cap-origin point, so every waypoint below is the
+    held cap's origin (flange underside) and the seat waypoint is the rim plane.
     """
     import fk
     import ik
     import scene_config as C
-    from src.remediation.geometry import SPEC, load_layout, rim_base_z
+    from src.remediation.geometry import SPEC, load_layout, rim_base_z, transit_base_z
 
     limits = np.deg2rad([C.JOINT_LIMITS_DEG[f'J{i}'] for i in range(1, 7)])
     ik.set_tool_axis(C.TOOL_AXIS)
     ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
     down = np.array([0., 0., -1.])
-    tool_offset = (tool_offset_m, 0.0, -0.0243)
+    tool_offset = tuple(tool_offset)
+    rim_z = rim_base_z()
+    # Cap plug tip 2 mm above the rim when the insertion starts.
+    engage_z = rim_z + SPEC.plug_depth + 0.002
 
-    transit_z = 0.285
+    transit_z = transit_base_z()
     start = np.array([.24, .25, transit_z])
 
     tray_center_base = np.array([0.385, 0.035])
@@ -120,25 +126,26 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     # 1. Spare cap waypoints (Table_00)
     p_sp = np.asarray(spare['base_pos_m'])
     high_sp = np.array([p_sp[0], p_sp[1], transit_z])
-    app_sp = np.array([p_sp[0], p_sp[1], 0.040])
-    contact_sp = np.array([p_sp[0], p_sp[1], 0.000])
+    # Detected table cap origin; the pocket ledge closes onto its flange underside.
+    contact_sp = np.array([p_sp[0], p_sp[1], p_sp[2]])
+    app_sp = contact_sp + np.array([0., 0., 0.040])
 
     # 2. Missing cap waypoints (dynamically matched from TableCam detection)
     p_mi = np.asarray(missing['base_pos_m'])
     missing_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_mi[:2]))
     p_mi_bore = slots_base_xy[missing_slot]
     high_mi = np.array([p_mi_bore[0], p_mi_bore[1], transit_z])
-    engage_mi = np.array([p_mi_bore[0], p_mi_bore[1], 0.275])
-    seat_mi = np.array([p_mi_bore[0], p_mi_bore[1], 0.25934])
+    engage_mi = np.array([p_mi_bore[0], p_mi_bore[1], engage_z])
+    seat_mi = np.array([p_mi_bore[0], p_mi_bore[1], rim_z])
 
     # 3. Crooked cap waypoints (dynamically matched from TableCam detection)
     p_cr_init = np.array([crooked_init_pos[0], crooked_init_pos[1]])
     crooked_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_cr_init[:2]))
     p_cr_bore = slots_base_xy[crooked_slot]
     high_cr_vert = np.array([p_cr_bore[0], p_cr_bore[1], transit_z])
-    app_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.285])
-    engage_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.275])
-    seat_cr = np.array([p_cr_bore[0], p_cr_bore[1], 0.25934])
+    app_cr = np.array([p_cr_bore[0], p_cr_bore[1], transit_z])
+    engage_cr = np.array([p_cr_bore[0], p_cr_bore[1], engage_z])
+    seat_cr = np.array([p_cr_bore[0], p_cr_bore[1], rim_z])
 
     q_home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
     q_cur, ok = ik.solve(q_home, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
@@ -364,7 +371,7 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--simulation-tool-offset-m', type=float, default=SIMULATION_TOOL_OFFSET_M)
     args = parser.parse_args()
-    SIMULATION_TOOL_OFFSET_M = float(args.simulation_tool_offset_m)
+    SIMULATION_TOOL_OFFSET_M = args.simulation_tool_offset_m
 
     current_observation = json.loads(args.detections.read_text())
     if current_observation.get('source') != 'current_loaded_scene_tablecam':
@@ -400,7 +407,7 @@ def main():
         print('[compliant-remediation] scene open', flush=True)
 
         world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/60.)
-        attach_visual_pair(stage)
+        mount = attach_visual_pair(stage)
         attach_collision_proxies(stage)
         col_report = configure_stage_collisions(stage)
         print(f'[compliant-remediation] custom gripper mounted; stage collisions configured: {col_report}', flush=True)
@@ -411,7 +418,11 @@ def main():
         names = list(arm.dof_names)
         arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
 
-        tool_offset = (SIMULATION_TOOL_OFFSET_M, 0.0, -0.0243)
+        tool_offset = tuple(mount['cap_seat_tcp_j6_m'])
+        if SIMULATION_TOOL_OFFSET_M is not None:
+            tool_offset = (float(SIMULATION_TOOL_OFFSET_M),) + tool_offset[1:]
+        jaw_grip = mount['cap_grip_jaw_m']
+        print(f'[compliant-remediation] CAD tool point {tool_offset}, flange grip jaw {jaw_grip:.5f} m', flush=True)
 
         # Identify physical cap prims in USD stage
         spare_prim = find_closest_cap_prim(stage, spare['base_pos_m'])
@@ -428,7 +439,7 @@ def main():
         # Plan trajectories
         print('[compliant-remediation] planning trajectories for spare cap placement and crooked cap press-reseat...', flush=True)
         paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot = plan_realistic_remediation_trajectories(
-            spare, missing, initial_cr_pos, SIMULATION_TOOL_OFFSET_M
+            spare, missing, initial_cr_pos, tool_offset
         )
         print(f'[compliant-remediation] all trajectories planned successfully for missing={missing_slot}, crooked={crooked_slot}', flush=True)
 
@@ -437,6 +448,9 @@ def main():
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
         camera.initialize()
         init_positions = set_jaw_separation(arm, names, C.JAW_OPEN)
+        # Warm up at the first planned waypoint so step 0 is not a ~30 deg
+        # home-to-start snap with a huge feedforward velocity.
+        init_positions[arm_idx] = paths['approach_spare'][0]
         arm.set_joint_positions(init_positions)
         arm.set_joint_velocities(np.zeros(len(names)))
         arm.apply_action(ArticulationAction(joint_positions=init_positions))
@@ -449,24 +463,26 @@ def main():
         frame_dir = args.out / 'frames'
         frame_dir.mkdir(exist_ok=True)
 
-        clamp_jaws = np.linspace(C.JAW_OPEN, C.JAW_CLOSED, 20)
-        release_jaws = np.linspace(C.JAW_CLOSED, C.JAW_OPEN, 20)
+        # The half-pockets are coaxial at jaw_grip; fully closed would drive the
+        # vial lip 0.65 mm into the glass on each side.
+        clamp_jaws = np.linspace(C.JAW_OPEN, jaw_grip, 20)
+        release_jaws = np.linspace(jaw_grip, C.JAW_OPEN, 20)
 
         # 15-phase authentic remediation sequence
         phases = [
             ('approach_spare', paths['approach_spare'], [C.JAW_OPEN]*len(paths['approach_spare']), 'free'),
             ('clamp_spare', [None]*20, clamp_jaws, 'clamping_spare'),
-            ('lift_spare', paths['lift_spare'], [C.JAW_CLOSED]*len(paths['lift_spare']), 'carrying_spare'),
-            ('carry_spare', paths['carry_spare'], [C.JAW_CLOSED]*len(paths['carry_spare']), 'carrying_spare'),
-            ('engage_missing_bore', paths['engage_missing_bore'], [C.JAW_CLOSED]*len(paths['engage_missing_bore']), 'engage_spare'),
-            ('staged_insertion_missing', paths['staged_insertion_missing'], [C.JAW_CLOSED]*len(paths['staged_insertion_missing']), 'staged_spare'),
-            ('dwell_missing', [None]*15, [C.JAW_CLOSED]*15, 'dwell_spare'),
+            ('lift_spare', paths['lift_spare'], [jaw_grip]*len(paths['lift_spare']), 'carrying_spare'),
+            ('carry_spare', paths['carry_spare'], [jaw_grip]*len(paths['carry_spare']), 'carrying_spare'),
+            ('engage_missing_bore', paths['engage_missing_bore'], [jaw_grip]*len(paths['engage_missing_bore']), 'engage_spare'),
+            ('staged_insertion_missing', paths['staged_insertion_missing'], [jaw_grip]*len(paths['staged_insertion_missing']), 'staged_spare'),
+            ('dwell_missing', [None]*15, [jaw_grip]*15, 'dwell_spare'),
             ('release_spare', [None]*20, release_jaws, 'releasing_spare'),
             ('retreat_from_placed', paths['retreat_from_placed'], [C.JAW_OPEN]*len(paths['retreat_from_placed']), 'free'),
-            ('transit_to_crooked', paths['transit_to_crooked'], [C.JAW_CLOSED]*len(paths['transit_to_crooked']), 'free'),
-            ('approach_crooked', paths['approach_crooked'], [C.JAW_CLOSED]*len(paths['approach_crooked']), 'approach_crooked'),
-            ('staged_reseat_crooked', paths['staged_reseat_crooked'], [C.JAW_CLOSED]*len(paths['staged_reseat_crooked']), 'staged_crooked'),
-            ('dwell_crooked', [None]*15, [C.JAW_CLOSED]*15, 'dwell_crooked'),
+            ('transit_to_crooked', paths['transit_to_crooked'], [jaw_grip]*len(paths['transit_to_crooked']), 'free'),
+            ('approach_crooked', paths['approach_crooked'], [jaw_grip]*len(paths['approach_crooked']), 'approach_crooked'),
+            ('staged_reseat_crooked', paths['staged_reseat_crooked'], [jaw_grip]*len(paths['staged_reseat_crooked']), 'staged_crooked'),
+            ('dwell_crooked', [None]*15, [jaw_grip]*15, 'dwell_crooked'),
             ('release_crooked', [None]*20, release_jaws, 'releasing_crooked'),
             ('retreat_home', paths['retreat_home'], [C.JAW_OPEN]*len(paths['retreat_home']), 'free'),
         ]
@@ -504,20 +520,22 @@ def main():
                 velocities = np.zeros(len(names))
                 velocities[arm_idx] = vel_arm
 
-                arm.set_joint_positions(positions)
-                arm.set_joint_velocities(velocities)
+                # Drive through the joint PD targets only. Teleporting the joints
+                # (set_joint_positions) every step re-inserts any contacting
+                # collider into the static tray, and PhysX's depenetration impulse
+                # then fights the weak wrist drives -- the rim chatter.
                 arm.apply_action(ArticulationAction(joint_positions=positions, joint_velocities=velocities))
 
                 # ---------------- SPARE CAP (MISSING SLOT) ----------------
                 if (mode == 'carrying_spare' or mode == 'engage_spare') and spare_prim is not None:
                     _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.00836])
+                    p_cap_world = p_tcp_base + np.array([0., 0., SPEC.world_base_z])
                     set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
                     cap_status_text = f'CARRY SPARE TO {missing_slot}'
 
                 if mode == 'staged_spare' and spare_prim is not None:
                     _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = np.array([p_tcp_base[0], p_tcp_base[1], p_tcp_base[2] + SPEC.world_base_z + 0.00836])
+                    p_cap_world = p_tcp_base + np.array([0., 0., SPEC.world_base_z])
                     set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
                     # Staged resistance force building from 10 N -> 22.4 N
                     progress = (step_idx + 1) / float(len(path))
@@ -616,7 +634,8 @@ def main():
             'scene': str(args.scene),
             'current_scene_detections': str(args.detections),
             'current_scene_tablecam_observation': current_observation,
-            'simulation_tool_offset_m': SIMULATION_TOOL_OFFSET_M,
+            'simulation_tool_offset_j6_m': list(tool_offset),
+            'cap_grip_jaw_m': jaw_grip,
             'missing_slot': missing_slot,
             'crooked_slot': crooked_slot,
             'vial_breakability': {

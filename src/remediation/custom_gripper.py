@@ -1,83 +1,188 @@
-"""Visual-only first-pass mount for the two custom gripper halves.
+"""CAD-derived mount, collision geometry and TCP for the two custom finger halves.
 
-The user confirmed that the supplied STEP is one half: local -Z is the gripping
-direction and the top, +Y inset face mates to the pneumatic jaw's inner face.
-The transform below is therefore an inspectable mounting hypothesis, not a
-contact-qualified TCP or collision model.
+Sources of truth (see runs/archive/2026-10-26_cad_audit for the extraction):
+- data/gripper.step: one finger half, metres.  Dimensions below are B-rep
+  vertex / face values, NOT the raw CARTESIAN_POINT envelope (which includes
+  axis placements and once produced a phantom 91.5 x 22.3 x 35.6 mm finger).
+  The solid is 50.8 x 15.875 x 22.225 mm.  Its inner face carries two coaxial
+  pockets sized to the CSI CAD parts: r 15.875 mm (cap flange, 1.250 in) and
+  r 13.589 mm (vial OD, 1.070 in).
+- jeremiah_given_context/SMC-MHZL2-16D2.step: SMC body and prongs, mm.  Each
+  prong is a carriage plus a 15 x 5 x 8 mm blade with two 3.4 mm holes 7.0 mm
+  apart, matching the finger's two 2.8 mm holes 7.0 mm apart.  The STEP pose is
+  the open pose (jaw centres +/-13.9 mm, as cell.py assumes).
+
+Finger frame (STEP): length along Z with the tip at -Z, grip side +Y, notch
+for the blade cut into the -Y back.  The blade slides into the notch, its inner
+face against the inset face, its tip against the notch floor.
 """
 from pathlib import Path
 
+import numpy as np
 from pxr import Gf, UsdGeom, UsdPhysics
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET = ROOT / 'data/gripper.usd'
-SOURCE_Y_MAX = 0.00175355771760241
-SOURCE_Y_MIN = -0.0205384609807311
-SOURCE_Y_CENTER = (SOURCE_Y_MIN + SOURCE_Y_MAX) / 2.0
-SOURCE_Z_MAX = 0.0437506223631226
-SOURCE_Z_MIN = -0.0477762395223592
-SOURCE_Z_TOP = 0.0437506223631226
-SOURCE_Z_BOTTOM = -0.0477762395223592
-# First visual alignment adjustment from the rendered inspection image.
-# +X is farther along the tool, away from the robot base.
-# Final visual alignment: the custom fingers sit 5 mm forward of the retracted
-# review pose, so their inset mounting faces align with the SMC carrier holes.
-FORWARD_EXTENSION = 0.0185
-DOWNWARD_SHIFT = 0.0065
-MIN_FINGER_GAP = 0.003
-STARTING_FINGER_GAP = MIN_FINGER_GAP + 2 * 0.006
-# The cell places each jaw root laterally before applying our CAD reference.
-# Compensate that existing root offset when positioning the asymmetric STEP.
-# The articulated Isaac jaws add 12 mm of total separation over their travel.
-# The initial visual-only pose was centered at the wide end, yielding a
-# measured 15--27 mm CAD gap.  Shift each half 6 mm inward so the commanded
-# mechanism spans the required 3--15 mm mesh separation.
-JAW_ROOT_LATERAL_COMP = 0.00425
-# The supplied pneumatic linkage has opposite left/right motion relative to
-# the custom STEP reference frame.  Pair a custom half to the counterpart jaw
-# and compensate its fixed mounting offset so open/closed mesh gaps remain
-# 15/3 mm while retaining the supplied SMC carrier motion.
-COUNTERPART_JAW_INSET = 0.018002
-# Measured from the mounted CAD envelope in Isaac (see
-# custom_gripper_tcp_metrology.json). This supports simulation approach-pose
-# visualization only; physical TCP/contact calibration remains required.
-SIMULATION_GRASP_TIP_OFFSET_M = 0.2843020875330954
+
+# data/gripper.step, finger frame, metres.
+FINGER_X_RANGE = (0.0134043, 0.0356293)
+FINGER_BACK_Y = -0.015875
+FINGER_INSET_FACE_Y = -0.00635          # mates to the SMC blade inner face
+FINGER_NOTCH_X_RANGE = (0.020389, 0.028644)
+FINGER_NOTCH_FLOOR_Z = 0.0297806        # SMC blade tip seats here
+FINGER_TOP_Z = 0.0437506
+FINGER_TIP_Z = -0.0070494
+FINGER_POCKET_AXIS_XY = (0.0245168, 0.0017536)
+FINGER_FLANGE_LEDGE_Z = -0.004304       # cap flange underside rests here
+# (z0, z1, radius) of the coaxial pocket from the tip upward.
+FINGER_POCKET_BANDS = (
+    (FINGER_TIP_Z, FINGER_FLANGE_LEDGE_Z, 0.013589),
+    (FINGER_FLANGE_LEDGE_Z, 0.0004585, 0.015875),
+    (0.0004585, 0.0208719, 0.013589),
+    (0.0208719, 0.0256344, 0.015875),
+)
+FINGER_MOUNT_Z = 0.0256344              # solid mount block above the pocket
+
+# SMC-MHZL2-16D2.step (prong 'hole_v' placed by the assembly transforms).
+SMC_BLADE_TIP_X = 0.0173                # beyond the body jaw face, along the tool axis
+SMC_BLADE_INNER_FACE_OPEN = 0.01345     # from the gripper centreline, jaws open
+
+POCKET_FROM_INSET_FACE = FINGER_POCKET_AXIS_XY[1] - FINGER_INSET_FACE_Y
+# Radial clearance added to the pocket collision surfaces only.  The CAD fit is
+# line-to-line (lip r = vial OD r = 13.589 mm); with zero clearance PhysX caught
+# the lip on the rim top, held the wrist off the seat and friction-locked the
+# jaws shut.  0.2 mm (print tolerance scale) seats contact-free.  Visual geometry
+# and the TCP stay exactly at CAD.
+FINGER_POCKET_SIM_CLEARANCE = 0.0002
+
+
+def cap_grip_jaw(jaw_open):
+    """Per-jaw opening at which both half-pockets are coaxial (the flange grip pose)."""
+    return jaw_open - (SMC_BLADE_INNER_FACE_OPEN - POCKET_FROM_INSET_FACE)
+
+
+def cap_seat_tcp(body_face_x):
+    """J6-frame point on the pocket axis at the flange ledge.
+
+    This is the CAD origin of the held cap (flange underside on its axis), so at
+    seating it coincides with the vial rim plane.
+    """
+    return (body_face_x + SMC_BLADE_TIP_X + FINGER_NOTCH_FLOOR_Z - FINGER_FLANGE_LEDGE_Z, 0.0, 0.0)
+
+
+def _jaw_mount(stage, jaw_root):
+    """(finger->jaw Gf.Matrix4d, sign) from the jaw's prismatic joint and the SMC blade."""
+    import cell
+    import scene_config as C
+    joint = next((p for p in stage.Traverse() if p.IsA(UsdPhysics.PrismaticJoint)
+                  and [str(t) for t in UsdPhysics.PrismaticJoint(p).GetBody1Rel().GetTargets()] == [jaw_root]), None)
+    if joint is None:
+        raise RuntimeError(f'No prismatic joint drives {jaw_root}')
+    j = UsdPhysics.PrismaticJoint(joint)
+    if j.GetAxisAttr().Get() != 'Y':
+        raise RuntimeError(f'{joint.GetPath()} axis is not the finger spread axis')
+    # Joint zero is the open pose (cell.jaw_targets), so the centreline sits at -localPos0.y.
+    origin = np.asarray(j.GetLocalPos0Attr().Get(), float)
+    sign = 1.0 if origin[1] > 0 else -1.0
+    d = -sign                                   # jaw-frame +Y direction toward the centreline
+    y_face = -origin[1] + sign * SMC_BLADE_INNER_FACE_OPEN
+    _check_blade(stage, jaw_root, y_face, sign)
+    # Row-vector matrix: rows are the images of the finger x, y, z axes, then the origin.
+    m = Gf.Matrix4d(0, 0, d, 0,
+                    0, d, 0, 0,
+                    -1, 0, 0, 0,
+                    SMC_BLADE_TIP_X + FINGER_NOTCH_FLOOR_Z, y_face - d * FINGER_INSET_FACE_Y,
+                    -d * FINGER_POCKET_AXIS_XY[0], 1)
+    return m, sign, float(origin[0])
+
+
+def _check_blade(stage, jaw_root, y_face, sign):
+    """Fail loudly if the mounted SMC blade disagrees with the STEP-derived face/tip."""
+    blade = stage.GetPrimAtPath(jaw_root + '/SMCJaw')
+    if not blade.IsValid():
+        return
+    to_jaw = UsdGeom.Xformable(blade).ComputeLocalToWorldTransform(0.) * \
+        UsdGeom.Xformable(stage.GetPrimAtPath(jaw_root)).ComputeLocalToWorldTransform(0.).GetInverse()
+    m = np.asarray(to_jaw, float)
+    v = np.asarray(UsdGeom.Mesh(blade).GetPointsAttr().Get(), float) @ m[:3, :3] + m[3, :3]
+    v = v[v[:, 0] > 0.006]                      # blade beyond the carriage
+    inner = v[:, 1].min() if sign > 0 else v[:, 1].max()
+    if abs(inner - y_face) > 2e-4 or abs(v[:, 0].max() - SMC_BLADE_TIP_X) > 2e-4:
+        raise RuntimeError(f'{jaw_root}/SMCJaw blade (face {inner:.5f}, tip {v[:, 0].max():.5f}) '
+                           f'disagrees with SMC STEP (face {y_face:.5f}, tip {SMC_BLADE_TIP_X:.5f})')
+
+
+def _clip(poly, n, c):
+    """Keep the part of convex polygon `poly` with n.p >= c."""
+    out = []
+    for a, b in zip(poly, poly[1:] + poly[:1]):
+        da, db = n @ a - c, n @ b - c
+        if da >= 0:
+            out.append(a)
+        if da * db < 0:
+            out.append(a + (b - a) * (da / (da - db)))
+    return out
+
+
+def finger_collision_pieces(sectors=12):
+    """Convex prisms (finger frame) covering the solid but never entering the pockets.
+
+    Each pocket band is the finger rectangle minus a disk; it is split into angular
+    sectors about the pocket axis and each sector is clipped by the tangent line at
+    its mid-angle, so collision surfaces sit on or just outside the CAD pocket.
+    """
+    x0, x1 = FINGER_X_RANGE
+    rect = [np.array(p) for p in ((x0, FINGER_BACK_Y), (x1, FINGER_BACK_Y), (x1, 0.), (x0, 0.))]
+    c = np.array(FINGER_POCKET_AXIS_XY)
+    ta, tb = (np.arctan2(-c[1], x - c[0]) for x in (x0, x1))
+    pieces = []
+    for z0, z1, r in FINGER_POCKET_BANDS:
+        for t0, t1 in zip(*(lambda t: (t[:-1], t[1:]))(np.linspace(ta, tb, sectors + 1))):
+            u = lambda t: np.array([np.cos(t), np.sin(t)])
+            poly = _clip(rect, np.array([-u(t0)[1], u(t0)[0]]), np.array([-u(t0)[1], u(t0)[0]]) @ c)
+            poly = _clip(poly, -np.array([-u(t1)[1], u(t1)[0]]), -np.array([-u(t1)[1], u(t1)[0]]) @ c)
+            poly = _clip(poly, u((t0 + t1) / 2), u((t0 + t1) / 2) @ c + r + FINGER_POCKET_SIM_CLEARANCE)
+            if len(poly) >= 3:
+                pieces.append(([tuple(p) for p in poly], z0, z1))
+    nx0, nx1 = FINGER_NOTCH_X_RANGE
+    for (a, b), (ya, yb), (za, zb) in (
+            ((x0, x1), (FINGER_BACK_Y, 0.), (FINGER_MOUNT_Z, FINGER_NOTCH_FLOOR_Z)),
+            ((x0, x1), (FINGER_INSET_FACE_Y, 0.), (FINGER_NOTCH_FLOOR_Z, FINGER_TOP_Z)),
+            ((x0, nx0), (FINGER_BACK_Y, FINGER_INSET_FACE_Y), (FINGER_NOTCH_FLOOR_Z, FINGER_TOP_Z)),
+            ((nx1, x1), (FINGER_BACK_Y, FINGER_INSET_FACE_Y), (FINGER_NOTCH_FLOOR_Z, FINGER_TOP_Z))):
+        pieces.append(([(a, ya), (b, ya), (b, yb), (a, yb)], za, zb))
+    return pieces
 
 
 def attach_collision_proxies(stage):
-    """Attach conservative invisible box proxies for contact-gate testing.
+    """Attach invisible convex collision pieces that follow the CAD finger, pockets open.
 
     These proxies follow the jaw rigid bodies but intentionally do not approve
     contact actions; the release checker still requires swept-path and grasp
     validation.
     """
     import cell
-    import scene_config as C
-    carriage_x, finger_x = cell.gripper_layout()
-    length = SOURCE_Z_MAX - SOURCE_Z_MIN
-    width = SOURCE_Y_MAX - SOURCE_Y_MIN
-    height = 0.0356293480873969
+    from pxr import PhysxSchema
     paths = []
-    for sign, tag in ((1, 'L'), (-1, 'R')):
-        # Match the corrected counterpart-jaw visual linkage so collision
-        # geometry follows the same custom-finger state.
-        jaw_root = cell.JAW_PRIMS['R' if tag == 'L' else 'L']
+    for tag in ('L', 'R'):
+        jaw_root = cell.JAW_PRIMS[tag]
+        m, _, _ = _jaw_mount(stage, jaw_root)
         path = jaw_root + '/CustomFingerCollisionProxy'
-        proxy = UsdGeom.Cube.Define(stage, path)
-        proxy.CreateSizeAttr(1.0)
-        UsdGeom.Xformable(proxy).AddTranslateOp().Set(
-            Gf.Vec3d(finger_x - carriage_x + C.FINGER_LENGTH / 2 + FORWARD_EXTENSION,
-                     (-sign * (width / 2 + STARTING_FINGER_GAP / 2 + JAW_ROOT_LATERAL_COMP)
-                      + sign * COUNTERPART_JAW_INSET),
-                     -0.0178 - DOWNWARD_SHIFT)
-        )
-        UsdGeom.Xformable(proxy).AddScaleOp().Set(Gf.Vec3f(length / 2, width / 2, height / 2))
-        UsdGeom.Imageable(proxy).CreateVisibilityAttr().Set('invisible')
-        UsdPhysics.CollisionAPI.Apply(proxy.GetPrim())
-        from pxr import PhysxSchema
-        physx_col = PhysxSchema.PhysxCollisionAPI.Apply(proxy.GetPrim())
-        physx_col.CreateContactOffsetAttr().Set(0.0005)
-        physx_col.CreateRestOffsetAttr().Set(0.0)
+        root = UsdGeom.Xform.Define(stage, path)
+        UsdGeom.Xformable(root).AddTransformOp().Set(m)
+        UsdGeom.Imageable(root).CreateVisibilityAttr().Set('invisible')
+        for k, (poly, z0, z1) in enumerate(finger_collision_pieces()):
+            n = len(poly)
+            piece = UsdGeom.Mesh.Define(stage, f'{path}/Piece_{k:02d}')
+            piece.CreatePointsAttr([Gf.Vec3f(x, y, z) for z in (z0, z1) for x, y in poly])
+            piece.CreateFaceVertexCountsAttr([n, n] + [4] * n)
+            piece.CreateFaceVertexIndicesAttr(list(range(n))[::-1] + list(range(n, 2 * n)) +
+                                              [i for a in range(n) for i in (a, (a + 1) % n, n + (a + 1) % n, n + a)])
+            UsdPhysics.CollisionAPI.Apply(piece.GetPrim())
+            UsdPhysics.MeshCollisionAPI.Apply(piece.GetPrim()).CreateApproximationAttr('convexHull')
+            physx_col = PhysxSchema.PhysxCollisionAPI.Apply(piece.GetPrim())
+            physx_col.CreateContactOffsetAttr().Set(0.0005)
+            physx_col.CreateRestOffsetAttr().Set(0.0)
         paths.append(path)
     return paths
 
@@ -87,29 +192,16 @@ def attach_visual_pair(stage):
         raise FileNotFoundError(f'Convert custom STEP before mounting: {ASSET}')
     import cell
     import scene_config as C
-    carriage_x, finger_x = cell.gripper_layout()
-    mount_x = finger_x - carriage_x + C.FINGER_LENGTH + SOURCE_Z_BOTTOM + FORWARD_EXTENSION
-    target_center = (SOURCE_Y_MAX - SOURCE_Y_MIN) / 2.0 + STARTING_FINGER_GAP / 2.0
     paths = []
-    for sign, tag in ((1, 'L'), (-1, 'R')):
-        jaw = cell.JAW_PRIMS['R' if tag == 'L' else 'L']
+    for tag in ('L', 'R'):
+        jaw = cell.JAW_PRIMS[tag]
         if not stage.GetPrimAtPath(jaw).IsValid():
             raise RuntimeError(f'Custom gripper requires active jaw {jaw}')
+        m, _, body_face_x = _jaw_mount(stage, jaw)
         path = jaw + '/CustomFingerCad'
         root = UsdGeom.Xform.Define(stage, path)
         root.GetPrim().GetReferences().AddReference(str(ASSET))
-        xf = UsdGeom.Xformable(root)
-        # -Z source (finger bottom) maps to +X tool direction.  The right half
-        # mirrors across the jaw-spread axis, putting each +Y inset face inward.
-        # Center the asymmetric STEP envelope first, then set the inner
-        # surfaces to the 3 mm closed gap. Mirroring applies to the source
-        # center as well as the mesh geometry.
-        y_translation = (-sign * (target_center + SOURCE_Y_CENTER + JAW_ROOT_LATERAL_COMP)
-                         + sign * COUNTERPART_JAW_INSET)
-        xf.AddTranslateOp().Set(Gf.Vec3d(mount_x, y_translation, -0.0178 - DOWNWARD_SHIFT))
-        xf.AddRotateYOp().Set(-90.0)
-        if sign < 0:
-            xf.AddScaleOp().Set(Gf.Vec3f(1.0, -1.0, 1.0))
+        UsdGeom.Xformable(root).AddTransformOp().Set(m)
         paths.append(path)
     # Hide only the stock long blade, soft tip, and detailed extender. Keep the
     # SMC jaw body visible because it is the moving left/right assembly.
@@ -158,18 +250,12 @@ def attach_visual_pair(stage):
     return {
         'asset': str(ASSET.relative_to(ROOT)),
         'paths': paths,
-        'source_down_axis': '-Z',
-        'mounting_face': '+Y inset face',
-        'forward_extension_m': FORWARD_EXTENSION,
-        'downward_shift_m': DOWNWARD_SHIFT,
-        'closed_min_mesh_gap_m': MIN_FINGER_GAP,
-        'open_min_mesh_gap_m': STARTING_FINGER_GAP,
-        'jaw_root_lateral_compensation_m': JAW_ROOT_LATERAL_COMP,
+        'mount': 'SMC blade in finger notch: inset face on blade inner face, blade tip on notch floor',
+        'cap_seat_tcp_j6_m': list(cap_seat_tcp(body_face_x)),
+        'cap_grip_jaw_m': cap_grip_jaw(C.JAW_OPEN),
         'stock_finger_visuals_hidden': ['Finger', 'SoftTip', 'Detail', 'SensorCarrier', 'SensorRedNose', 'OuterCrossBolt',
                                         'MountScrew*', 'ScrewSocket*', 'Tape', 'Collision'],
         'moving_jaw_visual_retained': 'SMCJaw carrier with mounting holes',
-        'starting_jaw_state': 'fully_extended',
-        'starting_extension_per_jaw_m': float(C.JAW_STROKE),
         'hidden_wrist_visuals': hidden_wrist_details,
-        'mode': 'visual_only_no_collision_no_tcp',
+        'mode': 'cad_mounted',
     }

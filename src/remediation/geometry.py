@@ -115,10 +115,10 @@ def world_to_base(position):
     return result
 
 
-def rim_base_z():
+def rim_base_z(spec=SPEC):
     # In the digital twin fixture assembly, vials are supported at base_z = 0.0645 m.
-    # With 203.2 mm (8.00 in) length, the vial top rim is at base_z = 0.2677 m.
-    return 0.2677
+    # With the CAD 0890-01 length (203.0 mm), the vial top rim is at base_z = 0.2675 m.
+    return 0.0645 + spec.vial_height
 
 
 def transit_base_z():

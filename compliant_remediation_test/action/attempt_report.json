@@ -1,7 +1,7 @@
 {
   "mode": "wrist_reorientation_staged_insertion_remediation",
   "physical_robot_authorized": false,
-  "scene": "shared/scenes/remediation_dataset1_v1.usda",
+  "scene": "shared/scenes/remediation_dataset1_v2_cad.usda",
   "current_scene_detections": "compliant_remediation_test/perception/current_scene_detections.json",
   "current_scene_tablecam_observation": {
     "source": "current_loaded_scene_tablecam",
@@ -53,7 +53,12 @@
       }
     ]
   },
-  "simulation_tool_offset_m": 0.2843020875330954,
+  "simulation_tool_offset_j6_m": [
+    0.26838459272823334,
+    0.0,
+    0.0
+  ],
+  "cap_grip_jaw_m": 0.000653599999999999,
   "missing_slot": "G11",
   "crooked_slot": "G21",
   "vial_breakability": {
