@@ -157,25 +157,25 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
 
     paths = {}
 
-    # 1. approach_spare: start -> high_sp (20) -> app_sp (15) -> contact_sp (15) = 50 steps
+    # 1. approach_spare: start -> high_sp (40) -> app_sp (25) -> contact_sp (20) = 85 steps
     q_high_sp, _ = ik.solve(q_cur, high_sp, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    p_start_high = s_curve_joints(q_cur, q_high_sp, 20)
-    p_descend_app, q_tmp = solve_cartesian(q_high_sp, s_curve_pts(high_sp, app_sp, 15), [down]*15)
-    p_descend_contact, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, contact_sp, 15), [down]*15)
+    p_start_high = s_curve_joints(q_cur, q_high_sp, 40)
+    p_descend_app, q_tmp = solve_cartesian(q_high_sp, s_curve_pts(high_sp, app_sp, 25), [down]*25)
+    p_descend_contact, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, contact_sp, 20), [down]*20)
     paths['approach_spare'] = p_start_high + p_descend_app + p_descend_contact
 
-    # 2. lift_spare: contact_sp -> app_sp (15) -> high_sp (15) = 30 steps
-    p_lift_app, q_tmp = solve_cartesian(q_cur, s_curve_pts(contact_sp, app_sp, 15), [down]*15)
-    p_lift_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, high_sp, 15), [down]*15)
+    # 2. lift_spare: contact_sp -> app_sp (20) -> high_sp (25) = 45 steps
+    p_lift_app, q_tmp = solve_cartesian(q_cur, s_curve_pts(contact_sp, app_sp, 20), [down]*20)
+    p_lift_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, high_sp, 25), [down]*25)
     paths['lift_spare'] = p_lift_app + p_lift_high
 
-    # 3. carry_spare: high_sp -> high_mi = 20 steps (smooth joint S-curve to avoid singularity jerk)
+    # 3. carry_spare: high_sp -> high_mi = 35 steps (smooth joint S-curve to avoid singularity jerk)
     q_target_mi, _ = ik.solve(q_cur, high_mi, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['carry_spare'] = s_curve_joints(q_cur, q_target_mi, 20)
+    paths['carry_spare'] = s_curve_joints(q_cur, q_target_mi, 35)
     q_cur = q_target_mi.copy()
 
-    # 4. engage_missing_bore: high_mi -> engage_mi = 15 steps
-    p_eng_mi, q_cur = solve_cartesian(q_cur, s_curve_pts(high_mi, engage_mi, 15), [down]*15)
+    # 4. engage_missing_bore: high_mi -> engage_mi = 20 steps
+    p_eng_mi, q_cur = solve_cartesian(q_cur, s_curve_pts(high_mi, engage_mi, 20), [down]*20)
     paths['engage_missing_bore'] = p_eng_mi
 
     # 5. staged_insertion_missing: engage_mi -> seat_mi = 25 steps
@@ -183,19 +183,19 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     pts_staged_mi = np.array([[seat_mi[0], seat_mi[1], z] for z in z_staged_mi])
     paths['staged_insertion_missing'], q_cur = solve_cartesian(q_cur, pts_staged_mi, [down]*25)
 
-    # 6. retreat_from_placed: seat_mi -> engage_mi (15) -> high_mi (15) = 30 steps
-    p_ret_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_mi, engage_mi, 15), [down]*15)
-    p_ret_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(engage_mi, high_mi, 15), [down]*15)
+    # 6. retreat_from_placed: seat_mi -> engage_mi (20) -> high_mi (25) = 45 steps
+    p_ret_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_mi, engage_mi, 20), [down]*20)
+    p_ret_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(engage_mi, high_mi, 25), [down]*25)
     paths['retreat_from_placed'] = p_ret_eng + p_ret_high
 
-    # 7. transit_to_crooked: high_mi -> high_cr_vert = 20 steps (smooth joint S-curve)
+    # 7. transit_to_crooked: high_mi -> high_cr_vert = 35 steps (smooth joint S-curve)
     q_target_cr, _ = ik.solve(q_cur, high_cr_vert, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['transit_to_crooked'] = s_curve_joints(q_cur, q_target_cr, 20)
+    paths['transit_to_crooked'] = s_curve_joints(q_cur, q_target_cr, 35)
     q_cur = q_target_cr.copy()
 
-    # 8. approach_crooked: high_cr_vert -> app_cr (15) -> engage_cr (10) = 25 steps
-    p_app_cr1, q_tmp = solve_cartesian(q_cur, s_curve_pts(high_cr_vert, app_cr, 15), [down]*15)
-    p_app_cr2, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_cr, engage_cr, 10), [down]*10)
+    # 8. approach_crooked: high_cr_vert -> app_cr (20) -> engage_cr (15) = 35 steps
+    p_app_cr1, q_tmp = solve_cartesian(q_cur, s_curve_pts(high_cr_vert, app_cr, 20), [down]*20)
+    p_app_cr2, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_cr, engage_cr, 15), [down]*15)
     paths['approach_crooked'] = p_app_cr1 + p_app_cr2
 
     # 9. staged_reseat_crooked: engage_cr -> seat_cr = 25 steps
@@ -203,11 +203,11 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     pts_staged_cr = np.array([[seat_cr[0], seat_cr[1], z] for z in z_staged_cr])
     paths['staged_reseat_crooked'], q_cur = solve_cartesian(q_cur, pts_staged_cr, [down]*25)
 
-    # 10. retreat_home: seat_cr -> engage_cr (10) -> high_cr_vert (10) -> start (20) = 40 steps
-    p_home_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_cr, engage_cr, 10), [down]*10)
-    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_vert, 10), [down]*10)
+    # 10. retreat_home: seat_cr -> engage_cr (15) -> high_cr_vert (20) -> start (40) = 75 steps
+    p_home_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_cr, engage_cr, 15), [down]*15)
+    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_vert, 20), [down]*20)
     q_target_home, _ = ik.solve(q_tmp2, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    p_home_transit = s_curve_joints(q_tmp2, q_target_home, 20)
+    p_home_transit = s_curve_joints(q_tmp2, q_target_home, 40)
     paths['retreat_home'] = p_home_eng + p_home_high + p_home_transit
     q_cur = q_target_home.copy()
 
@@ -399,7 +399,7 @@ def main():
         stage = omni.usd.get_context().get_stage()
         print('[compliant-remediation] scene open', flush=True)
 
-        world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/30.)
+        world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/60.)
         attach_visual_pair(stage)
         attach_collision_proxies(stage)
         col_report = configure_stage_collisions(stage)
@@ -476,6 +476,7 @@ def main():
         cr_force_N = 0.0
         cap_status_text = 'SPARE APPROACH'
         q_hold = arm.get_joint_positions()[arm_idx].copy()
+        q_prev = q_hold.copy()
 
         for phase, path, jaw_vals, mode in phases:
             print(f'[compliant-remediation] phase: {phase}', flush=True)
@@ -494,9 +495,18 @@ def main():
                 if joints is not None:
                     q_hold = joints.copy()
                 positions[arm_idx] = q_hold
+
+                # Continuous velocity feedforward matching trajectory derivative
+                dt = 1.0 / 60.0
+                vel_arm = (q_hold - q_prev) / dt
+                q_prev = q_hold.copy()
+
+                velocities = np.zeros(len(names))
+                velocities[arm_idx] = vel_arm
+
                 arm.set_joint_positions(positions)
-                arm.set_joint_velocities(np.zeros(len(names)))
-                arm.apply_action(ArticulationAction(joint_positions=positions))
+                arm.set_joint_velocities(velocities)
+                arm.apply_action(ArticulationAction(joint_positions=positions, joint_velocities=velocities))
 
                 # ---------------- SPARE CAP (MISSING SLOT) ----------------
                 if (mode == 'carrying_spare' or mode == 'engage_spare') and spare_prim is not None:
