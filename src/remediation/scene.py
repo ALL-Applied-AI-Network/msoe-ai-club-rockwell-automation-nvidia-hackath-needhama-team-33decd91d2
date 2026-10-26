@@ -172,11 +172,18 @@ def _cap_dynamics(prim,dynamic):
         phys.CreateEnableCCDAttr(True)
 
 
-def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True):
+def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True, paper_color=None):
     import cell
     if min(crooked,missing,table_caps)<0 or crooked+missing>30 or table_caps>10:
         raise ValueError('Invalid scene inventory (30 vials, at most 10 separated spares)')
     cell.build(stage,with_objects=False)
+    if paper_color is not None:
+        # A thin, non-authoritative colored paper sheet under the spare-cap
+        # area creates background variation without changing the tray geometry.
+        # Its top is just above the nominal table surface so caps settle on it.
+        paper = material(stage, 'TableCapPaper', paper_color, roughness=.72)
+        box(stage, '/World/TableCapPaper', (.37, -.245, SPEC.surface_world_z + .0001),
+            (.27, .12, .0002), paper)
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
     cap_color=np.clip(np.array((.96,.76,.04))+rng.normal(0,.035,3),0,1)

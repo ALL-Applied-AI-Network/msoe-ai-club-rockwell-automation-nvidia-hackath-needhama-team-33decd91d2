@@ -21,7 +21,7 @@ sys.path.insert(0,str(ROOT))
 from src.remediation.geometry import CLASS_NAMES, configuration_hash
 
 
-def generate_dataset(out, scenes=100, seed=1000, crooked=5, missing=5, table_caps=5, fixed_inventory=False, max_attempts=5):
+def generate_dataset(out, scenes=100, seed=1000, crooked=5, missing=5, table_caps=5, fixed_inventory=False, max_attempts=5, paper_colors=()):
     if not os.environ.get('SLURM_JOB_ID'):
         raise RuntimeError('Submit generation with scripts/submit_isaac_job.slurm')
     out=Path(out).resolve()
@@ -69,6 +69,8 @@ def generate_dataset(out, scenes=100, seed=1000, crooked=5, missing=5, table_cap
                     if counts==(0,0,0): counts=(0,0,max(1,table_caps))
                 command=[sys.executable,str(ROOT/'src/remediation/qualify_scene.py'),'--out',str(sample),'--seed',str(sample_seed),
                          '--crooked',str(counts[0]),'--missing',str(counts[1]),'--table-caps',str(counts[2])]
+                if paper_colors:
+                    command.extend(['--paper-color', paper_colors[index % len(paper_colors)]])
                 result=subprocess.run(command,check=False)
                 report_path=sample/'qualification.json'
                 report=json.loads(report_path.read_text()) if report_path.exists() else {}
@@ -107,9 +109,11 @@ if __name__=='__main__':
     p.add_argument('--seed',type=int,default=1000); p.add_argument('--crooked',type=int,default=5)
     p.add_argument('--missing',type=int,default=5); p.add_argument('--table-caps',type=int,default=5)
     p.add_argument('--fixed-inventory',action='store_true',help='Use the same inventory in each scene for a plumbing pilot')
+    p.add_argument('--paper-colors',default='',help='Semicolon-separated r,g,b colors for table-cap paper backgrounds')
     p.add_argument('--max-attempts',type=int,default=5)
     a=p.parse_args()
     if a.scenes<10: p.error('At least 10 independent scenes are required for train/val/test splits')
-    r=generate_dataset(a.out,a.scenes,a.seed,a.crooked,a.missing,a.table_caps,a.fixed_inventory,a.max_attempts)
+    paper_colors=tuple(x.strip() for x in a.paper_colors.split(';') if x.strip())
+    r=generate_dataset(a.out,a.scenes,a.seed,a.crooked,a.missing,a.table_caps,a.fixed_inventory,a.max_attempts,paper_colors)
     print('DATASET_ACCEPTED',r['accepted'],'accepted samples',len(r['samples']),'failed',len(r['failed_samples']))
     if not r['accepted']: raise SystemExit(2)

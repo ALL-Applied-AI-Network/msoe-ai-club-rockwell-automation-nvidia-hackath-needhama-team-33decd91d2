@@ -58,7 +58,10 @@ def run(args):
         from src.remediation.scene import build_scene
         world=World(stage_units_in_meters=1.,physics_dt=1/120.,rendering_dt=1/30.)
         stage=omni.usd.get_context().get_stage()
-        inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed)
+        paper_color=tuple(float(x) for x in args.paper_color.split(',')) if args.paper_color else None
+        if paper_color is not None and (len(paper_color) != 3 or any(x < 0 or x > 1 for x in paper_color)):
+            raise ValueError('--paper-color must be r,g,b with values in [0,1]')
+        inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,paper_color)
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -144,6 +147,7 @@ def parser():
     p.add_argument('--out',required=True); p.add_argument('--seed',type=int,default=42)
     p.add_argument('--crooked',type=int,default=1); p.add_argument('--missing',type=int,default=1)
     p.add_argument('--table-caps',type=int,default=1); p.add_argument('--steps',type=int,default=360)
+    p.add_argument('--paper-color', help='Optional colored paper under the table-cap area, as r,g,b in [0,1]')
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
     return p
 
