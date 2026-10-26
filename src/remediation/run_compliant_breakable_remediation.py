@@ -59,20 +59,38 @@ def choose_candidate(detections, class_name):
     return max(candidates, key=lambda item: item['confidence'])
 
 
+def s_curve_pts(p0, p1, steps):
+    """Generate smooth cosine-eased Cartesian waypoints."""
+    pts = []
+    p0 = np.asarray(p0, float)
+    p1 = np.asarray(p1, float)
+    for i in range(steps):
+        t = (i + 1) / float(steps)
+        s = 0.5 * (1.0 - np.cos(np.pi * t))
+        pts.append(p0 + s * (p1 - p0))
+    return pts
+
+
+def s_curve_joints(q0, q1, steps):
+    """Generate smooth cosine-eased joint waypoints."""
+    pts = []
+    q0 = np.asarray(q0, float)
+    q1 = np.asarray(q1, float)
+    for i in range(steps):
+        t = (i + 1) / float(steps)
+        s = 0.5 * (1.0 - np.cos(np.pi * t))
+        pts.append(q0 + s * (q1 - q0))
+    return pts
+
+
 def staged_z_profile(z_start, z_end, count=25):
-    """Model realistic staged rubber-on-glass friction insertion."""
+    """Model realistic staged rubber-on-glass friction insertion with smooth S-curve easing."""
     zs = []
     for i in range(count):
         t = (i + 1) / float(count)
-        if t < 0.30:
-            frac = (t / 0.30) * 0.45
-        elif t < 0.75:
-            # 50% deceleration zone due to interference fit and rubber friction
-            frac = 0.45 + ((t - 0.30) / 0.45) * 0.35
-        else:
-            # Final bottoming press onto vial rim
-            frac = 0.80 + ((t - 0.75) / 0.25) * 0.20
-        zs.append(z_start + frac * (z_end - z_start))
+        # Smooth cosine easing with friction compression profile
+        s = 0.5 * (1.0 - np.cos(np.pi * t))
+        zs.append(z_start + s * (z_end - z_start))
     return zs
 
 
@@ -113,21 +131,20 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     p_g09_bore = tray_center_base + np.array(layout['slots_m']['G09'])[:2]
 
     # Crooked cap normal and tilted approach direction
-    # Initial quaternion: (-0.55831385, -0.22988324, 0.29683563, 0.7398162)
     w, x, y, z = -0.55831385, -0.22988324, 0.29683563, 0.7398162
     rot_cap = ScipyRot.from_quat([x, y, z, w])
     cap_normal = rot_cap.apply([0, 0, 1])
     tool_tilted_dir = -cap_normal
 
-    GRASP_ADVANCE_M = 0.018  # 18 mm advance along tilted axis so conformal pads envelope flange
+    GRASP_ADVANCE_M = 0.008  # 8 mm advance along tilted axis securely envelopes flange without colliding into tray
 
     high_cr_vert = np.array([p_cr_init[0], p_cr_init[1], transit_z])
     p_tilt_grasp = p_cr_base + GRASP_ADVANCE_M * tool_tilted_dir
-    p_tilt_standoff = p_tilt_grasp - 0.045 * tool_tilted_dir
-    p_tilt_extract = p_tilt_grasp - 0.055 * tool_tilted_dir
-    p_upright_extract = np.array([p_tilt_extract[0], p_tilt_extract[1], 0.250])
+    p_tilt_standoff = p_tilt_grasp - 0.035 * tool_tilted_dir
+    p_tilt_extract = p_tilt_grasp - 0.045 * tool_tilted_dir
+    p_upright_extract = np.array([p_tilt_extract[0], p_tilt_extract[1], 0.285])
 
-    align_cr_bore = np.array([p_g09_bore[0], p_g09_bore[1], 0.250])
+    align_cr_bore = np.array([p_g09_bore[0], p_g09_bore[1], 0.285])
     engage_cr = np.array([p_g09_bore[0], p_g09_bore[1], 0.230 - GRASP_ADVANCE_M])
     seat_cr = np.array([p_g09_bore[0], p_g09_bore[1], rim_base_z() + SPEC.flange_thickness - GRASP_ADVANCE_M])
     high_cr_bore = np.array([p_g09_bore[0], p_g09_bore[1], transit_z])
@@ -137,7 +154,7 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
     if not ok:
         raise RuntimeError('Home-to-start IK solve failed')
 
-    def solve_path(q_in, cartesian, directions):
+    def solve_cartesian(q_in, cartesian, directions):
         q = q_in.copy()
         path = []
         for p, d in zip(cartesian, directions):
@@ -149,77 +166,88 @@ def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, to
 
     paths = {}
 
-    # 1. approach_spare
-    pts_app_sp = np.vstack([np.linspace(start, high_sp, 20, endpoint=False),
-                            np.linspace(high_sp, app_sp, 15, endpoint=False),
-                            np.linspace(app_sp, contact_sp, 15, endpoint=False)])
-    paths['approach_spare'], q_cur = solve_path(q_cur, pts_app_sp, [down]*len(pts_app_sp))
+    # 1. approach_spare: start -> high_sp (20) -> app_sp (15) -> contact_sp (15) = 50 steps
+    q_high_sp, _ = ik.solve(q_cur, high_sp, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    p_start_high = s_curve_joints(q_cur, q_high_sp, 20)
+    p_descend_app, q_tmp = solve_cartesian(q_high_sp, s_curve_pts(high_sp, app_sp, 15), [down]*15)
+    p_descend_contact, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, contact_sp, 15), [down]*15)
+    paths['approach_spare'] = p_start_high + p_descend_app + p_descend_contact
 
-    # 2. lift_spare
-    pts_lift_sp = np.vstack([np.linspace(contact_sp, app_sp, 15, endpoint=False),
-                             np.linspace(app_sp, high_sp, 15, endpoint=False)])
-    paths['lift_spare'], q_cur = solve_path(q_cur, pts_lift_sp, [down]*len(pts_lift_sp))
+    # 2. lift_spare: contact_sp -> app_sp (15) -> high_sp (15) = 30 steps
+    p_lift_app, q_tmp = solve_cartesian(q_cur, s_curve_pts(contact_sp, app_sp, 15), [down]*15)
+    p_lift_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, high_sp, 15), [down]*15)
+    paths['lift_spare'] = p_lift_app + p_lift_high
 
-    # 3. carry_spare
-    pts_carry_sp = np.linspace(high_sp, high_mi, 20, endpoint=False)
-    paths['carry_spare'], q_cur = solve_path(q_cur, pts_carry_sp, [down]*len(pts_carry_sp))
+    # 3. carry_spare: high_sp -> high_mi = 20 steps (smooth joint S-curve to avoid singularity jerk)
+    q_target_mi, _ = ik.solve(q_cur, high_mi, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    paths['carry_spare'] = s_curve_joints(q_cur, q_target_mi, 20)
+    q_cur = q_target_mi.copy()
 
-    # 4. engage_missing_bore
-    pts_eng_mi = np.linspace(high_mi, engage_mi, 15, endpoint=False)
-    paths['engage_missing_bore'], q_cur = solve_path(q_cur, pts_eng_mi, [down]*len(pts_eng_mi))
+    # 4. engage_missing_bore: high_mi -> engage_mi = 15 steps
+    p_eng_mi, q_cur = solve_cartesian(q_cur, s_curve_pts(high_mi, engage_mi, 15), [down]*15)
+    paths['engage_missing_bore'] = p_eng_mi
 
-    # 5. staged_insertion_missing (realistic friction resistance)
+    # 5. staged_insertion_missing: engage_mi -> seat_mi = 25 steps
     z_staged_mi = staged_z_profile(engage_mi[2], seat_mi[2], 25)
     pts_staged_mi = np.array([[seat_mi[0], seat_mi[1], z] for z in z_staged_mi])
-    paths['staged_insertion_missing'], q_cur = solve_path(q_cur, pts_staged_mi, [down]*len(pts_staged_mi))
+    paths['staged_insertion_missing'], q_cur = solve_cartesian(q_cur, pts_staged_mi, [down]*25)
 
-    # 6. retreat_from_placed
-    pts_ret_mi = np.vstack([np.linspace(seat_mi, engage_mi, 15, endpoint=False),
-                            np.linspace(engage_mi, high_mi, 15, endpoint=False)])
-    paths['retreat_from_placed'], q_cur = solve_path(q_cur, pts_ret_mi, [down]*len(pts_ret_mi))
+    # 6. retreat_from_placed: seat_mi -> engage_mi (15) -> high_mi (15) = 30 steps
+    p_ret_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_mi, engage_mi, 15), [down]*15)
+    p_ret_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(engage_mi, high_mi, 15), [down]*15)
+    paths['retreat_from_placed'] = p_ret_eng + p_ret_high
 
-    # 7. transit_to_crooked
-    pts_trans_cr = np.linspace(high_mi, high_cr_vert, 20, endpoint=False)
-    paths['transit_to_crooked'], q_cur = solve_path(q_cur, pts_trans_cr, [down]*len(pts_trans_cr))
+    # 7. transit_to_crooked: high_mi -> high_cr_vert = 20 steps (smooth joint S-curve)
+    q_target_cr, _ = ik.solve(q_cur, high_cr_vert, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    paths['transit_to_crooked'] = s_curve_joints(q_cur, q_target_cr, 20)
+    q_cur = q_target_cr.copy()
 
-    # 8. wrist_tilt_align (robot wrist articulates to match 44.1° cap tilt)
-    alphas = np.linspace(0, 1, 15)
-    dirs_tilt = [((1-a)*down + a*tool_tilted_dir)/np.linalg.norm((1-a)*down + a*tool_tilted_dir) for a in alphas]
-    pts_tilt = np.linspace(high_cr_vert, p_tilt_standoff, 15)
-    paths['wrist_tilt_align'], q_cur = solve_path(q_cur, pts_tilt, dirs_tilt)
+    # 8. wrist_tilt_align: high_cr_vert -> p_tilt_standoff = 15 steps (smooth joint S-curve)
+    q_target_standoff, ok = ik.solve(q_cur, p_tilt_standoff, tool_tilted_dir, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    if not ok:
+        q_target_standoff, _ = ik.solve(q_home, p_tilt_standoff, tool_tilted_dir, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    paths['wrist_tilt_align'] = s_curve_joints(q_cur, q_target_standoff, 15)
+    q_cur = q_target_standoff.copy()
 
-    # 9. tilted_approach_crooked (descend along tilted axis with open jaws)
-    pts_app_cr = np.linspace(p_tilt_standoff, p_tilt_grasp, 15)
-    paths['tilted_approach_crooked'], q_cur = solve_path(q_cur, pts_app_cr, [tool_tilted_dir]*len(pts_app_cr))
+    # 9. tilted_approach_crooked: p_tilt_standoff -> p_tilt_grasp = 15 steps
+    pts_app_cr = s_curve_pts(p_tilt_standoff, p_tilt_grasp, 15)
+    paths['tilted_approach_crooked'], q_cur = solve_cartesian(q_cur, pts_app_cr, [tool_tilted_dir]*15)
 
-    # 10. tilted_extract_crooked (extract along tilted axis out of vial mouth)
-    pts_ext_cr = np.linspace(p_tilt_grasp, p_tilt_extract, 20)
-    paths['tilted_extract_crooked'], q_cur = solve_path(q_cur, pts_ext_cr, [tool_tilted_dir]*len(pts_ext_cr))
+    # 10. tilted_extract_crooked: p_tilt_grasp -> p_tilt_extract = 20 steps
+    pts_ext_cr = s_curve_pts(p_tilt_grasp, p_tilt_extract, 20)
+    paths['tilted_extract_crooked'], q_cur = solve_cartesian(q_cur, pts_ext_cr, [tool_tilted_dir]*20)
 
-    # 11. wrist_reorient_straighten (robot articulates wrist in mid-air to straighten cap to 0.0° vertical)
+    # 11. wrist_reorient_straighten: smooth joint-space S-curve from tilted extraction to upright pose
+    # Solves upright pose at safe 0.285m clearance, avoiding wrist singularity flips entirely
     alphas_reorient = np.linspace(0, 1, 20)
-    dirs_reorient = [((1-a)*tool_tilted_dir + a*down)/np.linalg.norm((1-a)*tool_tilted_dir + a*down) for a in alphas_reorient]
-    pts_reorient = np.linspace(p_tilt_extract, p_upright_extract, 20)
-    paths['wrist_reorient_straighten'], q_cur = solve_path(q_cur, pts_reorient, dirs_reorient)
+    s_alphas_r = 0.5 * (1.0 - np.cos(np.pi * alphas_reorient))
+    dirs_reorient = [((1-a)*tool_tilted_dir + a*down)/np.linalg.norm((1-a)*tool_tilted_dir + a*down) for a in s_alphas_r]
+    q_target_upright, ok = ik.solve(q_cur, p_upright_extract, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    if not ok:
+        q_target_upright, _ = ik.solve(q_home, p_upright_extract, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    paths['wrist_reorient_straighten'] = s_curve_joints(q_cur, q_target_upright, 20)
+    q_cur = q_target_upright.copy()
 
-    # 12. concentric_bore_align (glide horizontally over vial G09 bore)
-    pts_align_cr = np.linspace(p_upright_extract, align_cr_bore, 15)
-    paths['concentric_bore_align'], q_cur = solve_path(q_cur, pts_align_cr, [down]*len(pts_align_cr))
+    # 12. concentric_bore_align: p_upright_extract -> align_cr_bore = 15 steps
+    pts_align_cr = s_curve_pts(p_upright_extract, align_cr_bore, 15)
+    paths['concentric_bore_align'], q_cur = solve_cartesian(q_cur, pts_align_cr, [down]*15)
 
-    # 13. engage_crooked_bore
-    pts_eng_cr = np.linspace(align_cr_bore, engage_cr, 10)
-    paths['engage_crooked_bore'], q_cur = solve_path(q_cur, pts_eng_cr, [down]*len(pts_eng_cr))
+    # 13. engage_crooked_bore: align_cr_bore -> engage_cr = 10 steps
+    pts_eng_cr = s_curve_pts(align_cr_bore, engage_cr, 10)
+    paths['engage_crooked_bore'], q_cur = solve_cartesian(q_cur, pts_eng_cr, [down]*10)
 
-    # 14. staged_insertion_crooked (realistic friction resistance)
+    # 14. staged_insertion_crooked: engage_cr -> seat_cr = 25 steps
     z_staged_cr = staged_z_profile(engage_cr[2], seat_cr[2], 25)
     pts_staged_cr = np.array([[seat_cr[0], seat_cr[1], z] for z in z_staged_cr])
-    paths['staged_insertion_crooked'], q_cur = solve_path(q_cur, pts_staged_cr, [down]*len(pts_staged_cr))
+    paths['staged_insertion_crooked'], q_cur = solve_cartesian(q_cur, pts_staged_cr, [down]*25)
 
-    # 15. retreat_home
-    pts_home = np.vstack([np.linspace(seat_cr, engage_cr, 10, endpoint=False),
-                          np.linspace(engage_cr, high_cr_bore, 10, endpoint=False),
-                          np.linspace(high_cr_bore, start, 20, endpoint=False)])
-    paths['retreat_home'], q_cur = solve_path(q_cur, pts_home, [down]*len(pts_home))
+    # 15. retreat_home: seat_cr -> engage_cr (10) -> high_cr_bore (10) -> start (20) = 40 steps
+    p_home_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_cr, engage_cr, 10), [down]*10)
+    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_bore, 10), [down]*10)
+    q_target_home, _ = ik.solve(q_tmp2, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
+    p_home_transit = s_curve_joints(q_tmp2, q_target_home, 20)
+    paths['retreat_home'] = p_home_eng + p_home_high + p_home_transit
+    q_cur = q_target_home.copy()
 
     return paths, tool_tilted_dir, dirs_reorient, p_g28_bore, p_g09_bore, GRASP_ADVANCE_M
 
@@ -306,6 +334,18 @@ def set_cap_kinematic(cap_prim, kinematic=True):
                 PhysxSchema.PhysxRigidBodyAPI(cap_prim).CreateEnableCCDAttr().Set(True)
             rb.CreateVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
             rb.CreateAngularVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+
+
+def set_cap_collision(cap_prim, enabled=True):
+    """Enable or disable collision on cap prim components."""
+    from pxr import Usd, UsdPhysics
+    if cap_prim is None:
+        return
+    for child in Usd.PrimRange(cap_prim):
+        if "Liner" in child.GetName():
+            continue
+        if child.HasAPI(UsdPhysics.CollisionAPI):
+            UsdPhysics.CollisionAPI(child).CreateCollisionEnabledAttr().Set(enabled)
 
 
 class VialBreakabilityMonitor:
@@ -478,21 +518,25 @@ def main():
         g28_force_N = 0.0
         g09_force_N = 0.0
         cap_status_text = 'SPARE APPROACH'
+        q_hold = arm.get_joint_positions()[arm_idx].copy()
 
         for phase, path, jaw_vals, mode in phases:
             print(f'[compliant-remediation] phase: {phase}', flush=True)
 
             if mode == 'clamping_spare' and spare_prim is not None:
+                set_cap_collision(spare_prim, False)
                 set_cap_kinematic(spare_prim, True)
 
             if mode == 'clamping_crooked' and crooked_prim is not None:
+                set_cap_collision(crooked_prim, False)
                 set_cap_kinematic(crooked_prim, True)
 
             for step_idx, joints in enumerate(path):
                 jaw_pos = jaw_vals[step_idx]
                 positions = set_jaw_separation(arm, names, jaw_pos)
                 if joints is not None:
-                    positions[arm_idx] = joints
+                    q_hold = joints.copy()
+                positions[arm_idx] = q_hold
                 arm.set_joint_positions(positions)
                 arm.set_joint_velocities(np.zeros(len(names)))
                 arm.apply_action(ArticulationAction(joint_positions=positions))
@@ -525,6 +569,7 @@ def main():
                     g28_force_N = max(0.0, 22.4 * (1.0 - (step_idx + 1) / 20.0))
                     cap_status_text = 'RELEASE SPARE (SEATED FLUSH)'
                     if step_idx == len(path) - 1:
+                        set_cap_collision(spare_prim, True)
                         set_cap_kinematic(spare_prim, False)
                         g28_force_N = 0.0
 
@@ -583,6 +628,7 @@ def main():
                     g09_force_N = max(0.0, 24.8 * (1.0 - (step_idx + 1) / 20.0))
                     cap_status_text = 'RELEASE RE-SEATED CAP G09'
                     if step_idx == len(path) - 1:
+                        set_cap_collision(crooked_prim, True)
                         set_cap_kinematic(crooked_prim, False)
                         g09_force_N = 0.0
 
