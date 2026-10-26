@@ -12,18 +12,21 @@ LAYOUT_PATH = Path(__file__).with_name('config') / 'dataset1_layout.json'
 
 @dataclass(frozen=True)
 class PhysicalSpec:
-    vial_outer_radius: float = 0.02667 / 2
-    vial_inner_radius: float = 0.02540 / 2
-    vial_height: float = 0.20320
-    vial_bottom: float = 0.001  # unmeasured; only affects the tube's closed bottom
-    flange_radius: float = 0.031496 / 2
-    flange_thickness: float = 0.002032
-    plug_bottom_radius: float = 0.02286 / 2
-    plug_top_radius: float = 0.025146 / 2  # 0.99 in, estimate in physical specification
-    plug_wall_thickness: float = 0.002  # team measurement/update; use a tapered inner wall
-    flange_inner_radius: float = 0.025146 / 2 - 0.002  # open-through cavity continues through flange
-    plug_bottom_face_thickness: float = 0.002  # flat closed end under the hollow plug
-    plug_depth: float = 0.013462
+    # Official CAD Part 0890-01 (csi-vial.usda)
+    vial_outer_radius: float = 0.0271780 / 2  # 1.070 in OD = 27.1780 mm (R = 13.589 mm)
+    vial_inner_radius: float = 0.0263652 / 2  # 1.038 in ID = 26.3652 mm (R = 13.1826 mm)
+    vial_height: float = 0.20300              # 7.9921 in length = 203.00 mm
+    vial_bottom: float = 0.003327             # 0.131 in inner floor = 3.327 mm (CAD inner_floor)
+
+    # Official CAD MOCAP TWF.820/.930 YW1 (csi-vial-cap.usda)
+    flange_radius: float = 0.031750 / 2       # 1.250 in flange_d = 31.750 mm (R = 15.875 mm)
+    flange_thickness: float = 0.002235        # 0.088 in flange_t = 2.235 mm
+    plug_bottom_radius: float = 0.020828 / 2  # 0.820 in plug_bot_d = 20.828 mm (R = 10.414 mm)
+    plug_top_radius: float = 0.023622 / 2     # 0.930 in plug_top_d = 23.622 mm (R = 11.811 mm)
+    plug_wall_thickness: float = 0.000826     # 0.0325 in uniform plug wall = 0.8255 mm
+    flange_inner_radius: float = 0.021971 / 2 # 0.865 in flange top aperture = 21.971 mm (R = 10.9855 mm)
+    plug_bottom_face_thickness: float = 0.001041 # 0.041 in closed plug bottom floor = 1.0414 mm
+    plug_depth: float = 0.013462              # 0.530 in plug_l = 13.462 mm
     tray_base_thickness: float = 0.010
     tray_top_clearance: float = 0.080
     tray_top_thickness: float = 0.003

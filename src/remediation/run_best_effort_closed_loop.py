@@ -140,18 +140,10 @@ def set_jaws(arm, names, opened):
 
 
 def disable_gripper_collisions(stage):
-    """Disable overlapping EOAT colliders to eliminate PhysX self-collision jitter."""
-    from pxr import UsdPhysics
-    import cell
-    roots = (cell.FLANGE + '/Gripper', *cell.JAW_PRIMS.values())
-    disabled = []
-    for prim in stage.Traverse():
-        path = str(prim.GetPath())
-        if any(path == root or path.startswith(root + '/') for root in roots):
-            if prim.HasAPI(UsdPhysics.CollisionAPI):
-                UsdPhysics.CollisionAPI(prim).CreateCollisionEnabledAttr().Set(False)
-                disabled.append(path)
-    return disabled
+    """Deconflict EOAT colliders via CollisionSubAgent."""
+    from src.remediation.collision_manager import CollisionSubAgent
+    agent = CollisionSubAgent()
+    return agent.deconflict_eoat_colliders(stage)
 
 
 def find_closest_cap_prim(stage, target_base_pos):

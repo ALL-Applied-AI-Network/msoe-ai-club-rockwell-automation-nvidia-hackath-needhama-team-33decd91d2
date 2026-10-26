@@ -249,21 +249,21 @@ SORT_CUBES = [
     (0.419421, 0.178986, "yellow"),
 ]  # PHOTO-FIT; see calibration/uwm_20261008/fit.json
 
-# -- vial (vial.usda, 27.18 mm dia x 203 mm long)
+# -- vial (vial.usda, 27.18 mm dia x 203 mm long from CAD 0890-01)
 # Each entry: (x_ctr, y, yaw_deg) where yaw_deg is the angle of the vial
 # long-axis from world +X in the XY plane (0° = along +X, 90° = along +Y).
 # cell.py: RotateY(+90°) maps local Z→world X, then RotateZ(yaw_deg) tilts it.
 # Translation accounts for the offset: T = (x_ctr - L/2·cos(yaw), y - L/2·sin(yaw)).
-VIAL_RADIUS = 0.017 / 2  # RENDER-FIT: reduce tube silhouette width
-VIAL_LENGTH = 0.1400  # PHOTO-FIT: 140 mm, conditional on table prior
+VIAL_RADIUS = 0.02718 / 2  # Match official CAD (part 0890-01)
+VIAL_LENGTH = 0.2030  # Match official CAD length (203 mm)
 VIAL_MASS = 0.020
 SORT_VIALS = [
     (0.423296, -0.218227, 39.638288),
     (0.399653, -0.007706, 10.367641),
 ]  # PHOTO-FIT; see calibration/uwm_20261008/fit.json
 
-# -- cap (vial_cap.usda, 31.75 mm dia puck; lies flat)
-CAP_RADIUS = 0.03175 / 2  # RENDER-FIT: CAD diameter matches real silhouette
+# -- cap (vial_cap.usda, 31.75 mm dia puck; lies flat from MOCAP TWF.820/.930)
+CAP_RADIUS = 0.03175 / 2  # Official CAD flange diameter (1.250 in = 31.75 mm)
 CAP_HEIGHT = 0.01570
 CAP_MASS = 0.005
 SORT_CAPS = [
@@ -273,7 +273,7 @@ SORT_CAPS = [
 # CAD customData: flange 1.250 in, plug .930 -> .820 in, flange .088 in.
 # Preserve the real two-diameter geometry rather than shrinking the entire cap.
 CAP_FLANGE_THICK = 0.088 * 0.0254
-CAP_PLUG_LENGTH = CAP_HEIGHT - CAP_FLANGE_THICK
+CAP_PLUG_LENGTH = 0.530 * 0.0254
 CAP_PLUG_BASE_RADIUS = 0.930 * 0.0254 / 2
 CAP_PLUG_TIP_RADIUS = 0.820 * 0.0254 / 2
 CAP_ORIENTATIONS = ["narrow_end_up", "narrow_end_up"]
