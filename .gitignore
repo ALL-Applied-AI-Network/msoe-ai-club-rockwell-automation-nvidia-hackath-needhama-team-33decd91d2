@@ -14,5 +14,3 @@ runs/
 .venv*
 *.pt
 **__pycache__/
-# User-provided context and downloads
-jeremiah_given_context/
