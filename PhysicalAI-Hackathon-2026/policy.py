@@ -54,7 +54,8 @@ class Policy:
         self.full_remediation = os.environ.get("REMEDIATION_MODE", "hover").lower() == "full"
         self.controller = RemediationController(UNMEASURED_CONTACT_TOOL) if self.full_remediation else None
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
-        self.trace_dir = Path(os.environ.get("REMEDIATION_TRACE_DIR", ROOT / "runs/archive" / label))
+        # Physical-policy traces are team artifacts, so share them by default.
+        self.trace_dir = Path(os.environ.get("REMEDIATION_TRACE_DIR", ROOT / "shared/runs" / label))
         self.trace_dir.mkdir(parents=True, exist_ok=True)
         (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)

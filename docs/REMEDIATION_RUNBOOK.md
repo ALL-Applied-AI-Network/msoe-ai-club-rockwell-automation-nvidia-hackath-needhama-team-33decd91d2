@@ -1,9 +1,10 @@
 # Remediation runbook
 
 This is the reproducible path for the synthetic-data, TableCam perception, and
-Isaac Sim remediation workflow. Generated files live under `runs/archive/` and
-are intentionally not tracked by Git. The source code, configuration, commands,
-and required reports are tracked in this repository.
+Isaac Sim remediation workflow. New generated files live under `shared/runs/`
+so the team can inspect them; historical local archives remain under
+`runs/archive/`. The source code, configuration, commands, and required reports
+are tracked in this repository.
 
 The current controller is a **best-effort simulation review**, not authorization
 for physical robot contact. It uses a fresh TableCam capture to choose targets,
@@ -20,7 +21,7 @@ test -r shared/data/fanuc_er4ia_sim/cell.py
 test -r data/gripper.step
 test -r data/gripper.usd
 scripts/fix_shared_permissions.sh
-mkdir -p logs runs/archive
+mkdir -p logs shared/runs
 ```
 
 `shared/data/` is competition reference data. Never modify it. Isaac rendering,
@@ -30,7 +31,7 @@ Slurm; do not run them directly on the login node.
 Choose a new descriptive output directory for every experiment:
 
 ```bash
-export RUN_DIR="runs/archive/$(date +%F)_remediation_<description>"
+export RUN_DIR="shared/runs/$(date +%F)_remediation_<description>"
 ```
 
 Replace `<description>` with a short identifier such as `baseline_seed20261022`.
@@ -255,12 +256,12 @@ stop the arm during the first descent.
 ### Review local decision evidence
 
 Every physical-policy process prints a local trace directory when it starts.
-By default it is a new directory under `runs/archive/` named
+By default it is a new directory under `shared/runs/` named
 `YYYY-MM-DD_HH-MM-SS_physical_policy`. To choose an explicit directory for a
 scheduled run, set `REMEDIATION_TRACE_DIR` before starting the client:
 
 ```bash
-export REMEDIATION_TRACE_DIR="$PWD/../runs/archive/$(date +%F)_physical_remediation"
+export REMEDIATION_TRACE_DIR="$PWD/../shared/runs/$(date +%F)_physical_remediation"
 REMEDIATION_MODE=full uv run run.py
 ```
 
@@ -281,7 +282,7 @@ To encode the labelled frames into an H.264 video after the run, execute this
 from the repository root, replacing `TRACE_DIR` with the printed directory:
 
 ```bash
-TRACE_DIR="runs/archive/YYYY-MM-DD_HH-MM-SS_physical_policy"
+TRACE_DIR="shared/runs/YYYY-MM-DD_HH-MM-SS_physical_policy"
 FFMPEG_BIN=$(./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
 "$FFMPEG_BIN" -y -framerate 20 -i "$TRACE_DIR/tablecam_annotated/%04d.png" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$TRACE_DIR/tablecam_yolo_trace.mp4"
