@@ -17,13 +17,13 @@ Missing cap (tool pointing straight down):
      cap drops under gravity.
   3. The closed fingertip face presses the flange down, force limited.
 
-Crooked cap (balanced on the vial edge, sec. 5 of the spec):
+Crooked cap (leaning on the rim, sec. 5 of the spec: flange dipped into the mouth,
+plug bottom corner on the opposite rim):
   The cap's high side is measured from TableCam depth.  The tool tilts
   PRESS_TILT_DEG off vertical, rolled so the fingertip edge of one finger's solid
   outer back face is the lowest point of the gripper (the SMC body stays above
   the neighbouring caps), with that edge along the cap's high-to-low direction.
-  It presses the high side down while dragging the cap PRESS_DRAG_M toward its
-  high side, force limited.
+  It presses straight down just inboard of the raised flange edge, force limited.
 
 Vial loads are measured from PhysX contact reports (impulse / dt) and checked
 against the fracture limits below.  After both actions the caps settle and their
@@ -53,11 +53,6 @@ PRESS_FORCE_LIMIT_N = 30.0
 # Tool axis tilt from vertical for the crooked-cap press.  45 deg keeps the SMC
 # body ~21 mm above neighbouring caps and is reachable for the tested slots.
 PRESS_TILT_DEG = 45.0
-# A balanced crooked cap rests on its high-side plug edge with its whole flange
-# inboard of that support, so a pure downward push tips it further.  The press
-# drags it this far toward its high side while descending, so the flange edge
-# overhangs the support and the downward load levels the cap.
-PRESS_DRAG_M = 0.004
 DT = 1.0 / 60.0
 DOWN = np.array([0., 0., -1.])
 SPREAD_Y = np.array([0., 1., 0.])
@@ -298,21 +293,17 @@ def tilted_press_pose(planner, q, xy, z_high, z_low, tool_for, azimuth=None):
     raise RuntimeError(f'no reachable {PRESS_TILT_DEG:.0f} deg press heading at {np.round(xy, 4)}')
 
 
-def high_flange_edge(bore_xy, rim_world_z, azimuth):
-    """Horizontal offset (m, along the high side) and height of a balanced cap's outer high flange edge."""
-    from src.remediation.geometry import SPEC, perched_cap_pose
-    rim = np.r_[bore_xy, rim_world_z]
+def high_flange_edge(bore_xy, rim_z, azimuth, tilt_deg):
+    """Horizontal reach (m, toward the high side) and height above the rim of the
+    raised flange edge of a cap leaning on the rim (geometry.leaning_cap_pose)."""
+    from src.remediation.geometry import CROOKED_TILT_RANGE_DEG, SPEC, leaning_cap_pose
+    tilt = float(np.clip(tilt_deg, *CROOKED_TILT_RANGE_DEG))
+    rim = np.r_[bore_xy, rim_z]
+    # rotation(tilt, yaw) puts the cap's high side (local +Y) at azimuth yaw + 90 deg.
+    p, R = leaning_cap_pose(rim, tilt, np.degrees(azimuth) - 90.)
+    edge = R @ np.array([0., SPEC.flange_radius, SPEC.flange_thickness]) + p
     a = np.array([np.cos(azimuth), np.sin(azimuth)])
-    best = None
-    for yaw in np.arange(0., 360., 5.):
-        p, R, _ = perched_cap_pose(rim, yaw)
-        hi = R @ np.array([0., 1., 0.])
-        if best is None or hi[:2] @ a > best[0]:
-            ring = np.array([[SPEC.flange_radius * np.cos(t), SPEC.flange_radius * np.sin(t), SPEC.flange_thickness]
-                             for t in np.linspace(0, 2 * np.pi, 180, endpoint=False)]) @ R.T + p
-            k = np.argmax((ring[:, :2] - bore_xy) @ a)
-            best = (hi[:2] @ a, float((ring[k, :2] - bore_xy) @ a), float(ring[k, 2] - rim_world_z))
-    return best[1], best[2]
+    return float((edge[:2] - bore_xy) @ a), float(edge[2] - rim_z)
 
 
 class ContactMeter:
@@ -594,17 +585,16 @@ def main():
             if crooked_tilt:
                 az = np.radians(crooked_tilt['high_side_azimuth_deg'])
                 a2 = np.array([np.cos(az), np.sin(az)])
-                reach, top = high_flange_edge(crooked_xy, rim_z, az)
-                # Land 1 mm inboard of the outer high flange edge, then drag toward the high side.
-                land_xy = crooked_xy + (reach - 0.001) * a2
-                end_xy = land_xy + PRESS_DRAG_M * a2
+                reach, top = high_flange_edge(crooked_xy, rim_z, az, crooked_tilt['tilt_deg'])
+                # Land 2 mm inboard of the raised flange edge and push straight down: the
+                # cap pivots on the flange edge caught inside the mouth and levels.
+                land_xy = crooked_xy + (reach - 0.002) * a2
             else:
-                top, land_xy = 0.016, crooked_xy
-                end_xy = crooked_xy
+                top, land_xy = 0.020, crooked_xy
             high_cr = np.r_[land_xy, transit_z]
             start_cr = np.r_[land_xy, rim_z + top + 0.008]
             touch_cr = np.r_[land_xy, rim_z + top + 0.001]
-            end_cr = np.r_[end_xy, seated_top_z - 0.0005]
+            end_cr = np.r_[land_xy, seated_top_z - 0.0005]
             q_high_cr = P.solve(q_up, high_cr, d_t, s_t, edge)
             plan['tilt_to_crooked'] = s_curve_joints(q_up, q_high_cr, 50)
             plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, d_t, s_t, edge, 40)
@@ -686,7 +676,6 @@ def main():
             'tool_points_j6_m': {'pocket_ledge': list(ledge), 'fingertip_face': list(tip), 'back_edge': list(edge)},
             'crooked_press': {'tilt_from_vertical_deg': PRESS_TILT_DEG, 'tool_axis': d_t.tolist(),
                               'edge_direction': s_t.tolist(), 'edge_aligned_with_cap_tilt': aligned,
-                              'drag_toward_high_side_m': PRESS_DRAG_M if crooked_tilt else 0.0,
                               'cap_tilt_from_depth': crooked_tilt,
                               'contact': 'fingertip edge of the -Y finger outer back face (solid, no pocket notch)'},
             'cap_motion': 'PhysX contact only; no cap pose is written by the script',

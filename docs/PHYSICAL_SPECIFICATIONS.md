@@ -127,18 +127,19 @@ caps. A crooked cap is defined by how it rests (see section 5), not by a tilt an
 
 ## 5. Crooked Cap Physics & Deterministic Setup
 
-### Crooked Cap Definition: Balanced on the Vial Edge (team stipulation, October 26, 2026)
-A crooked cap is defined by **how it rests, not by an exact tilt**:
-* The plug's **bottom edge is balanced on the edge of the glass rim** (on the inner rim corner).
-* The opposite side of the plug is **down inside the vial mouth**, leaning on the inner wall.
-* The **whole flange stays above the rim plane**. A cap whose flange edge has dropped below the rim (resting on the plug side or plug-to-flange corner) has tipped past balance and is not a valid crooked cap.
+### Crooked Cap Definition: Leaning on the Rim (team observation, October 26, 2026)
+A crooked cap is defined by **how it rests, not by an exact tilt** (photo of the real cap: `Media.jpg`):
+* On the **low side** the wide flange dips **inside the vial mouth**; its outer edge rests on the inner edge of the glass rim at two points.
+* On the **high side** the plug's **bottom outer corner rests on the rim** at two points, with the plug overhanging the outside of the vial.
 
-The tilt follows from the geometry. With sections 1-2 the balanced pose is about **22 degrees** (bisected as the largest tilt that clears the glass, `perched_cap_pose` in `src/remediation/geometry.py`); under PhysX it held at 21.9 degrees with zero drift over 360 steps. The classifier (`cap_state`) checks the three conditions above and has no tilt band.
+PhysX contact reports confirm this four-point support: flange edge (cap r = 15.9 mm) on the rim inner edge on the low side, plug bottom corner (cap r = 11.4 mm, z = -13.5 mm) on the rim on the high side. `leaning_cap_pose` in `src/remediation/geometry.py` constructs the pose for a given tilt; `cap_state` classifies a cap as crooked when its flange dips into the mouth and its plug bottom rests on the rim (no tilt band).
 
-The earlier flange-on-outer-rim description (31.5-34.0 degrees) is geometrically impossible with these dimensions: the plug top (25.15 mm) fits the mouth (25.40 mm) with 0.13 mm radial clearance, so the cap cannot shift the 2.4 mm needed for the flange edge to reach the outer rim. The previous free-settling result (~45 degrees) had tipped past balance onto the plug corner.
+**Tilt range (`CROOKED_TILT_RANGE_DEG = (48, 77)`).** Scenes draw a uniform random tilt from this range. It comes from a PhysX sweep of 28 tilts x 3 seeds (`shared/runs/2026-10-26_crooked_tilt_sweep_v2_seed*`):
+* Below 48 deg the pose is geometrically impossible (the flange cannot dip into the mouth while the plug corner reaches the rim).
+* 48-77.6 deg held in every seed (settled 47-75 deg, drift <= 0.3 mm).
+* 79 deg failed in all three seeds (one cap fell into the vial); 80-86 deg slid down to ~77-81 deg.
 
-### Crooked-Cap Spawn
-Crooked caps are spawned directly in the balanced pose with a 0.2 mm gap above the rim contact, then settle under gravity. This replaces the earlier 25-28 degree free-air drop formula.
+The real cap in the photo is at roughly 55-60 deg. The earlier "balanced on the plug edge at ~22 deg" definition and the 31.5-34 deg band are superseded.
 
 ### Contact Physics & Settling Damping
 * **Sub-Millimeter Contact Offsets**:
@@ -185,7 +186,7 @@ Crooked caps are spawned directly in the balanced pose with a 0.2 mm gap above t
 Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Visual values are defined in `src/remediation/scene.py`.
 
 ### Measured with these dimensions
-- A crooked cap is balanced on the vial edge (section 5); with these dimensions that is about 22 degrees, held under PhysX.
+- A crooked cap leans on the rim (section 5) at a random tilt in 48-77 degrees.
 - Vial rim height is 213.2 mm above the work surface (10 mm base + 203.2 mm vial).
 - The YOLO checkpoint predates these dimensions and materials; retrain it before treating detection results as meaningful (see the cap-wall update above).
 
@@ -196,6 +197,7 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 
 ### Remediation motion results (October 26, 2026, scene `shared/runs/2026-10-26_docspec_blacksilver_balanced/`)
 - **Missing cap (physics pick-and-place):** seated in 3/3 repeats (tilt <= 0.7 deg, flush), peak measured vial load 3.6-5.6 N.
-- **Crooked cap (45 deg tilted press, back-face fingertip edge):** seated in 1/3 repeats. A balanced cap rests on its high-side plug edge with the whole flange inboard of that rim support (flange edge 10.9 mm vs rim 12.7 mm from the axis), so a downward push tips it further; the rigid sim has no cap compliance to help it slide in. Side-face (notched) and back-face-along-tilt variants were also tried; the cap pocket mouth at the fingertip captured the cap. Runs: `shared/runs/2026-10-26_physics_remediation_*`.
+- **Crooked cap, superseded balanced-pose scene (45 deg tilted press, back-face fingertip edge):** seated in 1/3 repeats. A balanced cap rests on its high-side plug edge with the whole flange inboard of that rim support (flange edge 10.9 mm vs rim 12.7 mm from the axis), so a downward push tips it further; the rigid sim has no cap compliance to help it slide in. Side-face (notched) and back-face-along-tilt variants were also tried; the cap pocket mouth at the fingertip captured the cap. Runs: `shared/runs/2026-10-26_physics_remediation_*`.
 - 90 deg (flat face horizontal) is not usable inside the tray: the SMC body hangs 18-24 mm below the finger faces and hits neighbouring vials.
+- **Crooked cap, leaning pose (scene `shared/runs/2026-10-26_docspec_blacksilver_leaning/`, G09 at 47.8 deg):** 0/3 seated with a straight-down press beside the raised flange edge. One run pushed the cap into the vial (68 N measured, vial fractured), one levelled it to ~10 deg but the cap was carried off on retreat, one was carried off before levelling. The TableCam depth plane fit misread the lean (21 deg tilt / 53 deg heading vs true 47.8 deg / 42.5 deg) because it assumes a flat cap top. Runs: `shared/runs/2026-10-26_physics_remediation_leaning_repeat*`.
 

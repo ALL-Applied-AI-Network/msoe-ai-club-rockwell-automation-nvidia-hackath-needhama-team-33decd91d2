@@ -10,7 +10,7 @@ import sys
 import numpy as np
 from pxr import Gf, Sdf, UsdGeom, UsdPhysics, UsdShade, PhysxSchema
 
-from src.remediation.geometry import SPEC, cap_vertices, load_layout, perched_cap_pose, rotation, spawn_height
+from src.remediation.geometry import CROOKED_TILT_RANGE_DEG, SPEC, cap_vertices, load_layout, leaning_cap_pose, rotation, spawn_height
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'shared/data/fanuc_er4ia_sim'))
@@ -173,10 +173,13 @@ def _cap_dynamics(prim,dynamic):
         phys.CreateLinearDampingAttr(1.2); phys.CreateAngularDampingAttr(2.)
         phys.CreateSolverPositionIterationCountAttr(32); phys.CreateSolverVelocityIterationCountAttr(8)
         phys.CreateEnableCCDAttr(True)
+        # Never sleep: a 5 g cap landing gently can otherwise freeze in a pose that
+        # cannot actually support it (e.g. resting on only two rim points).
+        phys.CreateSleepThresholdAttr(0.); phys.CreateStabilizationThresholdAttr(0.)
 
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
-                paper_color=None, tray_center_xy=None):
+                paper_color=None, tray_center_xy=None, crooked_tilts=None):
     import cell
     if min(crooked,missing,table_caps)<0 or crooked+missing>30 or table_caps>10:
         raise ValueError('Invalid scene inventory (30 vials, at most 10 separated spares)')
@@ -249,13 +252,17 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         if index in missing_ids: continue
         tilted=index in crooked_ids
         if tilted:
-            # Balanced on the vial edge; the tilt follows from the documented geometry.
-            pos,cap_R,_=perched_cap_pose(rim,float(rng.uniform(0,360)))
+            # Leaning on the rim at a random tilt from the range that holds in PhysX,
+            # or at an explicit tilt (one per crooked cap, in slot order) for sweeps.
+            k=sum(1 for c in inventory['caps'] if c['dynamic'])
+            tilt=float(crooked_tilts[k]) if crooked_tilts is not None else float(rng.uniform(*CROOKED_TILT_RANGE_DEG))
+            pos,cap_R=leaning_cap_pose(rim,tilt,float(rng.uniform(0,360)))
         else:
             cap_R=np.eye(3); pos=rim.copy(); pos[2]=rim[2]+.0002
         path='/World/RemediationCaps/'+slot
         make_cap(stage,path,pos,cap_R,yellow,cavity,physics_mat,dynamic=tilted)
-        inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap'})
+        inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap',
+                                  **({'spawn_tilt_deg':tilt} if tilted else {})})
     for i in range(table_caps):
         row,col=divmod(i,5)
         pos=np.array([.28+col*.045,-.255+row*.043,0.])

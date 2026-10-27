@@ -1,5 +1,6 @@
 """Metre-based physical geometry. Contains no simulator or robot commands."""
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 import hashlib
 import json
 from pathlib import Path
@@ -40,7 +41,8 @@ class PhysicalSpec:
     pad_width: float = 0.034
     spawn_clearance: float = 0.003
     contact_offset: float = 0.0005
-    penetration_tolerance: float = 0.0001
+    # 0.2 mm: PhysX settles a leaning cap ~0.13 mm into the rim at its pivot contact.
+    penetration_tolerance: float = 0.0002
     friction_static: float = 1.2
     friction_dynamic: float = 1.0
 
@@ -87,35 +89,61 @@ def _vial_wall_penetration(points, rim, spec=SPEC):
     return float(np.max(np.minimum(r - spec.vial_inner_radius, spec.vial_outer_radius - r)[inside])) if inside.any() else 0.
 
 
-def perched_cap_pose(rim, yaw_deg=0., lift=0.0002, spec=SPEC):
-    """Crooked cap balanced on the vial edge (docs/PHYSICAL_SPECIFICATIONS.md sec. 5).
+# Crooked-cap spawn tilts that hold in PhysX in the observed leaning pose (flange
+# dipped into the mouth, plug bottom corner on the opposite rim).  Below 48 deg the
+# pose is geometrically impossible; 79 deg failed in every seed and higher tilts
+# slid down to ~80 deg.  Sweep: shared/runs/2026-10-26_crooked_tilt_sweep_v2_seed*,
+# recorded in docs/PHYSICAL_SPECIFICATIONS.md sec. 5.
+CROOKED_TILT_RANGE_DEG = (48., 77.)
 
-    The plug's bottom edge rests on the inner edge of the glass rim while the
-    opposite side of the plug leans against the inner wall.  The tilt is not a
-    target: it is the largest tilt at which the perched cap clears the glass,
-    found by bisection on the documented dimensions.  `lift` leaves a small gap
-    so PhysX settles the cap into contact instead of starting interpenetrated.
+
+@lru_cache(maxsize=None)
+def _leaning_offset(tilt_tenths, spec=SPEC):
+    """(cap-origin shift along the high side, height above rim) for a leaning cap at yaw 0."""
+    tilt = tilt_tenths / 10.
+    ri, ro = spec.vial_inner_radius, spec.vial_outer_radius
+    local = cap_surface_points(spec)
+    sub = local[::3]
+    flange_pts = sub[:, 2] >= 0
+    bottom_pts = sub[:, 2] < -spec.plug_depth + spec.plug_bottom_face_thickness + 1e-4
+    L = sub @ rotation(tilt, 0.).T
+
+    def penetrates(W):
+        r = np.linalg.norm(W[:, :2], axis=1)
+        return bool(np.any((W[:, 2] < 0) & (r > ri) & (r < ro)))
+
+    best = None
+    for py in np.linspace(-0.008, 0.008, 81):
+        lo, hi = -0.03, 0.03
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if penetrates(L + [0, py, mid]) else (lo, mid)
+        W = L + [0, py, hi]
+        r = np.linalg.norm(W[:, :2], axis=1)
+        near = np.hypot(np.maximum(np.maximum(ri - r, r - ro), 0), np.minimum(W[:, 2], 0)) < 1.5e-4
+        dipped = flange_pts & (W[:, 2] < -5e-4)
+        if (near & flange_pts).any() and (near & bottom_pts).any() and dipped.any() and r[dipped].max() < ri:
+            if best is None or hi < best[1]:
+                best = (float(py), float(hi))
+    return best
+
+
+def leaning_cap_pose(rim, tilt_deg, yaw_deg=0., lift=0.0003, spec=SPEC):
+    """Crooked cap as observed on the real cell (docs/PHYSICAL_SPECIFICATIONS.md sec. 5).
+
+    The wide flange dips into the vial mouth on the low side, resting on the inner
+    rim edge, while the plug's bottom face rests on the rim on the opposite (high)
+    side with the plug corner overhanging the outside of the vial.  Of the
+    resting positions at this tilt, the lowest one is returned, lifted by `lift`
+    so PhysX settles it into contact.  Raises ValueError if the tilt cannot rest
+    this way.
     """
-    rim = np.asarray(rim, float)
-    pts = cap_surface_points(spec)
-
-    def place(tilt):
-        R = rotation(tilt, yaw_deg)
-        edge = np.array([0., spec.plug_bottom_radius, -spec.plug_depth])
-        d = R @ np.array([0., 1., 0.]); d[2] = 0; d /= np.linalg.norm(d)
-        p = rim + spec.vial_inner_radius * d + np.array([0., 0., lift]) - R @ edge
-        return p, R
-
-    lo, hi = 1., 60.
-    for _ in range(40):
-        mid = (lo + hi) / 2
-        p, R = place(mid)
-        if _vial_wall_penetration(pts @ R.T + p, rim, spec) > 0:
-            hi = mid
-        else:
-            lo = mid
-    p, R = place(lo)
-    return p, R, lo
+    off = _leaning_offset(int(round(tilt_deg * 10)), spec)
+    if off is None:
+        raise ValueError(f'a cap cannot lean on the rim at {tilt_deg:.1f} deg')
+    R = rotation(tilt_deg, yaw_deg)
+    p = np.asarray(rim, float) + rotation(0., yaw_deg) @ np.array([0., off[0], off[1] + lift])
+    return p, R
 
 
 def spawn_height(support_z, orientation, spec=SPEC):
@@ -133,12 +161,18 @@ def cap_surface_points(spec=SPEC):
     """Dense surface samples for independent post-settling penetration checks."""
     a=np.arange(192)*2*np.pi/192
     rings=[]
+    taper=lambda z: spec.plug_bottom_radius+(z+spec.plug_depth)/spec.plug_depth*(spec.plug_top_radius-spec.plug_bottom_radius)
+    # Outer plug wall over its full depth (including the bottom outer corner).
+    for z in np.linspace(-spec.plug_depth,0,75):
+        rings.append((taper(z),z))
     for z in np.linspace(-spec.plug_depth + spec.plug_bottom_face_thickness,0,65):
-        r=spec.plug_bottom_radius+(z+spec.plug_depth)/spec.plug_depth*(spec.plug_top_radius-spec.plug_bottom_radius)
-        rings.extend([(r,z),(r-spec.plug_wall_thickness,z)])
+        rings.append((taper(z)-spec.plug_wall_thickness,z))
     inner_bottom=spec.plug_bottom_radius-spec.plug_wall_thickness
+    # Bottom face out to the outer radius; cavity floor out to the inner wall.
+    for r in np.linspace(0,spec.plug_bottom_radius,38):
+        rings.append((r,-spec.plug_depth))
     for r in np.linspace(0,inner_bottom,32):
-        rings.extend([(r,-spec.plug_depth),(r,-spec.plug_depth+spec.plug_bottom_face_thickness)])
+        rings.append((r,-spec.plug_depth+spec.plug_bottom_face_thickness))
     for r in np.linspace(spec.flange_inner_radius,spec.flange_radius,32):
         rings.extend([(r,0),(r,spec.flange_thickness)])
     return np.concatenate([np.column_stack([r*np.cos(a),r*np.sin(a),np.full(len(a),z)]) for r,z in rings])
@@ -180,27 +214,22 @@ def cap_state(position, orientation, rim_position=None, spec=SPEC):
     offset = float(np.linalg.norm(p[:2]-rim[:2]))
     elevation = float(p[2]-rim[2])
     # A crooked cap is defined by how it rests, not by a tilt angle
-    # (docs/PHYSICAL_SPECIFICATIONS.md sec. 5): the plug's bottom edge is balanced
-    # on the glass rim while the opposite side of the plug is down inside the mouth.
-    a = np.arange(96) * 2 * np.pi / 96
-    plug = np.column_stack((spec.plug_bottom_radius*np.cos(a), spec.plug_bottom_radius*np.sin(a),
-                            np.full(96, -spec.plug_depth))) @ R.T + p
-    radial = np.linalg.norm(plug[:, :2] - rim[:2], axis=1)
-    in_mouth = (plug[:, 2] < rim[2] - .001) & (radial < spec.vial_inner_radius)
-    # The plug's bottom edge must touch the top of the glass rim, and the whole
-    # flange must stay above the rim plane; a flange edge below the rim means the
-    # cap has tipped past the balanced state onto the plug side.
-    radial_plug = np.linalg.norm(plug[:, :2] - rim[:2], axis=1)
-    edge_on_rim = bool(np.any((np.abs(plug[:, 2] - rim[2]) < .0006)
-                              & (radial_plug > spec.vial_inner_radius - .0003)
-                              & (radial_plug < spec.vial_outer_radius + .0003)))
-    flange = np.column_stack((spec.flange_radius*np.cos(a), spec.flange_radius*np.sin(a), np.zeros(96))) @ R.T + p
-    edge_on_rim = edge_on_rim and bool(flange[:, 2].min() > rim[2] - .0003)
-    plug_in_mouth = bool(in_mouth.any())
+    # (docs/PHYSICAL_SPECIFICATIONS.md sec. 5): the flange dips inside the vial mouth
+    # on the low side while the plug's bottom face rests on the rim on the high side.
+    local = cap_surface_points(spec)[::3]
+    world = local @ R.T + p
+    r = np.linalg.norm(world[:, :2] - rim[:2], axis=1)
+    dz = world[:, 2] - rim[2]
+    flange = local[:, 2] >= 0
+    bottom = local[:, 2] < -spec.plug_depth + spec.plug_bottom_face_thickness + 1e-4
+    dipped = flange & (dz < -.0003)
+    flange_in_mouth = bool(dipped.any() and r[dipped].max() < spec.vial_inner_radius + .0003)
+    bottom_on_rim = bool(np.any(bottom & (np.abs(dz) < .0006) & (r > spec.vial_inner_radius - .0003)
+                                & (r < spec.vial_outer_radius + .0003)))
     cls = 'invalid'
     if offset < .002 and tilt < 5 and abs(elevation) < .001:
         cls = 'good_cap'
-    elif tilt >= 5 and edge_on_rim and plug_in_mouth:
+    elif tilt >= 5 and flange_in_mouth and bottom_on_rim:
         cls = 'crooked_cap'
     return {'tilt_deg': tilt, 'rim_offset_m': offset, 'rim_elevation_m': elevation, 'class_name': cls,
-            'plug_edge_on_rim': edge_on_rim, 'plug_in_mouth': plug_in_mouth}
+            'flange_in_mouth': flange_in_mouth, 'plug_bottom_on_rim': bottom_on_rim}

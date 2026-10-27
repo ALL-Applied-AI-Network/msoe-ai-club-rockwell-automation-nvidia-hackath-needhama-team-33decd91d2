@@ -13,6 +13,12 @@ from src.remediation.geometry import SPEC, cap_state, cap_surface_points, config
 
 
 def pose(stage,path):
+    """World position and rotation matrix, read from PhysX (USD is not updated on render=False steps)."""
+    from omni.physx import get_physx_interface
+    from scipy.spatial.transform import Rotation
+    t=get_physx_interface().get_rigidbody_transformation(path)
+    if t and t.get('ret_val',True):
+        return np.asarray(t['position'],float),Rotation.from_quat(t['rotation']).as_matrix()
     from pxr import UsdGeom
     matrix=np.array(UsdGeom.Xformable(stage.GetPrimAtPath(path)).ComputeLocalToWorldTransform(0.))
     return matrix[3,:3],matrix[:3,:3].T
@@ -62,7 +68,8 @@ def run(args):
         if paper_color is not None and (len(paper_color) != 3 or any(x < 0 or x > 1 for x in paper_color)):
             raise ValueError('--paper-color must be r,g,b with values in [0,1]')
         inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
-                              paper_color,(args.tray_center_x,args.tray_center_y))
+                              paper_color,(args.tray_center_x,args.tray_center_y),
+                              [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None)
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -154,6 +161,7 @@ def parser():
     p.add_argument('--tray-center-y',type=float,default=.035,
                    help='Fixture center Y in metres for scene construction (default: 0.035).')
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
+    p.add_argument('--crooked-tilts',help='Comma-separated spawn tilt (deg) per crooked cap, for tilt sweeps')
     return p
 
 
