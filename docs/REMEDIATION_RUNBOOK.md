@@ -125,7 +125,7 @@ sbatch scripts/run_compliant_breakable_pipeline.slurm \
 
 To run a deliberate alternate scene, supply it as the first argument before the
 checkpoint. The canonical scene is
-`shared/scenes/black_silver_remediation_qualified_v3.usda`; do not substitute
+`shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda`; do not substitute
 `shared/scenes/remediation_dataset1_v2_cad.usda` for the black-and-silver test.
 
 ## 5. Physical-workcell preparation
@@ -173,10 +173,12 @@ loads are rejected at the policy boundary. In simulation they are written only t
 the evaluator artifacts after commands have been selected.
 
 The shared missing-cap sequence is pick, camera-verify, place, release,
-position-limited press and camera verification. The shared crooked-cap sequence is
-a TableCam-targeted vertical press and camera verification. Its W/P/R remains fixed
-at `(-180, 0, 0)` for the complete route: transit open, close above the cap, descend,
-press, retreat, then open. Missing caps are handled first.
+position-limited press and camera verification. For a crooked cap, the shared policy
+keeps the claw open and descends as for a whole-vial pickup: the conformal pockets
+surround the cap and vial while the solid internal mount shoulder presses the cap.
+The CAD-measured shoulder depth is 32.6838 mm from the fingertip TCP; the configured
+press offset is added as upward clearance. The policy then retreats vertically,
+still open. The tool axis remains vertical throughout. Missing caps are handled first.
 
 The Isaac adapter expands each TCP destination into a simultaneous Cartesian and
 shortest-path wrist transition limited to 1 mm and 0.5 degree per 60 Hz physics
@@ -305,13 +307,16 @@ uv run run.py --mode full --allow-provisional-contact \
 
 Test one operation at a time over a clear work area. Suggested progression is
 `0.010`, `0.005`, `0.002`, then `0.001` m. Do not move directly from +10 mm to zero
-over glass. The three controls have distinct effects:
+over the vial. The controls have distinct effects:
 
 - `--pick-offset-m`: loose-cap gripper closing height.
 - `--place-offset-m`: release height above a missing-cap target.
-- `--press-offset-m`: lowest crooked-cap press height.
+- `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
+- `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
 
-Use a positive press offset for alignment-only trials. A zero or negative press offset
+Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
+depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and
+leaves the shoulder 10 mm above nominal contact. A zero or negative press offset
 can create contact and must be tried only at low speed with the operator ready to stop
 the arm. The controller rejects offsets outside +/-25 mm, targets without projected
 RGB-D points, detections below the confidence threshold, and targets outside the

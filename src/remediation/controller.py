@@ -119,7 +119,8 @@ def wpr_to_rotation(wpr_deg):
 
 
 class RemediationController:
-    def __init__(self, tool, max_attempts=1, min_confidence=0.70):
+    def __init__(self, tool, max_attempts=1, min_confidence=0.70,
+                 crooked_shoulder_depth_m=0.0326838):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -127,6 +128,9 @@ class RemediationController:
         self.min_confidence = float(min_confidence)
         if not 0.0 < self.min_confidence < 1.0:
             raise ValueError("min_confidence must be between 0 and 1")
+        self.crooked_shoulder_depth_m = float(crooked_shoulder_depth_m)
+        if not 0.020 <= self.crooked_shoulder_depth_m <= 0.040:
+            raise ValueError("crooked shoulder depth must be between 0.020 and 0.040 m")
         self.reset()
 
     def reset(self):
@@ -168,16 +172,16 @@ class RemediationController:
         target_pos = np.asarray(target["base_pos_m"], dtype=float)
         self._add([current[0], current[1], height], False)
         if spare is None:
-            # Crooked-cap remediation is a straight, fixed-orientation press.
-            # Close above the cap, descend vertically, press, then retreat before
-            # opening.  Every action is emitted by checked_action(), so W/P/R is
-            # held at the standard down pose for the entire route.
+            # Crooked-cap remediation treats the open claw like a whole-vial
+            # pickup: the conformal pockets descend around the cap and vial until
+            # the solid internal mount shoulder reaches the cap top.  The depth is
+            # measured from the fingertip TCP in the finger CAD, not inferred from
+            # the finger's overall 50.8 mm length.
             self._add([target_pos[0], target_pos[1], height], False)
-            self._add([target_pos[0], target_pos[1], height], True)
-            self._add(target_pos + [0, 0, 0.025], True)
-            self._add(target_pos + [0, 0, self.tool.press_offset_m], True)
-            self._add(target_pos + [0, 0, 0.025], True)
-            self._add([target_pos[0], target_pos[1], height], True)
+            self._add(target_pos + [0, 0, 0.025], False)
+            low = target_pos + [0, 0, self.tool.press_offset_m - self.crooked_shoulder_depth_m]
+            self._add(low, False)
+            self._add(target_pos + [0, 0, 0.025], False)
             self._add([target_pos[0], target_pos[1], height], False)
             self.state = "repair"
         else:

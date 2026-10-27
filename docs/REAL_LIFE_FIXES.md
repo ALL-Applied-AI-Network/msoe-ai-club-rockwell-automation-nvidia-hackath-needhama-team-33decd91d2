@@ -1,5 +1,9 @@
 # Real-Life Demo: What Can Go Wrong, and the Prepared Fixes
 
+> Historical risk register: regrip and wrist-camera sections describe the retained
+> legacy controller. The active shared policy is the TableCam-only open-claw
+> internal-shoulder strategy documented in `REMEDIATION_RUNBOOK.md`.
+
 Everything in the remediation pipeline has so far run only in Isaac Sim
 (`physical_robot_authorized: false` in every attempt report). This list covers
 what is likely to break when the same pipeline drives the real Fanuc ER-4iA,

@@ -56,6 +56,7 @@ class Policy:
     def __init__(self, checkpoint=None, *, mode="hover", confidence=0.70, imgsz=1280,
                  device="0", allow_provisional_contact=False,
                  pick_offset_m=0.0, place_offset_m=0.0, press_offset_m=0.0,
+                 crooked_shoulder_depth_m=0.0326838,
                  trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
         if str(device).lower() != "cpu":
@@ -75,7 +76,8 @@ class Policy:
         self.full_remediation = mode == "full"
         self.controller = (RemediationController(provisional_contact_tool(
             allow_provisional_contact, pick_offset_m, place_offset_m, press_offset_m),
-            min_confidence=self.confidence)
+            min_confidence=self.confidence,
+            crooked_shoulder_depth_m=crooked_shoulder_depth_m)
             if self.full_remediation else None)
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
         # Physical-policy traces are team artifacts, so share them by default.

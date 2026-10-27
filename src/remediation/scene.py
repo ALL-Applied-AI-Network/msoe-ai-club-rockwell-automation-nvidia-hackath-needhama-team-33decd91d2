@@ -44,6 +44,42 @@ def material(stage, name, color, opacity=1., roughness=.35, metallic=0., ior=Non
     return mat
 
 
+def clear_vial_material(stage):
+    """Use the same physically based clear-polymer appearance as YOLO training."""
+    mat = UsdShade.Material(stage.GetPrimAtPath('/World/Looks/vial_glass'))
+    if not mat.GetPrim().IsValid():
+        raise RuntimeError('Starter scene is missing /World/Looks/vial_glass')
+    shader = stage.GetPrimAtPath('/World/Looks/vial_glass/Shader')
+    shader.GetAttribute('inputs:glass_ior').Set(1.57)
+    shader.GetAttribute('inputs:frosting_roughness').Set(0.035)
+    shader.GetAttribute('inputs:glass_color').Set(Gf.Vec3f(.985, .995, 1.0))
+    return mat
+
+
+def textured_tray_aluminum(stage):
+    """Satin aluminum using the tray roughness and subtle normal textures."""
+    mat = UsdShade.Material.Define(stage, '/World/RemediationLooks/Fixture')
+    shader = UsdShade.Shader.Define(stage, str(mat.GetPath()) + '/Surface')
+    shader.SetSourceAsset(Sdf.AssetPath('OmniPBR.mdl'), 'mdl')
+    shader.SetSourceAssetSubIdentifier('OmniPBR', 'mdl')
+    texture_root = ROOT / 'shared/data/fanuc_er4ia_sim/textures'
+    shader.CreateInput('diffuse_color_constant', Sdf.ValueTypeNames.Color3f).Set(
+        Gf.Vec3f(.72, .74, .76))
+    shader.CreateInput('metallic_constant', Sdf.ValueTypeNames.Float).Set(1.0)
+    shader.CreateInput('reflection_roughness_constant', Sdf.ValueTypeNames.Float).Set(.30)
+    shader.CreateInput('reflection_roughness_texture_influence', Sdf.ValueTypeNames.Float).Set(1.0)
+    shader.CreateInput('reflectionroughness_texture', Sdf.ValueTypeNames.Asset).Set(
+        Sdf.AssetPath(str(texture_root / 'alu_roughness.png')))
+    shader.CreateInput('normalmap_texture', Sdf.ValueTypeNames.Asset).Set(
+        Sdf.AssetPath(str(texture_root / 'alu_normal.png')))
+    shader.CreateInput('bump_factor', Sdf.ValueTypeNames.Float).Set(.18)
+    shader.CreateInput('project_uvw', Sdf.ValueTypeNames.Bool).Set(True)
+    shader.CreateInput('world_or_object', Sdf.ValueTypeNames.Bool).Set(False)
+    shader.CreateInput('texture_scale', Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(90, 90))
+    mat.CreateSurfaceOutput('mdl').ConnectToSource(shader.ConnectableAPI(), 'out')
+    return mat
+
+
 def collision(prim, convex=False):
     UsdPhysics.CollisionAPI.Apply(prim).CreateCollisionEnabledAttr(True)
     if prim.IsA(UsdGeom.Mesh):
@@ -194,12 +230,12 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
     cap_color=np.clip(np.array((.96,.76,.04))+rng.normal(0,.035,3),0,1)
-    # Stipulated materials: semi-smooth (satin) silicone caps, clear glass vials,
+    # Stipulated materials: semi-gloss plastic caps, clear plastic vials,
     # a black base/standoffs, and a silver perforated plate.
-    yellow=material(stage,'Cap',cap_color,roughness=.45)
-    cavity=material(stage,'CapCavity',np.clip(cap_color*np.array((.52,.48,.22)),0,1),roughness=.55)
-    glass=material(stage,'Glass',(.97,.99,1.),.08,roughness=.02,ior=1.5)
-    metal=material(stage,'Fixture',(.72,.74,.76),roughness=.3,metallic=1.)
+    yellow=material(stage,'Cap',cap_color,roughness=.30)
+    cavity=material(stage,'CapCavity',np.clip(cap_color*np.array((.52,.48,.22)),0,1),roughness=.42)
+    glass=clear_vial_material(stage)
+    metal=textured_tray_aluminum(stage)
     black=material(stage,'TrayBase',(.025,.028,.032),roughness=.42)
     physics_mat=UsdShade.Material.Define(stage,'/World/RemediationLooks/Contact')
     pm=UsdPhysics.MaterialAPI.Apply(physics_mat.GetPrim())

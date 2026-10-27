@@ -12,12 +12,12 @@
 #SBATCH --error=logs/slurm-%j.err
 #
 # Physically compliant, fracture-aware digital twin remediation pipeline.
-# Executes TableCam perception, YOLO defect detection, compliant zero-clipping
-# pivot press simulation with breakable glass vial monitoring, and frame annotation.
+# Executes TableCam perception, YOLO defect detection, shared-policy collision
+# simulation with clear-plastic vial evaluation, and frame annotation.
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-canonical_scene="shared/scenes/black_silver_remediation_qualified_v3.usda"
+canonical_scene="shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda"
 if [[ $# -eq 2 ]]; then
     scene="$canonical_scene"
     checkpoint="$1"
@@ -60,7 +60,7 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --capture-report "$perception/capture_report.json" \
     --out "$perception/current_scene_detections.json" --device 0
 
-echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement, fixed-wrist crooked-cap press)..."
+echo "[pipeline] 3/4: Running physics-based remediation (contact placement, open-claw crooked-cap shoulder press)..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json" \

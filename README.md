@@ -26,7 +26,7 @@ All assets and dependencies are pre-configured. On any platform (Rosie, GB10, or
 The ground-truth path is the collision-physics, fracture-aware remediation simulation. Reference output: `compliant_remediation_test/`.
 
 ```bash
-# One Slurm job: TableCam capture -> YOLO -> compliant PhysX press simulation -> per-frame YOLO overlay -> mp4
+# One Slurm job: TableCam capture -> YOLO -> shared-policy PhysX remediation -> per-frame YOLO overlay -> mp4
 sbatch scripts/run_compliant_breakable_pipeline.slurm \
     shared/yolo26x/best.pt \
     shared/runs/$(date +%F)_compliant_remediation
@@ -35,7 +35,7 @@ sbatch scripts/run_compliant_breakable_pipeline.slurm \
 sbatch scripts/run_compliant_breakable_pipeline.slurm <scene.usda> <checkpoint.pt> <out_dir>
 ```
 
-Default scene: `shared/scenes/black_silver_remediation_qualified_v3.usda`. Monitor with `squeue --me` and `tail -f logs/slurm-<jobid>.out`.
+Default scene: `shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda`. It uses clear-plastic vials, textured satin aluminum, and semi-gloss plastic caps. Monitor with `squeue --me` and `tail -f logs/slurm-<jobid>.out`.
 
 Outputs in `<out_dir>`:
 - `perception/` - TableCam image, depth, `current_scene_detections.json`
@@ -44,7 +44,7 @@ Outputs in `<out_dir>`:
 - `action/attempt_report.json` and `action/frames/` - simulation result and frames
 - `action/yolo_frames/` and `tablecam_yolo_compliant_remediation.mp4` - annotated review video
 
-Latest physics-based run: [docs/media/physics_remediation_regrip.mp4](docs/media/physics_remediation_regrip.mp4) (click it on GitHub to play; full pipeline, scene `shared/runs/2026-10-26_docspec_blacksilver_leaning/`). The missing cap in G15 is picked, placed and seated through contact. The crooked cap in G09 is measured with the wrist camera, gripped along its axis, turned upright, regrasped on the table, and placed and pressed flush (see `docs/PHYSICAL_SPECIFICATIONS.md` sec. 7 for repeat results, including the 71 deg cap that still fails 2/3).
+Current crooked-cap validation: `shared/runs/2026-10-27_shared_policy_open_shoulder_press_v14/`. The shared controller keeps the claw open, descends the CAD-measured 32.6838 mm from the fingertip TCP so the internal shoulder presses the cap, then retreats open. The older [regrip video](docs/media/physics_remediation_regrip.mp4) is retained as a legacy comparison, not the active policy.
 
 Any other Isaac script: `./run.sh <script.py> [args]` (submits via Slurm on the login node). See `AGENTS.md` for architecture and rules, and `docs/REMEDIATION_RUNBOOK.md` for scene qualification and dataset/training steps.
 

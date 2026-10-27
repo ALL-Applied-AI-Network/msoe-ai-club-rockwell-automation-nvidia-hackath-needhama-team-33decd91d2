@@ -1048,7 +1048,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     from isaacsim.sensors.camera import Camera
     from src.remediation.controller import (ContactTool, RemediationController,
                                             wpr_to_rotation)
-    from src.remediation.geometry import base_to_uf0, transit_base_z, uf0_to_base
+    from src.remediation.geometry import SPEC, base_to_uf0, transit_base_z, uf0_to_base
     from src.remediation.policy_driver import PolicyDriver
 
     P = Planner()
@@ -1097,7 +1097,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                   closed_loop_tracking=True)
     controller = RemediationController(
         ContactTool(args.pick_offset_m, args.place_offset_m, args.press_offset_m, validated=True),
-        max_attempts=1, min_confidence=args.confidence)
+        max_attempts=1, min_confidence=args.confidence,
+        crooked_shoulder_depth_m=args.crooked_shoulder_depth_m)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
     checkpoint = Path(args.checkpoint).resolve()
@@ -1257,6 +1258,7 @@ def main():
     parser.add_argument('--pick-offset-m', type=float, default=0.0)
     parser.add_argument('--place-offset-m', type=float, default=0.0)
     parser.add_argument('--press-offset-m', type=float, default=0.0)
+    parser.add_argument('--crooked-shoulder-depth-m', type=float, default=0.0326838)
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
                         help='regrip: wrist-camera servo onto the cap axis, coaxial grip, lift, turn upright and '
                              're-place; vertical: closed fingertips pressed straight down; tilted: PRESS_TILT_DEG '

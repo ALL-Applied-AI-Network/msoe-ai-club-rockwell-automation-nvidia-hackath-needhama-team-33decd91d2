@@ -221,6 +221,7 @@ def main() -> None:
     p.add_argument("--pick-offset-m", type=float, default=0.0)
     p.add_argument("--place-offset-m", type=float, default=0.0)
     p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -244,7 +245,9 @@ def main() -> None:
                                  imgsz=args.imgsz, device=args.device,
                                  allow_provisional_contact=args.allow_provisional_contact,
                                  pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
-                                 press_offset_m=args.press_offset_m, trace_dir=args.trace_dir))
+                                 press_offset_m=args.press_offset_m,
+                                 crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
+                                 trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
         except Exception:  # noqa: BLE001  (reported by verdict)
@@ -266,7 +269,9 @@ def main() -> None:
                    imgsz=args.imgsz, device=args.device,
                    allow_provisional_contact=args.allow_provisional_contact,
                    pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
-                   press_offset_m=args.press_offset_m, trace_dir=args.trace_dir))
+                   press_offset_m=args.press_offset_m,
+                   crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
+                   trace_dir=args.trace_dir))
 
 
 if __name__ == "__main__":

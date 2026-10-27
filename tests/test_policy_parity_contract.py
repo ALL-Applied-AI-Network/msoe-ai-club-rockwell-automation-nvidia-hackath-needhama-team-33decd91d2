@@ -67,6 +67,7 @@ class PolicyParityContractTests(unittest.TestCase):
 
     def test_shared_isaac_adapter_uses_closed_loop_joint_tracking(self):
         runner = (ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text()
+        self.assertIn("from src.remediation.geometry import SPEC, base_to_uf0", runner)
         self.assertIn("closed_loop_tracking=True", runner)
         self.assertIn("POLICY_MAX_FOLLOWING_ERROR_DEG", runner)
         self.assertIn("POLICY_RESUME_ERROR_DEG", runner)

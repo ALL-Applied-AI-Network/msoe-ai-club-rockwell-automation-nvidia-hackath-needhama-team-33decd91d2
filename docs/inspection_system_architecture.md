@@ -50,8 +50,8 @@ To achieve the twin goals of **ultra-low-cost, sub-millisecond edge inspection**
 | Detected Class | Decision Action | Robot Arm Command |
 |---|---|---|
 | `pass` | `pass` | None (keep on line) |
-| `crooked_cap` | `press_reseat` | Compliant downward Z-press with tactile/force check |
-| `missing_cap` | `scrap_and_backfill` | Pick vial body $\to$ deposit to scrap chute $\to$ buffer pick |
+| `crooked_cap` | `open_shoulder_reseat` | TableCam-targeted open-claw descent; CAD internal shoulder presses cap; position-limited, no force input |
+| `missing_cap` | `pick_place_press` | Pick nearest camera-detected loose cap $\to$ place $\to$ position-limited press |
 | `damaged_vial` | `scrap_and_backfill` | Safe gripper retraction $\to$ scrap $\to$ buffer pick |
 | `no_vial` (missed) | `emergency_missed_placement` | Immediately pick replacement from buffer to backfill |
 

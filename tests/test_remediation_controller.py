@@ -31,7 +31,7 @@ class RemediationControllerTests(unittest.TestCase):
         np.testing.assert_allclose(action[:6], self.tcp)
 
     def test_qualified_crooked_cap_builds_bounded_route(self):
-        detection = self.detection("crooked_cap", [0.31, 0.02, 0.01])
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
         actions = [self.controller.act(self.obs, [detection])]
         while self.controller.queue:
             actions.append(self.controller.act(self.obs, [detection]))
@@ -39,7 +39,8 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertTrue(all(len(action) == 7 for action in actions))
         self.assertTrue(all(np.isfinite(action).all() for action in map(np.asarray, actions)))
         self.assertTrue(all(150.0 <= action[0] <= 650.0 for action in actions))
-        self.assertTrue(all(action[3:6] == [-180.0, 0.0, 0.0] for action in actions))
+        self.assertTrue(all(np.allclose(wpr_to_rotation(action[3:6])[:, 2], [0, 0, -1])
+                            for action in actions))
 
     def test_vertical_axis_has_standard_down_orientation(self):
         np.testing.assert_allclose(axis_to_wpr([0, 0, 1]), [-180, 0, 0], atol=1e-8)
@@ -51,17 +52,24 @@ class RemediationControllerTests(unittest.TestCase):
         axis /= np.linalg.norm(axis)
         np.testing.assert_allclose(wpr_to_rotation(axis_to_wpr(axis))[:, 2], -axis, atol=1e-8)
 
-    def test_crooked_press_needs_no_wrist_axis_or_table_spot(self):
-        detection = self.detection("crooked_cap", [0.31, 0.02, 0.01])
+    def test_crooked_open_claw_descends_to_internal_shoulder_and_retreats(self):
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
         actions = [self.controller.act(self.obs, [detection])]
         while self.controller.queue:
             actions.append(self.controller.act(self.obs, [detection]))
         self.assertEqual(self.controller.state, "repair")
-        gripper = [action[6] for action in actions]
-        self.assertIn(1.0, gripper)
-        self.assertIn(0.0, gripper)
-        self.assertEqual(len(actions), 8)
+        self.assertTrue(all(action[6] == 0.0 for action in actions))
         self.assertTrue(all(action[3:6] == [-180.0, 0.0, 0.0] for action in actions))
+        target_uf0_z = base_to_uf0([0.31, 0.02, 0.21])[2]
+        self.assertAlmostEqual(min(action[2] for action in actions),
+                               target_uf0_z - 32.6838 + 0.5, places=4)
+
+    def test_crooked_shoulder_depth_limits_are_rejected(self):
+        tool = ContactTool(0.0, 0.0, 0.0, validated=True)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_shoulder_depth_m=0.019)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_shoulder_depth_m=0.041)
 
     def test_missing_cap_requires_spare(self):
         action = self.controller.act(

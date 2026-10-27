@@ -1,8 +1,8 @@
 # Remediation execution status
 
-Updated October 22, 2026. This records the current implemented evidence for the
+Archived status snapshot from October 22, 2026. It records the evidence available for the
 black-and-silver remediation fixture. It does not promote the system for physical
-robot contact.
+robot contact. For the active scene and policy, use `REMEDIATION_RUNBOOK.md`.
 
 ## Fixture and scene
 

@@ -81,8 +81,9 @@ uv run run.py --mode hover
 
 Full mode uses the same simulator-independent controller as the supported Isaac
 pipeline. It requests TableCam RGB/depth, handles missing caps before crooked caps,
-and uses a fixed-down, straight vertical press for a crooked cap. W/P/R remains
-`-180, 0, 0` throughout that press route. The controller rejects simulator-only fields; Isaac truth and contact
+and keeps the claw open while descending around the capped vial until the CAD-measured
+internal shoulder reaches the crooked cap, then retreats vertically.
+The controller rejects simulator-only fields; Isaac truth and contact
 loads exist only in separate evaluation output. Because the real cell provides no
 force measurement, shared-policy pressing is position-limited in both environments.
 
@@ -90,7 +91,8 @@ For supervised provisional contact, use CLI options rather than environment vari
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
-  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010
+  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --crooked-shoulder-depth-m 0.0326838
 ```
 
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,

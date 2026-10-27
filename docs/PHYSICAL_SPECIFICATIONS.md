@@ -56,12 +56,16 @@ must be regenerated before a later release decision.
 **Materials and priority (October 26, 2026):** This document takes priority over the
 CAD models in `cad_models/` wherever they disagree (the CAD vial is 1.070/1.038 in
 OD/ID and the CAD flange 1.25 in). Simulation materials are a black tray base and
-standoffs, a silver perforated plate, clear glass vials, and semi-smooth (satin)
-caps. A crooked cap is defined by how it rests (see section 5), not by a tilt angle.
+standoffs, a satin silver perforated plate, clear plastic vials, and semi-gloss
+plastic caps (surface roughness 0.30; darker cavity roughness 0.42). The clear-plastic render is an appearance approximation using the
+YOLO training shader (IOR 1.57, frosting roughness 0.035); the resin has not been
+measured. The silver plate uses the aluminum roughness and normal maps. These
+visual settings do not change collision geometry or contact parameters. A crooked
+cap is defined by how it rests (see section 5), not by a tilt angle.
 
 ---
 
-## 1. Vial Dimensions (Glass Cylinder, Flat Bottom)
+## 1. Vial Dimensions (Clear Plastic Cylinder, Flat Bottom)
 * **Inner Diameter (ID)**: $1.00\text{ in} = 0.02540\text{ m} = 25.40\text{ mm}$
   * Inner Radius: $0.50\text{ in} = 0.01270\text{ m} = 12.70\text{ mm}$
 * **Outer Diameter (OD)**: $1.05\text{ in} = 0.02667\text{ m} = 26.67\text{ mm}$
@@ -195,14 +199,17 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 - Build the scene with `qualify_scene.py --fixed --scene-out shared/runs/<run>/scene.usda`, then pass it as the first argument to `scripts/run_compliant_breakable_pipeline.slurm`.
 - Reference run: `shared/runs/2026-10-26_docspec_compliant_remediation/`.
 
-### Remediation motion results (October 26, 2026, scene `shared/runs/2026-10-26_docspec_blacksilver_balanced/`)
+### Legacy remediation motion results (October 26–27, 2026)
+
+The press, wrist-servo and regrip results below are retained experimental history.
+They are not the active shared physical/simulation policy.
 - **Missing cap (physics pick-and-place):** seated in 3/3 repeats (tilt <= 0.7 deg, flush), peak measured vial load 3.6-5.6 N.
 - **Crooked cap, superseded balanced-pose scene (45 deg tilted press, back-face fingertip edge):** seated in 1/3 repeats. A balanced cap rests on its high-side plug edge with the whole flange inboard of that rim support (flange edge 10.9 mm vs rim 12.7 mm from the axis), so a downward push tips it further; the rigid sim has no cap compliance to help it slide in. Side-face (notched) and back-face-along-tilt variants were also tried; the cap pocket mouth at the fingertip captured the cap. Runs: `shared/runs/2026-10-26_physics_remediation_*`.
 - 90 deg (flat face horizontal) is not usable inside the tray: the SMC body hangs 18-24 mm below the finger faces and hits neighbouring vials.
 - **Crooked cap, leaning pose (scene `shared/runs/2026-10-26_docspec_blacksilver_leaning/`, G09 at 47.8 deg):** 0/3 seated with a straight-down press beside the raised flange edge. One run pushed the cap into the vial (68 N measured, vial fractured), one levelled it to ~10 deg but the cap was carried off on retreat, one was carried off before levelling. The TableCam depth plane fit misread the lean (21 deg tilt / 53 deg heading vs true 47.8 deg / 42.5 deg) because it assumes a flat cap top. Runs: `shared/runs/2026-10-26_physics_remediation_leaning_repeat*`.
 - **Same, with vial give** (compliant glass contact, 6e4 N/m / 100 N s/m, ~0.5 mm at 30 N; `collision_manager.configure_vial_give`): no fractures (peak 14-36 N vs 68 N rigid), but 0/3 seated. In every repeat the cap is carried out on retreat (see the back-face result below for the cause). Runs: `shared/runs/2026-10-26_physics_remediation_vialgive_repeat*`.
 - **Same, pressing with the solid outer back face 10 mm up from the tip** (`PRESS_FACE_UP_M`, path checked offline to stay clear of all glass): 0/3 seated, no fractures (13-28 N). The cap's open top (21.15 mm through the flange) faces up toward the tool in this lean; the finger slides into it and the cap rides out on the finger like a thimble. This is also what happened in the earlier fingertip presses (an earlier note attributing it to the finger pocket was wrong). Runs: `shared/runs/2026-10-26_physics_remediation_backface_repeat*`.
-- **Straight-down press with the closed fingertips** (`--crooked-press vertical`, now the default): 0/3 seated centred on the vial (the leaning cap slides up into the fingertip pocket; at the tip the pocket mouth, r 13.6 mm, is wider than the finger's 11.1 mm half-width, leaving only two solid crescents) and 0/3 with a crescent offset over the raised flange edge (tilt fell from ~45 to ~38-40 deg, then stalled). The cap stays in its vial; peak loads 12-18 N. Runs: `shared/runs/2026-10-26_physics_remediation_{vertical,crescent}_repeat*`.
+- **Straight-down press with the closed fingertips** (legacy `--controller-policy legacy --crooked-press vertical`): 0/3 seated centred on the vial (the leaning cap slides up into the fingertip pocket; at the tip the pocket mouth, r 13.6 mm, is wider than the finger's 11.1 mm half-width, leaving only two solid crescents) and 0/3 with a crescent offset over the raised flange edge (tilt fell from ~45 to ~38-40 deg, then stalled). The cap stays in its vial; peak loads 12-18 N. Runs: `shared/runs/2026-10-26_physics_remediation_{vertical,crescent}_repeat*`.
 
 ### Wrist-camera servoing onto the crooked cap axis (October 26, 2026)
 `src/remediation/servo_crooked_cap.py` (maths in `wrist_servo.py`). TableCam supplies only the vial position: its depth-based lean estimate was unreliable (heading wrong by 142 deg on one cap, tilt 21-33 deg against 48-71 deg true). The wrist camera first looks straight down over the vial, fits an ellipse to the inner edge of the cap's lit flange ring (the 21.15 mm opening), computes the two possible circle-plane normals in closed form, and picks one using the wrist depth gradient across the ring. It then points the camera down that axis and stops at the first view where the opening is round (minor/major >= 0.995), reporting that camera axis.
@@ -216,7 +223,7 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 
 The closed-form estimate is accurate from an oblique view (0.3-2.2 deg from the first, straight-down image) but noisy once the opening is nearly round (up to ~14 deg), so the round view's camera axis is used rather than its image estimate. Sim images are noise-free; real wrist RGB-D has not been tested. Runs: `shared/runs/2026-10-26_wrist_servo_v4_G09`, `shared/runs/2026-10-26_servo_test_seed*/servo_v4`.
 
-**Real wrist-camera model (October 27, 2026).** The servo now sees the wrist camera as the cell delivers it (`src/remediation/wrist_camera_model.py`, from `PhysicalAI-Hackathon-2026/calibration/cameras.json`). Colour: 848 x 480 sensor served at 1280 x 720, fx 619.6 px, radial k1 = -0.0196. Depth: a separate camera at its own calibrated pose (21 mm and 2.9 deg from the colour camera), 848 x 480, fx 416.9 px, principal point (421.35, 239.34), uint16 mm with 0 = no depth. Both poses are set from the calibration at runtime, not taken from the scene. The ellipse is fitted to the undistorted opening edge, and depth is registered onto the colour pixels before the ring's depth gradient is taken. Depth noise is an assumption, not a measurement: the calibration's 3.0 mm plane RMS at 0.363 m, scaled with range^2. No colour sensor noise is modelled. Ray-traced depth still returns clear glass as a surface.
+**Legacy real wrist-camera model (October 27, 2026).** The retained servo sees the wrist camera as the cell delivers it (`src/remediation/wrist_camera_model.py`, from `PhysicalAI-Hackathon-2026/calibration/cameras.json`). Colour: 848 x 480 sensor served at 1280 x 720, fx 619.6 px, radial k1 = -0.0196. Depth: a separate camera at its own calibrated pose (21 mm and 2.9 deg from the colour camera), 848 x 480, fx 416.9 px, principal point (421.35, 239.34), uint16 mm with 0 = no depth. Both poses are set from the calibration at runtime, not taken from the scene. The ellipse is fitted to the undistorted opening edge, and depth is registered onto the colour pixels before the ring's depth gradient is taken. Depth noise is an assumption, not a measurement: the calibration's 3.0 mm plane RMS at 0.363 m, scaled with range^2. No colour sensor noise is modelled. Ray-traced depth still returns transparent plastic as a surface.
 
 | Scene (cap, tilt) | Ideal camera error | Real-camera model error |
 |---|---|---|
@@ -239,8 +246,8 @@ Full pipeline with the real-camera model, one run per scene (`shared/runs/2026-1
 | G09 (47.7 deg) | 3.0 deg | yes | no: released 1 mm high, carried off on retreat (before any wrist view) | intact |
 
 
-### Crooked cap: wrist-servoed grip, table regrasp and re-place (October 27, 2026)
-Default runner strategy (`--crooked-press regrip`). Sequence:
+### Legacy crooked-cap wrist-servoed grip, table regrasp and re-place (October 27, 2026)
+Legacy comparison strategy (`--controller-policy legacy --crooked-press regrip`). Sequence:
 1. Wrist-camera servo onto the cap axis (above).
 2. Open fingers approach down that axis, spread axis horizontal, and close on the flange. Near the robot base a cap leaning toward the robot needs J3 past its -69 deg limit for a coaxial grip (G09: -72.7 deg), so the tool may lean up to 10 deg less than the cap.
 3. The cap is lifted straight up and turned upright in free air.
