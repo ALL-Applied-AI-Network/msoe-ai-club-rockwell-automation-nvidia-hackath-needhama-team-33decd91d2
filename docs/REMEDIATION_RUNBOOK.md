@@ -60,8 +60,13 @@ sbatch scripts/submit_isaac_job.slurm src/remediation/qualify_scene.py \
   --out "$RUN_DIR/qualification" \
   --seed 20261022 \
   --crooked 1 --missing 1 --table-caps 1 \
+  --paper-color 1.0,0.25,0.55 \
   --steps 360 --fixed
 ```
+
+Loose replacement caps are staged on the right side of the calibrated
+TableCam image, over the optional pink paper. Use the same paper placement in
+the physical cell; it is a visual background aid, never a localization target.
 
 After the job finishes, inspect:
 
@@ -125,7 +130,7 @@ sbatch scripts/run_compliant_breakable_pipeline.slurm \
 
 To run a deliberate alternate scene, supply it as the first argument before the
 checkpoint. The canonical scene is
-`shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda`; do not substitute
+`shared/scenes/tablecam_right_pink_spares_qualified_v2.usda`; do not substitute
 `shared/scenes/remediation_dataset1_v2_cad.usda` for the black-and-silver test.
 
 ## 5. Physical-workcell preparation
@@ -313,6 +318,7 @@ over the vial. The controls have distinct effects:
 - `--place-offset-m`: release height above a missing-cap target.
 - `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
+- `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
 
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and

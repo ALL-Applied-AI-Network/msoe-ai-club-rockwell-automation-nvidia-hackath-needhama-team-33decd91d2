@@ -20,7 +20,8 @@ ALLOWED_OBSERVATION_FIELDS = frozenset({
 })
 ALLOWED_DETECTION_FIELDS = frozenset({
     "class_name", "confidence", "base_pos_m", "bbox_xyxy", "pixel",
-    "depth_available", "contact_qualified", "localization_note", "timestamp",
+    "depth_available", "surface_top_base_z_m", "contact_qualified",
+    "localization_note", "timestamp",
 })
 FORBIDDEN_ORACLE_FIELDS = frozenset({
     "prim", "prim_path", "world_pose", "true_pose", "true_axis",
@@ -120,7 +121,7 @@ def wpr_to_rotation(wpr_deg):
 
 class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
-                 crooked_shoulder_depth_m=0.0326838):
+                 crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -131,6 +132,9 @@ class RemediationController:
         self.crooked_shoulder_depth_m = float(crooked_shoulder_depth_m)
         if not 0.020 <= self.crooked_shoulder_depth_m <= 0.040:
             raise ValueError("crooked shoulder depth must be between 0.020 and 0.040 m")
+        self.crooked_tap_depth_m = float(crooked_tap_depth_m)
+        if not 0.0 < self.crooked_tap_depth_m <= 0.010:
+            raise ValueError("crooked tap depth must be greater than 0 and at most 0.010 m")
         self.reset()
 
     def reset(self):
@@ -177,11 +181,16 @@ class RemediationController:
             # the solid internal mount shoulder reaches the cap top.  The depth is
             # measured from the fingertip TCP in the finger CAD, not inferred from
             # the finger's overall 50.8 mm length.
+            surface_top = float(target.get("surface_top_base_z_m", np.nan))
+            if not np.isfinite(surface_top):
+                raise ValueError("crooked cap requires an RGB-D surface-top height")
+            contact = np.array([target_pos[0], target_pos[1],
+                                surface_top - self.crooked_shoulder_depth_m])
             self._add([target_pos[0], target_pos[1], height], False)
-            self._add(target_pos + [0, 0, 0.025], False)
-            low = target_pos + [0, 0, self.tool.press_offset_m - self.crooked_shoulder_depth_m]
+            self._add(contact + [0, 0, 0.025], False)
+            low = contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m]
             self._add(low, False)
-            self._add(target_pos + [0, 0, 0.025], False)
+            self._add(contact + [0, 0, 0.025], False)
             self._add([target_pos[0], target_pos[1], height], False)
             self.state = "repair"
         else:

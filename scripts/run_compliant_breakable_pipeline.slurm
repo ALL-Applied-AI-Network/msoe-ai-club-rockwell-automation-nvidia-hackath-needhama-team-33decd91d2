@@ -17,7 +17,7 @@
 set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
-canonical_scene="shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda"
+canonical_scene="shared/scenes/tablecam_right_pink_spares_qualified_v2.usda"
 if [[ $# -eq 2 ]]; then
     scene="$canonical_scene"
     checkpoint="$1"

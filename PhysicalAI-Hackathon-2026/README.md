@@ -92,7 +92,7 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
-  --crooked-shoulder-depth-m 0.0326838
+  --crooked-shoulder-depth-m 0.0326838 --crooked-tap-depth-m 0.005
 ```
 
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,

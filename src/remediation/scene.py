@@ -225,7 +225,12 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         # area creates background variation without changing the tray geometry.
         # Its top is just above the nominal table surface so caps settle on it.
         paper = material(stage, 'TableCapPaper', paper_color, roughness=.72)
-        box(stage, '/World/TableCapPaper', (.37, -.245, SPEC.surface_world_z + .0001),
+        # Positive table Y is the right-hand side in the calibrated TableCam
+        # image.  Match the physical spare-cap staging area there.
+        # Lift the rendered sheet 0.5 mm beyond its physical half-thickness.
+        # The starter cell has a separate white mat coplanar with the nominal
+        # work surface; the extra visual clearance prevents depth fighting.
+        box(stage, '/World/TableCapPaper', (.37, .315, SPEC.surface_world_z + .0006),
             (.27, .12, .0002), paper)
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
@@ -305,7 +310,8 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     for i in range(table_caps):
         # Three per row: a fourth column (x 0.415 m and beyond) is at the edge of the arm's reach.
         row,col=divmod(i,3)
-        pos=np.array([.28+col*.045,-.255+row*.043,0.])
+        # Stage loose replacement caps on the right from TableCam's viewpoint.
+        pos=np.array([.28+col*.045,.325-row*.043,0.])
         if randomize: pos[:2]+=rng.uniform(-.001,.001,2)
         cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(SPEC.surface_world_z,cap_R)
         path=f'/World/RemediationCaps/Table_{i:02d}'

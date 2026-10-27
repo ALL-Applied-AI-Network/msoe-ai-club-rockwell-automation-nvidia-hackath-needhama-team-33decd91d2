@@ -18,59 +18,6 @@ ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_DIR = ROOT / 'PhysicalAI-Hackathon-2026/calibration'
 
 
-def _kmeans_1d(values, groups, iterations=30):
-    """Small deterministic 1-D clustering helper; no learned tray coordinates."""
-    values=np.asarray(values,dtype=float)
-    centers=np.linspace(values.min(),values.max(),groups)
-    for _ in range(iterations):
-        labels=np.argmin(abs(values[:,None]-centers[None,:]),axis=1)
-        updated=np.array([values[labels==i].mean() if np.any(labels==i) else centers[i] for i in range(groups)])
-        if np.allclose(updated,centers): break
-        centers=updated
-    return np.sort(centers)
-
-
-def refine_crooked_to_observed_grid(targets):
-    """Replace a tilted cap centroid with its nearest grid intersection.
-
-    The grid is fitted from current good/missing observations only. It is a
-    perception-derived consistency prior, not a stored aperture coordinate map.
-    """
-    anchors=[t for t in targets if t['class_name'] in ('good_cap','missing_cap') and t['confidence']>=.9]
-    if len(anchors)<18: return targets
-    points=np.array([t['base_pos_m'][:2] for t in anchors],dtype=float)
-    center=points.mean(axis=0)
-    _,_,vt=np.linalg.svd(points-center,full_matrices=False)
-    axes=vt[:2]
-    uv=(points-center)@axes.T
-    candidates=[]
-    for rows,cols in ((6,5),(5,6)):
-        u=_kmeans_1d(uv[:,0],rows); v=_kmeans_1d(uv[:,1],cols)
-        grid=np.array([center+x*axes[0]+y*axes[1] for x in u for y in v])
-        residual=np.mean([np.min(np.linalg.norm(grid-p,axis=1)) for p in points])
-        candidates.append((residual,grid))
-    _,grid=min(candidates,key=lambda item:item[0])
-    refined=[]
-    for target in targets:
-        item=dict(target)
-        if item['class_name']=='crooked_cap':
-            old=np.asarray(item['base_pos_m'],dtype=float)
-            nearest=grid[np.argmin(np.linalg.norm(grid-old[:2],axis=1))]
-            correction=float(np.linalg.norm(nearest-old[:2]))
-            # A poor lattice fit must never turn a detector estimate into a
-            # distant command target. Expected tilted-cap correction is mm-scale.
-            if correction<=.012:
-                item['box_center_base_pos_m']=old.tolist()
-                item['base_pos_m']=[float(nearest[0]),float(nearest[1]),float(old[2])]
-                item['localization_note']='Tilted-cap box center refined to nearest TableCam-observed tray grid intersection; validation pending'
-                item['feature']='observed_grid_slot'
-            else:
-                item['localization_note']='Observed grid fit disagreed with tilted-cap box center; retained coarse RGB estimate'
-                item['grid_refinement_rejected_m']=correction
-        refined.append(item)
-    return refined
-
-
 def load_cameras(calib_dir=CALIBRATION_DIR):
     raw = json.loads((Path(calib_dir) / 'cameras.json').read_text())
     return {name: {'T': np.array(c.get('T_base_cam', c.get('T_flange_cam'))),
@@ -162,17 +109,32 @@ class RemediationVisionDetector:
                          if name == 'table_cap' else self.rim_z + (0 if name == 'missing_cap' else SPEC.flange_thickness))
                 position = pixel_to_base(self.table_cam, center, plane, (w, h))
                 depth_value=None
+                surface_top=None
                 if depth_m is not None:
                     x0,y0,x1,y1=np.round(xyxy).astype(int)
-                    crop=depth_m[max(y0,0):min(y1,h),max(x0,0):min(x1,w)]
-                    valid=crop[np.isfinite(crop) & (crop>0)]
-                    if len(valid): depth_value=float(np.median(valid))
+                    x0,x1=max(x0,0),min(x1,w); y0,y1=max(y0,0),min(y1,h)
+                    mx,my=int(.15*(x1-x0)),int(.15*(y1-y0))
+                    xa,xb,ya,yb=x0+mx,x1-mx,y0+my,y1-my
+                    crop=depth_m[ya:yb,xa:xb]
+                    vv,uu=np.mgrid[ya:yb,xa:xb]
+                    valid=np.isfinite(crop) & (crop>0)
+                    if valid.sum() >= 8:
+                        z=crop[valid]
+                        native_w,native_h=self.table_cam['size']
+                        su,sv=native_w/w,native_h/h
+                        pc=np.column_stack([((uu[valid]*su-native_w/2)/self.table_cam['fx'])*z,
+                                            ((vv[valid]*sv-native_h/2)/self.table_cam['fx'])*z,z])
+                        points=pc@self.table_cam['T'][:3,:3].T+self.table_cam['T'][:3,3]
+                        position=np.median(points,axis=0)
+                        depth_value=float(np.median(z))
+                        surface_top=float(np.percentile(points[:,2],90))
                 targets.append({'class_name': name, 'confidence': float(confidence),
                                 'bbox_xyxy': xyxy.tolist(), 'pixel': center.tolist(),
                                 'base_pos_m': position.tolist(), 'tcp_pos_mm': base_to_uf0(position).tolist(),
                                 'timestamp': timestamp, 'plane_base_z_m': plane,
                                 'depth_median_m':depth_value,
+                                'surface_top_base_z_m':surface_top,
                                 'depth_available':depth_value is not None,
                                 'contact_qualified': False,
                                 'localization_note': 'RGB box-center and optional aligned depth observation; feature refinement and contact error budget remain unvalidated'})
-        return refine_crooked_to_observed_grid(targets)
+        return targets

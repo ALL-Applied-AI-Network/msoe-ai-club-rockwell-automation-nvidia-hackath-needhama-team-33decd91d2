@@ -16,6 +16,7 @@ class RemediationControllerTests(unittest.TestCase):
     @staticmethod
     def detection(class_name, xyz, *, qualified=True, depth=True, confidence=0.95):
         return {"class_name": class_name, "base_pos_m": list(xyz),
+                "surface_top_base_z_m": float(xyz[2]),
                 "confidence": confidence, "contact_qualified": qualified,
                 "depth_available": depth}
 
@@ -62,7 +63,7 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertTrue(all(action[3:6] == [-180.0, 0.0, 0.0] for action in actions))
         target_uf0_z = base_to_uf0([0.31, 0.02, 0.21])[2]
         self.assertAlmostEqual(min(action[2] for action in actions),
-                               target_uf0_z - 32.6838 + 0.5, places=4)
+                               target_uf0_z - 32.6838 - 5.0 + 0.5, places=4)
 
     def test_crooked_shoulder_depth_limits_are_rejected(self):
         tool = ContactTool(0.0, 0.0, 0.0, validated=True)
@@ -70,6 +71,10 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, crooked_shoulder_depth_m=0.019)
         with self.assertRaises(ValueError):
             RemediationController(tool, crooked_shoulder_depth_m=0.041)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_tap_depth_m=0.0)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_tap_depth_m=0.011)
 
     def test_missing_cap_requires_spare(self):
         action = self.controller.act(

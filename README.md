@@ -35,7 +35,7 @@ sbatch scripts/run_compliant_breakable_pipeline.slurm \
 sbatch scripts/run_compliant_breakable_pipeline.slurm <scene.usda> <checkpoint.pt> <out_dir>
 ```
 
-Default scene: `shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda`. It uses clear-plastic vials, textured satin aluminum, and semi-gloss plastic caps. Monitor with `squeue --me` and `tail -f logs/slurm-<jobid>.out`.
+Default scene: `shared/scenes/tablecam_right_pink_spares_qualified_v2.usda`. It uses clear-plastic vials, textured satin aluminum, semi-gloss plastic caps, and the TableCam-right pink spare-cap area. Monitor with `squeue --me` and `tail -f logs/slurm-<jobid>.out`.
 
 Outputs in `<out_dir>`:
 - `perception/` - TableCam image, depth, `current_scene_detections.json`

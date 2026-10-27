@@ -59,7 +59,7 @@ When simulating the vial tray, Fanuc ER-4iA arm, and gripper:
 The only supported remediation path is the compliant, collision-aware, fracture-aware simulation. Its reference output is checked in at `compliant_remediation_test/`.
 
 Entry point: `sbatch scripts/run_compliant_breakable_pipeline.slurm [scene.usda] <yolo_checkpoint.pt> <output_dir>`
-(default scene: `shared/runs/2026-10-27_clear_polymer_textured_tray_glossy_caps_qualification/scene.usda`). Stages:
+(default scene: `shared/scenes/tablecam_right_pink_spares_qualified_v2.usda`). Stages:
 
 1. `src/remediation/capture_live_tablecam.py` (Isaac): captures TableCam colour + depth -> `perception/`.
 2. `src/inspection/inspect_remediation_capture.py` (YOLO, `.conda_env`): detects defects and backprojects them to robot-base positions via `src/inspection/vision_pipeline.py`.

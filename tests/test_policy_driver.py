@@ -14,6 +14,7 @@ class PolicyDriverTests(unittest.TestCase):
         records = PolicyDriver(controller, observations, actions.append).run()
         self.assertEqual(actions, [])
         self.assertTrue(records[-1]["hold"])
+        self.assertEqual(records[-1]["state_before"], "inspect")
 
     def test_missing_cap_route_executes_shared_actions(self):
         controller = RemediationController(ContactTool(0.005, 0.005, 0.005, validated=True))
@@ -40,6 +41,12 @@ class PolicyDriverTests(unittest.TestCase):
         records = PolicyDriver(controller, observe, execute, max_decisions=40).run()
         self.assertGreater(sum(not row["hold"] for row in records), 5)
         self.assertEqual(controller.state, "inspect")
+        # Returning from verify to inspect is a transition hold, not completion.
+        # The final record is the subsequent inspection that finds no new work.
+        self.assertEqual(records[-2]["state_before"], "verify")
+        self.assertEqual(records[-2]["state"], "inspect")
+        self.assertEqual(records[-1]["state_before"], "inspect")
+        self.assertEqual(records[-1]["state"], "inspect")
 
 
 if __name__ == "__main__":

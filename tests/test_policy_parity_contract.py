@@ -79,6 +79,7 @@ class PolicyParityContractTests(unittest.TestCase):
         obs = {"tcp_pose": [*base_to_uf0([.3, 0, .3]), -180, 0, 0], "joints": [0] * 7}
         detections = [{"class_name": "crooked_cap", "confidence": .91,
                        "base_pos_m": [.31, .02, .01], "depth_available": True,
+                       "surface_top_base_z_m": .01,
                        "contact_qualified": True}]
         actions = [controller.act(obs, detections) for controller in controllers]
         self.assertEqual(actions[0], actions[1])
