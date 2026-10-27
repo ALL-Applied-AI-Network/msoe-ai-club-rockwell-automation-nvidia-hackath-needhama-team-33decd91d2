@@ -273,19 +273,24 @@ def tablecam_points(depth, capture_report):
 
 
 def refine_caps_with_depth(observed, depth, capture_report):
-    """Replace each good-cap position with the centroid of its flange top in TableCam depth.
+    """Replace each good-cap and table-cap position with the centroid of its flange top
+    in TableCam depth.
 
-    The box centre of an obliquely viewed cap is biased by ~1.4 mm; the flange top
-    (depth points within 0.8 mm of the seated flange-top height) is a full annulus
-    about the cap axis, so its centroid is the bore centre.
+    The box centre of an obliquely viewed cap is biased by ~1.4 mm (table caps
+    1.9-2.6 mm, enough to grip a spare off-centre so its plug catches the rim); the
+    flange top (depth points within 0.8 mm of the seated, or standing, flange-top
+    height) is a full annulus about the cap axis, so its centroid is the cap axis
+    (within 0.5 mm).
     """
     from src.remediation.geometry import SPEC, rim_base_z
     pts, scale = tablecam_points(depth, capture_report)
-    top = rim_base_z() + SPEC.flange_thickness
+    tops = {'good_cap': rim_base_z() + SPEC.flange_thickness,
+            'table_cap': SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness}
     out = []
     for d in observed:
         d = dict(d)
-        if d.get('class_name') == 'good_cap' and 'bbox_xyxy' in d:
+        top = tops.get(d.get('class_name'))
+        if top is not None and 'bbox_xyxy' in d:
             x0, y0, x1, y1 = [int(round(v / scale)) for v in d['bbox_xyxy']]
             q = pts[max(0, y0):y1, max(0, x0):x1].reshape(-1, 3)
             q = q[np.isfinite(q).all(1) & (np.abs(q[:, 2] - top) < 0.0008)]
