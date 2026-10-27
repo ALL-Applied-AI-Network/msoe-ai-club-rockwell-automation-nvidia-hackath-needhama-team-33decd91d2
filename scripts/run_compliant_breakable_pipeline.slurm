@@ -60,9 +60,10 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --capture-report "$perception/capture_report.json" \
     --out "$perception/current_scene_detections.json" --device 0
 
-echo "[pipeline] 3/4: Running compliant, breakable digital twin simulation..."
+echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement and tilted press)..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
-    --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action"
+    --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
+    --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json"
 
 if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
     echo "[pipeline] compliant simulation produced no frames; refusing to run overlay" >&2

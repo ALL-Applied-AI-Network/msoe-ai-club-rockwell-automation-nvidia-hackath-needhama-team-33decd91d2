@@ -26,12 +26,12 @@ TARGET="${1:?usage: sbatch scripts/submit_isaac_job.slurm <script> [args...]}"
 shift || true
 
 if [ -x "$TARGET" ] && [[ "$TARGET" == *.sh ]]; then
-    echo "[Slurm] Executing shell script: $TARGET $@"
-    exec "$TARGET" "$@"
+  echo "[Slurm] Executing shell script: $TARGET $@"
+  exec "$TARGET" "$@"
 elif [[ "$TARGET" == *.py ]]; then
-    echo "[Slurm] Executing Python with Isaac Sim runner: $TARGET $@"
-    exec ./scripts/run_isaac.sh "$TARGET" "$@"
+  echo "[Slurm] Executing Python with Isaac Sim runner: $TARGET $@"
+  exec ./scripts/run_isaac.sh "$TARGET" "$@"
 else
-    echo "[Slurm] Executing: $TARGET $@"
-    exec "$TARGET" "$@"
+  echo "[Slurm] Executing: $TARGET $@"
+  exec "$TARGET" "$@"
 fi

@@ -57,8 +57,7 @@ must be regenerated before a later release decision.
 CAD models in `cad_models/` wherever they disagree (the CAD vial is 1.070/1.038 in
 OD/ID and the CAD flange 1.25 in). Simulation materials are a black tray base and
 standoffs, a silver perforated plate, clear glass vials, and semi-smooth (satin)
-caps. With these dimensions a settled crooked cap sits at about 45 degrees, so the
-qualifier accepts crooked tilts of 8-50 degrees.
+caps. A crooked cap is defined by how it rests (see section 5), not by a tilt angle.
 
 ---
 
@@ -128,24 +127,18 @@ qualifier accepts crooked tilts of 8-50 degrees.
 
 ## 5. Crooked Cap Physics & Deterministic Setup
 
-### Mechanical Wedging Equilibrium
-* **Equilibrium Tilt Angle**: $31.5^\circ - 34.0^\circ$ (natural attractor state).
-* **Two-Point Contact Geometry**:
-  * One edge of the $0.90\text{ in}$ ($22.86\text{ mm}$) plug enters the $1.00\text{ in}$ ($25.40\text{ mm}$) tube mouth and catches against the inner glass wall.
-  * The opposing edge of the $1.24\text{ in}$ ($31.50\text{ mm}$) flange overhang ($2.415\text{ mm}$ per side) rests on the outer rim lip ($26.67\text{ mm}$ OD).
-* **Resting Elevation**: The cap center sits at $+5.0\text{ mm}$ to $+5.8\text{ mm}$ above the rim ($Z_{\text{settled}} \approx Z_{\text{rim}} + 0.0053\text{ m}$), with the high flange edge elevated $\approx +14\text{ mm}$ above the rim.
+### Crooked Cap Definition: Balanced on the Vial Edge (team stipulation, October 26, 2026)
+A crooked cap is defined by **how it rests, not by an exact tilt**:
+* The plug's **bottom edge is balanced on the edge of the glass rim** (on the inner rim corner).
+* The opposite side of the plug is **down inside the vial mouth**, leaning on the inner wall.
+* The **whole flange stays above the rim plane**. A cap whose flange edge has dropped below the rim (resting on the plug side or plug-to-flange corner) has tipped past balance and is not a valid crooked cap.
 
-### Clean-Air Zero-Phasing Spawn Formula
-To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$ glass vial walls at initialization, caps must be spawned in free air:
-* **Spawn Tilt**: Initial pitch $\theta \in [25.0^\circ, 28.0^\circ]$ around local $Y$.
-* **Center Elevation**:
-  $$Z_{\text{spawn}} = Z_{\text{rim}} + \text{lowest\_point}(\theta) + \delta_z$$
-  where:
-  $$\text{lowest\_point}(\theta) = H_{\text{plug}} \cos(\theta) + R_{\text{flange}} \sin(\theta)$$
-  and $\delta_z = +0.003\text{ m}$ ($+3\text{ mm}$ strictly above the glass rim in completely free air).
-* **Lateral Offset**:
-  * Columns 0–3: $\Delta x = -0.0015\text{ m}$ (bias toward the trailing rim edge).
-  * Column 4 (Tray Edge): $\Delta x = -0.0005\text{ m}$ with $\theta = 28.0^\circ$.
+The tilt follows from the geometry. With sections 1-2 the balanced pose is about **22 degrees** (bisected as the largest tilt that clears the glass, `perched_cap_pose` in `src/remediation/geometry.py`); under PhysX it held at 21.9 degrees with zero drift over 360 steps. The classifier (`cap_state`) checks the three conditions above and has no tilt band.
+
+The earlier flange-on-outer-rim description (31.5-34.0 degrees) is geometrically impossible with these dimensions: the plug top (25.15 mm) fits the mouth (25.40 mm) with 0.13 mm radial clearance, so the cap cannot shift the 2.4 mm needed for the flange edge to reach the outer rim. The previous free-settling result (~45 degrees) had tipped past balance onto the plug corner.
+
+### Crooked-Cap Spawn
+Crooked caps are spawned directly in the balanced pose with a 0.2 mm gap above the rim contact, then settle under gravity. This replaces the earlier 25-28 degree free-air drop formula.
 
 ### Contact Physics & Settling Damping
 * **Sub-Millimeter Contact Offsets**:
@@ -177,7 +170,7 @@ To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$
 ## 7. Simulation Materials, Source Priority & Run Conventions (October 26, 2026)
 
 ### Source priority
-1. This document is authoritative. `src/remediation/geometry.py` (`SPEC`) mirrors sections 1-3.
+1. This document is authoritative. Vial rim height uses the 10 mm base: `rim_base_z()` = 0.2081 m in the robot base frame (213.2 mm above the work surface). `src/remediation/geometry.py` (`SPEC`) mirrors sections 1-3.
 2. The CAD models in `cad_models/` are used only where this document is silent: the vial inner floor (3.327 mm, CAD 0890-01) and visual appearance reference.
 3. Where they disagree, this document wins. CAD values that were *not* adopted: vial 1.070 in OD / 1.038 in ID / 7.992 in length, and flange 1.250 in.
 
@@ -192,7 +185,7 @@ To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$
 Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Visual values are defined in `src/remediation/scene.py`.
 
 ### Measured with these dimensions
-- A settled crooked cap sits at about **45.0 degrees**, above both the 31.5-34.0 degree reference band and the 40-44 degrees noted earlier. The qualifier therefore accepts crooked tilts of 8-50 degrees (`cap_state` in `geometry.py`). The discrepancy with the reference band remains unresolved.
+- A crooked cap is balanced on the vial edge (section 5); with these dimensions that is about 22 degrees, held under PhysX.
 - Vial rim height is 213.2 mm above the work surface (10 mm base + 203.2 mm vial).
 - The YOLO checkpoint predates these dimensions and materials; retrain it before treating detection results as meaningful (see the cap-wall update above).
 
@@ -200,4 +193,9 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 - All outputs go under `shared/runs/YYYY-MM-DD_<task>/` (the pipeline script forces this).
 - Build the scene with `qualify_scene.py --fixed --scene-out shared/runs/<run>/scene.usda`, then pass it as the first argument to `scripts/run_compliant_breakable_pipeline.slurm`.
 - Reference run: `shared/runs/2026-10-26_docspec_compliant_remediation/`.
+
+### Remediation motion results (October 26, 2026, scene `shared/runs/2026-10-26_docspec_blacksilver_balanced/`)
+- **Missing cap (physics pick-and-place):** seated in 3/3 repeats (tilt <= 0.7 deg, flush), peak measured vial load 3.6-5.6 N.
+- **Crooked cap (45 deg tilted press, back-face fingertip edge):** seated in 1/3 repeats. A balanced cap rests on its high-side plug edge with the whole flange inboard of that rim support (flange edge 10.9 mm vs rim 12.7 mm from the axis), so a downward push tips it further; the rigid sim has no cap compliance to help it slide in. Side-face (notched) and back-face-along-tilt variants were also tried; the cap pocket mouth at the fingertip captured the cap. Runs: `shared/runs/2026-10-26_physics_remediation_*`.
+- 90 deg (flat face horizontal) is not usable inside the tray: the SMC body hangs 18-24 mm below the finger faces and hits neighbouring vials.
 

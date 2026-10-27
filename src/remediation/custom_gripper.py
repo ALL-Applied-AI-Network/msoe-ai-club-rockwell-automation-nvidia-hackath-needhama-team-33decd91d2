@@ -70,6 +70,24 @@ def cap_seat_tcp(body_face_x):
     return (body_face_x + SMC_BLADE_TIP_X + FINGER_NOTCH_FLOOR_Z - FINGER_FLANGE_LEDGE_Z, 0.0, 0.0)
 
 
+def finger_tip_tcp(cap_seat_tcp_j6):
+    """J6-frame centre of the closed fingertip face (on the pocket axis)."""
+    x = cap_seat_tcp_j6[0] + (FINGER_FLANGE_LEDGE_Z - FINGER_TIP_Z)
+    return (x, 0.0, 0.0)
+
+
+def finger_back_edge_tcp(cap_seat_tcp_j6, jaw, jaw_grip, along=0.0):
+    """J6-frame point on the fingertip edge of the -Y finger's outer back face.
+
+    The back face is solid (the cap pockets, r <= 15.875 mm, stop short of it), so
+    unlike the side faces its fingertip edge has no notch.  At the coaxial grip pose
+    the back sits FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y from the centreline and
+    moves with the jaw.  `along` offsets the point along J6 Z, the edge direction.
+    """
+    back = (FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y) + (jaw - jaw_grip)
+    return (finger_tip_tcp(cap_seat_tcp_j6)[0], -back, float(along))
+
+
 def _jaw_mount(stage, jaw_root):
     """(finger->jaw Gf.Matrix4d, sign) from the jaw's prismatic joint and the SMC blade."""
     import cell

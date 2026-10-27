@@ -63,7 +63,7 @@ Entry point: `sbatch scripts/run_compliant_breakable_pipeline.slurm [scene.usda]
 
 1. `src/remediation/capture_live_tablecam.py` (Isaac): captures TableCam colour + depth -> `perception/`.
 2. `src/inspection/inspect_remediation_capture.py` (YOLO, `.conda_env`): detects defects and backprojects them to robot-base positions via `src/inspection/vision_pipeline.py`.
-3. `src/remediation/run_compliant_breakable_remediation.py` (Isaac): PhysX-collision pivot-press simulation with breakable vial monitoring -> `action/attempt_report.json` and `action/frames/`.
+3. `src/remediation/run_compliant_breakable_remediation.py` (Isaac): physics-only remediation, no cap poses written. Missing cap: flange captured in the finger pockets, plug lowered into the mouth, released, then pressed with the fingertip face. Crooked cap: tilt measured from TableCam depth, 45 deg tilted press with the solid back-face fingertip edge. Vial loads come from PhysX contact reports. Writes `action/attempt_report.json` (incl. measured seating), `action/trace.json` and `action/frames/`.
 4. `src/remediation/overlay_yolo_frames.py` (YOLO): per-frame overlays, then ffmpeg encodes the video.
 
 Supporting modules: `collision_manager.py` (PhysX colliders, CCD, groups, materials), `custom_gripper.py` (gripper mount and collision proxies; `data/gripper.step`/`data/gripper.usd`), `geometry.py` (+ `config/dataset1_layout.json`), `render_perception_shadow_video.py` (overlay colours).
@@ -75,6 +75,7 @@ Script layout (`scripts/`):
 - `scripts/tools/`: utilities (`encode_frames.py`).
 
 Rules:
+- Never write cap poses from the runner (no kinematic snapping); caps move only through PhysX contact.
 - Do not add parallel/alternative runners (kinematic, "best effort", "lifelike") or one-off prompt/plan markdown files. Extend the pipeline above instead.
 - Tests: `tests/` (run with `.conda_env/bin/python -m unittest tests.test_remediation_geometry (etc.)`).
 - Never modify `shared/` contents unless the rules in section 1 allow it.

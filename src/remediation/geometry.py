@@ -79,6 +79,45 @@ def cap_vertices(segments=96, spec=SPEC):
     return np.concatenate([np.column_stack((r*np.cos(angle), r*np.sin(angle), np.full(segments,z))) for r,z in rings])
 
 
+def _vial_wall_penetration(points, rim, spec=SPEC):
+    """Deepest sampled point inside the glass wall below the rim plane (metres)."""
+    q = points - rim
+    r = np.linalg.norm(q[:, :2], axis=1)
+    inside = (q[:, 2] < 0) & (r > spec.vial_inner_radius) & (r < spec.vial_outer_radius)
+    return float(np.max(np.minimum(r - spec.vial_inner_radius, spec.vial_outer_radius - r)[inside])) if inside.any() else 0.
+
+
+def perched_cap_pose(rim, yaw_deg=0., lift=0.0002, spec=SPEC):
+    """Crooked cap balanced on the vial edge (docs/PHYSICAL_SPECIFICATIONS.md sec. 5).
+
+    The plug's bottom edge rests on the inner edge of the glass rim while the
+    opposite side of the plug leans against the inner wall.  The tilt is not a
+    target: it is the largest tilt at which the perched cap clears the glass,
+    found by bisection on the documented dimensions.  `lift` leaves a small gap
+    so PhysX settles the cap into contact instead of starting interpenetrated.
+    """
+    rim = np.asarray(rim, float)
+    pts = cap_surface_points(spec)
+
+    def place(tilt):
+        R = rotation(tilt, yaw_deg)
+        edge = np.array([0., spec.plug_bottom_radius, -spec.plug_depth])
+        d = R @ np.array([0., 1., 0.]); d[2] = 0; d /= np.linalg.norm(d)
+        p = rim + spec.vial_inner_radius * d + np.array([0., 0., lift]) - R @ edge
+        return p, R
+
+    lo, hi = 1., 60.
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        p, R = place(mid)
+        if _vial_wall_penetration(pts @ R.T + p, rim, spec) > 0:
+            hi = mid
+        else:
+            lo = mid
+    p, R = place(lo)
+    return p, R, lo
+
+
 def spawn_height(support_z, orientation, spec=SPEC):
     lowest = np.min((cap_vertices(spec=spec) @ np.asarray(orientation).T)[:, 2])
     return float(support_z - lowest + spec.spawn_clearance)
@@ -118,9 +157,9 @@ def world_to_base(position):
 
 
 def rim_base_z(spec=SPEC):
-    # In the digital twin fixture assembly, vials are supported at base_z = 0.0645 m.
-    # With the CAD 0890-01 length (203.0 mm), the vial top rim is at base_z = 0.2675 m.
-    return 0.0645 + spec.vial_height
+    # Vials stand on the 10 mm black base plate (docs/PHYSICAL_SPECIFICATIONS.md sec. 3),
+    # so the rim is base thickness + vial height above the work surface (213.2 mm).
+    return spec.surface_base_z + spec.tray_base_thickness + spec.vial_height
 
 
 def transit_base_z():
@@ -140,11 +179,28 @@ def cap_state(position, orientation, rim_position=None, spec=SPEC):
     rim = np.asarray(rim_position)
     offset = float(np.linalg.norm(p[:2]-rim[:2]))
     elevation = float(p[2]-rim[2])
+    # A crooked cap is defined by how it rests, not by a tilt angle
+    # (docs/PHYSICAL_SPECIFICATIONS.md sec. 5): the plug's bottom edge is balanced
+    # on the glass rim while the opposite side of the plug is down inside the mouth.
+    a = np.arange(96) * 2 * np.pi / 96
+    plug = np.column_stack((spec.plug_bottom_radius*np.cos(a), spec.plug_bottom_radius*np.sin(a),
+                            np.full(96, -spec.plug_depth))) @ R.T + p
+    radial = np.linalg.norm(plug[:, :2] - rim[:2], axis=1)
+    in_mouth = (plug[:, 2] < rim[2] - .001) & (radial < spec.vial_inner_radius)
+    # The plug's bottom edge must touch the top of the glass rim, and the whole
+    # flange must stay above the rim plane; a flange edge below the rim means the
+    # cap has tipped past the balanced state onto the plug side.
+    radial_plug = np.linalg.norm(plug[:, :2] - rim[:2], axis=1)
+    edge_on_rim = bool(np.any((np.abs(plug[:, 2] - rim[2]) < .0006)
+                              & (radial_plug > spec.vial_inner_radius - .0003)
+                              & (radial_plug < spec.vial_outer_radius + .0003)))
+    flange = np.column_stack((spec.flange_radius*np.cos(a), spec.flange_radius*np.sin(a), np.zeros(96))) @ R.T + p
+    edge_on_rim = edge_on_rim and bool(flange[:, 2].min() > rim[2] - .0003)
+    plug_in_mouth = bool(in_mouth.any())
     cls = 'invalid'
     if offset < .002 and tilt < 5 and abs(elevation) < .001:
         cls = 'good_cap'
-    # Upper bound 50 deg: with docs/PHYSICAL_SPECIFICATIONS.md geometry the cap wedges at ~45 deg.
-    elif offset < spec.vial_inner_radius and 8 <= tilt <= 50 and -.001 < elevation < .018:
+    elif tilt >= 5 and edge_on_rim and plug_in_mouth:
         cls = 'crooked_cap'
     return {'tilt_deg': tilt, 'rim_offset_m': offset, 'rim_elevation_m': elevation, 'class_name': cls,
-            'documented_tilt_band': 31.5 <= tilt <= 34.0}
+            'plug_edge_on_rim': edge_on_rim, 'plug_in_mouth': plug_in_mouth}

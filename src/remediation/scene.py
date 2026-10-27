@@ -10,7 +10,7 @@ import sys
 import numpy as np
 from pxr import Gf, Sdf, UsdGeom, UsdPhysics, UsdShade, PhysxSchema
 
-from src.remediation.geometry import SPEC, cap_vertices, load_layout, rotation, spawn_height
+from src.remediation.geometry import SPEC, cap_vertices, load_layout, perched_cap_pose, rotation, spawn_height
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'shared/data/fanuc_er4ia_sim'))
@@ -248,10 +248,11 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         inventory['slots'][slot]={'rim_world_m':rim.tolist(),'tube_path':str(tube.GetPath()),'requested':'missing_cap' if index in missing_ids else 'crooked_cap' if index in crooked_ids else 'good_cap'}
         if index in missing_ids: continue
         tilted=index in crooked_ids
-        cap_R=rotation(26.,float(rng.uniform(0,360))) if tilted else np.eye(3)
-        pos=rim.copy()
-        if tilted: pos+=cap_R@np.array([0,-.001,0])
-        pos[2]=spawn_height(rim[2],cap_R) if tilted else rim[2]+.0002
+        if tilted:
+            # Balanced on the vial edge; the tilt follows from the documented geometry.
+            pos,cap_R,_=perched_cap_pose(rim,float(rng.uniform(0,360)))
+        else:
+            cap_R=np.eye(3); pos=rim.copy(); pos[2]=rim[2]+.0002
         path='/World/RemediationCaps/'+slot
         make_cap(stage,path,pos,cap_R,yellow,cavity,physics_mat,dynamic=tilted)
         inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap'})

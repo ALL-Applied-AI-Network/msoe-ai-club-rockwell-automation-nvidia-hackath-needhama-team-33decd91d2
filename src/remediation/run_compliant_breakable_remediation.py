@@ -1,39 +1,42 @@
 #!/usr/bin/env python3
-"""Run a physically compliant, fracture-aware closed-loop digital twin remediation simulation.
+"""Physics-based, perception-driven cap remediation in Isaac Sim.
 
-Addresses real-world physical constraints:
-1. True Robotic Wrist Re-Orientation for Crooked Cap:
-   - When grasping a cap tilted at 44.1°, the claw cannot pick it up straight.
-   - The robot articulates its wrist (pitch -49.5°, roll 57.9°) to align the gripper
-     directly with the tilted cap axis (tool normal = -cap normal).
-   - The claw descends along the tilt vector with open jaws and clamps firmly onto
-     the tilted flange.
-   - The arm extracts the cap along the tilted axis into open air (Z = 0.250 m).
-   - In open air, the robot wrist actively articulates from 44.1° tilt back to vertical
-     (0.0°), visibly straightening the cap held in the claw!
-   - The arm then glides horizontally to concentric bore alignment (X = 0.3087 m, Y = 0.0957 m).
-2. Staged, Realistic Friction-Resistant Insertion:
-   - Rubber/silicone caps on glass do not slide smoothly like frictionless ice.
-   - Insertion is modeled with realistic staged compliance:
-     * Lead-in entry into bore (Z = 0.230 m -> 0.222 m).
-     * Tapered plug compression & rubber-on-glass friction resistance (speed slows by 50%
-       as insertion force builds from 10 N -> 22-25 N).
-     * Rim bottoming contact and firm compressive dwell (15 frames).
-3. Breakable But Not Fragile Vials (65.0 N Fracture Limit):
-   - Real-time contact force and fracture monitoring verifies structural integrity.
-   - Peak seating forces (22.4 N on G28, 24.8 N on G09) remain well below the 65 N limit.
-   - Both vials remain completely intact (0 broken vials).
+Every cap moves only through PhysX contact with the custom fingers, glass and
+tray; no cap pose is ever written by this script.
+
+Targets come from the current TableCam detections: the tray grid is fitted to
+the cap detections (no hardcoded tray coordinates) and refined with the
+missing-cap detection.  Dimensions follow docs/PHYSICAL_SPECIFICATIONS.md.
+
+Missing cap (tool pointing straight down):
+  1. Open fingers descend around the spare table cap until the pocket ledge is
+     1 mm under its flange; closing the jaws captures the flange between the
+     pocket ledge and shoulder.
+  2. The cap is carried over the empty vial and lowered until the plug is 6 mm
+     into the mouth (fingertips stay clear of the rim); the jaws open and the
+     cap drops under gravity.
+  3. The closed fingertip face presses the flange down, force limited.
+
+Crooked cap (balanced on the vial edge, sec. 5 of the spec):
+  The cap's high side is measured from TableCam depth.  The tool tilts
+  PRESS_TILT_DEG off vertical, rolled so the fingertip edge of one finger's solid
+  outer back face is the lowest point of the gripper (the SMC body stays above
+  the neighbouring caps), with that edge along the cap's high-to-low direction.
+  It presses the high side down while dragging the cap PRESS_DRAG_M toward its
+  high side, force limited.
+
+Vial loads are measured from PhysX contact reports (impulse / dt) and checked
+against the fracture limits below.  After both actions the caps settle and their
+measured poses are classified with geometry.cap_state.
 """
 import argparse
 import json
-import math
 from pathlib import Path
 import sys
 
 import cv2
 import numpy as np
 from scipy.spatial.transform import Rotation as ScipyRot
-from scipy.spatial.transform import Slerp
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [
@@ -42,14 +45,22 @@ sys.path[:0] = [
     str(ROOT / 'shared/data/fanuc_er4ia_sim'),
 ]
 
-# Tool point: the held cap's CAD origin (flange underside on the pocket axis),
-# derived from data/gripper.step + SMC-MHZL2-16D2.step by custom_gripper.
-# None = use the mounted CAD value; the CLI flag only overrides the axial distance.
-SIMULATION_TOOL_OFFSET_M = None
-
 # Physical glass vial fracture threshold parameters
 VIAL_AXIAL_FRACTURE_LIMIT_N = 65.0
 VIAL_LATERAL_FRACTURE_LIMIT_N = 40.0
+# Force at which a press stops advancing (well under the axial fracture limit).
+PRESS_FORCE_LIMIT_N = 30.0
+# Tool axis tilt from vertical for the crooked-cap press.  45 deg keeps the SMC
+# body ~21 mm above neighbouring caps and is reachable for the tested slots.
+PRESS_TILT_DEG = 45.0
+# A balanced crooked cap rests on its high-side plug edge with its whole flange
+# inboard of that support, so a pure downward push tips it further.  The press
+# drags it this far toward its high side while descending, so the flange edge
+# overhangs the support and the downward load levels the cap.
+PRESS_DRAG_M = 0.004
+DT = 1.0 / 60.0
+DOWN = np.array([0., 0., -1.])
+SPREAD_Y = np.array([0., 1., 0.])
 
 
 def choose_candidate(detections, class_name):
@@ -84,141 +95,31 @@ def s_curve_joints(q0, q1, steps):
     return pts
 
 
-def staged_z_profile(z_start, z_end, count=25):
-    """Model realistic staged rubber-on-glass friction insertion with smooth S-curve easing."""
-    zs = []
-    for i in range(count):
-        t = (i + 1) / float(count)
-        # Smooth cosine easing with friction compression profile
-        s = 0.5 * (1.0 - np.cos(np.pi * t))
-        zs.append(z_start + s * (z_end - z_start))
-    return zs
+def fit_tray_center(observed, layout):
+    """Estimate the fixture XY in the robot base frame from TableCam cap detections.
 
-
-def plan_realistic_remediation_trajectories(spare, missing, crooked_init_pos, tool_offset):
-    """Solve IK paths for complete pick-and-place spare remediation and compliant press-reseat.
-    
-    Dynamically maps missing and crooked cap perceptions to fixture layout apertures.
-    `tool_offset` is the J6-frame cap-origin point, so every waypoint below is the
-    held cap's origin (flange underside) and the seat waypoint is the rim plane.
+    Slides the documented 6 x 5 slot pattern over the detected caps (good and crooked)
+    and keeps the translation with the smallest mean nearest-slot distance, then
+    refines it with the matched residuals. No tray coordinates are hardcoded.
     """
-    import fk
-    import ik
-    import scene_config as C
-    from src.remediation.geometry import SPEC, load_layout, rim_base_z, transit_base_z
+    slots = np.array([v[:2] for v in layout['slots_m'].values()])
+    pts = np.array([d['base_pos_m'][:2] for d in observed if d['class_name'] in ('good_cap', 'crooked_cap')])
+    if len(pts) < 10:
+        raise RuntimeError('too few cap detections to localise the tray')
 
-    limits = np.deg2rad([C.JOINT_LIMITS_DEG[f'J{i}'] for i in range(1, 7)])
-    ik.set_tool_axis(C.TOOL_AXIS)
-    ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
-    down = np.array([0., 0., -1.])
-    tool_offset = tuple(tool_offset)
-    rim_z = rim_base_z()
-    # Cap plug tip 2 mm above the rim when the insertion starts.
-    engage_z = rim_z + SPEC.plug_depth + 0.002
+    def score(c):
+        d = np.linalg.norm(pts[:, None, :] - (slots + c)[None, :, :], axis=2)
+        return d.min(axis=1).mean()
 
-    transit_z = transit_base_z()
-    start = np.array([.24, .25, transit_z])
-
-    tray_center_base = np.array([0.385, 0.035])
-    layout = load_layout()
-    slots_base_xy = {slot: tray_center_base + np.array(pos[:2]) for slot, pos in layout['slots_m'].items()}
-
-    # 1. Spare cap waypoints (Table_00)
-    p_sp = np.asarray(spare['base_pos_m'])
-    high_sp = np.array([p_sp[0], p_sp[1], transit_z])
-    # Detected table cap origin; the pocket ledge closes onto its flange underside.
-    contact_sp = np.array([p_sp[0], p_sp[1], p_sp[2]])
-    app_sp = contact_sp + np.array([0., 0., 0.040])
-
-    # 2. Missing cap waypoints (dynamically matched from TableCam detection)
-    p_mi = np.asarray(missing['base_pos_m'])
-    missing_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_mi[:2]))
-    p_mi_bore = slots_base_xy[missing_slot]
-    high_mi = np.array([p_mi_bore[0], p_mi_bore[1], transit_z])
-    engage_mi = np.array([p_mi_bore[0], p_mi_bore[1], engage_z])
-    seat_mi = np.array([p_mi_bore[0], p_mi_bore[1], rim_z])
-
-    # 3. Crooked cap waypoints (dynamically matched from TableCam detection)
-    p_cr_init = np.array([crooked_init_pos[0], crooked_init_pos[1]])
-    crooked_slot = min(slots_base_xy.keys(), key=lambda s: np.linalg.norm(slots_base_xy[s] - p_cr_init[:2]))
-    p_cr_bore = slots_base_xy[crooked_slot]
-    high_cr_vert = np.array([p_cr_bore[0], p_cr_bore[1], transit_z])
-    app_cr = np.array([p_cr_bore[0], p_cr_bore[1], transit_z])
-    engage_cr = np.array([p_cr_bore[0], p_cr_bore[1], engage_z])
-    seat_cr = np.array([p_cr_bore[0], p_cr_bore[1], rim_z])
-
-    q_home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
-    q_cur, ok = ik.solve(q_home, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    if not ok:
-        raise RuntimeError('Home-to-start IK solve failed')
-
-    def solve_cartesian(q_in, cartesian, directions):
-        q = q_in.copy()
-        path = []
-        for p, d in zip(cartesian, directions):
-            q, ok = ik.solve(q, p, d, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-            if not ok:
-                raise RuntimeError(f'unreachable waypoint at {p}, dir={d}')
-            path.append(q.copy())
-        return path, q
-
-    paths = {}
-
-    # 1. approach_spare: start -> high_sp (40) -> app_sp (25) -> contact_sp (20) = 85 steps
-    q_high_sp, _ = ik.solve(q_cur, high_sp, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    p_start_high = s_curve_joints(q_cur, q_high_sp, 40)
-    p_descend_app, q_tmp = solve_cartesian(q_high_sp, s_curve_pts(high_sp, app_sp, 25), [down]*25)
-    p_descend_contact, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, contact_sp, 20), [down]*20)
-    paths['approach_spare'] = p_start_high + p_descend_app + p_descend_contact
-
-    # 2. lift_spare: contact_sp -> app_sp (20) -> high_sp (25) = 45 steps
-    p_lift_app, q_tmp = solve_cartesian(q_cur, s_curve_pts(contact_sp, app_sp, 20), [down]*20)
-    p_lift_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_sp, high_sp, 25), [down]*25)
-    paths['lift_spare'] = p_lift_app + p_lift_high
-
-    # 3. carry_spare: high_sp -> high_mi = 35 steps (smooth joint S-curve to avoid singularity jerk)
-    q_target_mi, _ = ik.solve(q_cur, high_mi, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['carry_spare'] = s_curve_joints(q_cur, q_target_mi, 35)
-    q_cur = q_target_mi.copy()
-
-    # 4. engage_missing_bore: high_mi -> engage_mi = 20 steps
-    p_eng_mi, q_cur = solve_cartesian(q_cur, s_curve_pts(high_mi, engage_mi, 20), [down]*20)
-    paths['engage_missing_bore'] = p_eng_mi
-
-    # 5. staged_insertion_missing: engage_mi -> seat_mi = 25 steps
-    z_staged_mi = staged_z_profile(engage_mi[2], seat_mi[2], 25)
-    pts_staged_mi = np.array([[seat_mi[0], seat_mi[1], z] for z in z_staged_mi])
-    paths['staged_insertion_missing'], q_cur = solve_cartesian(q_cur, pts_staged_mi, [down]*25)
-
-    # 6. retreat_from_placed: seat_mi -> engage_mi (20) -> high_mi (25) = 45 steps
-    p_ret_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_mi, engage_mi, 20), [down]*20)
-    p_ret_high, q_cur = solve_cartesian(q_tmp, s_curve_pts(engage_mi, high_mi, 25), [down]*25)
-    paths['retreat_from_placed'] = p_ret_eng + p_ret_high
-
-    # 7. transit_to_crooked: high_mi -> high_cr_vert = 35 steps (smooth joint S-curve)
-    q_target_cr, _ = ik.solve(q_cur, high_cr_vert, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    paths['transit_to_crooked'] = s_curve_joints(q_cur, q_target_cr, 35)
-    q_cur = q_target_cr.copy()
-
-    # 8. approach_crooked: high_cr_vert -> app_cr (20) -> engage_cr (15) = 35 steps
-    p_app_cr1, q_tmp = solve_cartesian(q_cur, s_curve_pts(high_cr_vert, app_cr, 20), [down]*20)
-    p_app_cr2, q_cur = solve_cartesian(q_tmp, s_curve_pts(app_cr, engage_cr, 15), [down]*15)
-    paths['approach_crooked'] = p_app_cr1 + p_app_cr2
-
-    # 9. staged_reseat_crooked: engage_cr -> seat_cr = 25 steps
-    z_staged_cr = staged_z_profile(engage_cr[2], seat_cr[2], 25)
-    pts_staged_cr = np.array([[seat_cr[0], seat_cr[1], z] for z in z_staged_cr])
-    paths['staged_reseat_crooked'], q_cur = solve_cartesian(q_cur, pts_staged_cr, [down]*25)
-
-    # 10. retreat_home: seat_cr -> engage_cr (15) -> high_cr_vert (20) -> start (40) = 75 steps
-    p_home_eng, q_tmp = solve_cartesian(q_cur, s_curve_pts(seat_cr, engage_cr, 15), [down]*15)
-    p_home_high, q_tmp2 = solve_cartesian(q_tmp, s_curve_pts(engage_cr, high_cr_vert, 20), [down]*20)
-    q_target_home, _ = ik.solve(q_tmp2, start, down, limits, tool_offset=tool_offset, spread_dir=[0, 1, 0])
-    p_home_transit = s_curve_joints(q_tmp2, q_target_home, 40)
-    paths['retreat_home'] = p_home_eng + p_home_high + p_home_transit
-    q_cur = q_target_home.copy()
-
-    return paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot
+    xs = np.arange(0.05, 0.60, 0.002)
+    ys = np.arange(-0.25, 0.30, 0.002)
+    best = min(((score(np.array([x, y])), x, y) for x in xs for y in ys))
+    c = np.array([best[1], best[2]])
+    for _ in range(5):
+        d = np.linalg.norm(pts[:, None, :] - (slots + c)[None, :, :], axis=2)
+        idx = d.argmin(axis=1)
+        c = c + (pts - (slots[idx] + c)).mean(axis=0)
+    return c, float(score(c))
 
 
 def set_jaw_separation(arm, names, jaw_val):
@@ -258,95 +159,224 @@ def find_closest_cap_prim(stage, target_base_pos):
     return closest_prim
 
 
-def set_cap_pose(cap_prim, pos_world, quat_world=(1.0, 0.0, 0.0, 0.0)):
-    """Set the world position and orientation of a cap prim."""
-    from pxr import Gf, UsdGeom
-    xf = UsdGeom.Xformable(cap_prim)
-    translate_op = None
-    orient_op = None
-    for op in xf.GetOrderedXformOps():
-        if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
-            translate_op = op
-        elif op.GetOpType() == UsdGeom.XformOp.TypeOrient:
-            orient_op = op
-    if translate_op is None:
-        translate_op = xf.AddTranslateOp()
-    if orient_op is None:
-        orient_op = xf.AddOrientOp()
-    translate_op.Set(Gf.Vec3d(float(pos_world[0]), float(pos_world[1]), float(pos_world[2])))
-    orient_op.Set(Gf.Quatf(float(quat_world[0]), Gf.Vec3f(float(quat_world[1]), float(quat_world[2]), float(quat_world[3]))))
-
-
 def get_cap_pose(cap_prim):
-    """Read world position and orientation quaternion (w, x, y, z) of a cap prim."""
+    """World position and (w, x, y, z) orientation of a cap, read from PhysX (USD may lag)."""
+    from omni.physx import get_physx_interface
+    t = get_physx_interface().get_rigidbody_transformation(str(cap_prim.GetPath()))
+    if t and t.get('ret_val', True):
+        x, y, z, w = t['rotation']
+        return np.asarray(t['position'], float), (float(w), float(x), float(y), float(z))
     from pxr import UsdGeom
-    xf = UsdGeom.Xformable(cap_prim)
-    mat = np.asarray(xf.ComputeLocalToWorldTransform(0.), dtype=float)
-    pos = mat[3, :3]
-    orient_op = next((op for op in xf.GetOrderedXformOps() if op.GetOpType() == UsdGeom.XformOp.TypeOrient), None)
-    if orient_op:
-        q = orient_op.Get()
-        return pos, (float(q.GetReal()), float(q.GetImaginary()[0]), float(q.GetImaginary()[1]), float(q.GetImaginary()[2]))
-    return pos, (1.0, 0.0, 0.0, 0.0)
+    m = np.asarray(UsdGeom.Xformable(cap_prim).ComputeLocalToWorldTransform(0.), dtype=float)
+    w, x, y, z = ScipyRot.from_matrix(m[:3, :3].T).as_quat()[[3, 0, 1, 2]]
+    return m[3, :3], (float(w), float(x), float(y), float(z))
 
 
-def set_cap_kinematic(cap_prim, kinematic=True):
-    """Toggle kinematic control on a rigid body cap prim."""
-    from pxr import Gf, UsdPhysics, PhysxSchema
-    if cap_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-        if kinematic and cap_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
-            PhysxSchema.PhysxRigidBodyAPI(cap_prim).CreateEnableCCDAttr().Set(False)
-        rb = UsdPhysics.RigidBodyAPI(cap_prim)
-        rb.CreateKinematicEnabledAttr().Set(kinematic)
-        if not kinematic:
-            if cap_prim.HasAPI(PhysxSchema.PhysxRigidBodyAPI):
-                PhysxSchema.PhysxRigidBodyAPI(cap_prim).CreateEnableCCDAttr().Set(True)
-            rb.CreateVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
-            rb.CreateAngularVelocityAttr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+def on_tray(detections, class_name, tray_center, layout, tol_m=0.025):
+    """Keep only detections of `class_name` that sit within `tol_m` of a documented slot."""
+    slots = np.array([v[:2] for v in layout['slots_m'].values()]) + tray_center
+    return [d for d in detections if d.get('class_name') == class_name
+            and np.linalg.norm(slots - np.asarray(d['base_pos_m'][:2]), axis=1).min() <= tol_m]
 
 
-def set_cap_collision(cap_prim, enabled=True):
-    """Enable or disable collision on cap prim components."""
-    from pxr import Usd, UsdPhysics
-    if cap_prim is None:
-        return
-    for child in Usd.PrimRange(cap_prim):
-        if "Liner" in child.GetName():
+def choose_targets(observed, layout):
+    """Spare cap, missing slot and crooked slot from the current TableCam detections."""
+    center, fit_err = fit_tray_center(observed, layout)
+    slots = lambda c: {s: c + np.array(v[:2]) for s, v in layout['slots_m'].items()}
+    spare = choose_candidate(observed, 'table_cap')
+    missing = choose_candidate(on_tray(observed, 'missing_cap', center, layout), 'missing_cap')
+    crooked = choose_candidate(on_tray(observed, 'crooked_cap', center, layout), 'crooked_cap')
+    grid = slots(center)
+    nearest = lambda xy: min(grid, key=lambda s: np.linalg.norm(grid[s] - xy))
+    missing_slot = nearest(np.asarray(missing['base_pos_m'][:2]))
+    # An empty bore is localised more precisely than cap tops seen obliquely, so it
+    # corrects the grid fit; the crooked bore is then taken from the refined grid.
+    residual = np.asarray(missing['base_pos_m'][:2]) - grid[missing_slot]
+    if np.linalg.norm(residual) < 0.010:
+        center = center + residual
+        grid = slots(center)
+    crooked_slot = nearest(np.asarray(crooked['base_pos_m'][:2]))
+    return {'tray_center_base_m': center.tolist(), 'tray_fit_error_m': fit_err,
+            'spare': spare, 'missing': missing, 'crooked': crooked,
+            'spare_xy': np.asarray(spare['base_pos_m'][:2]),
+            'missing_slot': missing_slot, 'missing_xy': np.asarray(missing['base_pos_m'][:2]),
+            'crooked_slot': crooked_slot, 'crooked_xy': grid[crooked_slot]}
+
+
+class Planner:
+    """IK waypoint generation for one tool point and tool orientation at a time."""
+
+    def __init__(self):
+        import ik
+        import scene_config as C
+        self.ik = ik
+        self.limits = np.deg2rad([C.JOINT_LIMITS_DEG[f'J{i}'] for i in range(1, 7)])
+        ik.set_tool_axis(C.TOOL_AXIS)
+        ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
+
+    def solve(self, q, p, d, s, tool):
+        q_new, ok = self.ik.solve(q, p, d, self.limits, tool_offset=tuple(tool), spread_dir=s)
+        if not ok:
+            raise RuntimeError(f'unreachable waypoint at {np.round(p, 4)}, dir={np.round(d, 3)}')
+        return q_new
+
+    def line(self, q, p0, p1, d, s, tool, steps):
+        path = []
+        for p in s_curve_pts(p0, p1, steps):
+            q = self.solve(q, p, d, s, tool)
+            path.append(q.copy())
+        return path
+
+    def steady(self, q, p0, p1, d, s, tool, step_m):
+        """Constant-speed straight line, `step_m` per physics step (used for pressing)."""
+        n = max(1, int(np.ceil(np.linalg.norm(np.asarray(p1) - p0) / step_m)))
+        path = []
+        for t in np.linspace(0, 1, n + 1)[1:]:
+            q = self.solve(q, np.asarray(p0) + t * (np.asarray(p1) - p0), d, s, tool)
+            path.append(q.copy())
+        return path
+
+
+def cap_tilt_from_depth(depth, capture_report, bbox_xyxy, bore_xy, rim_z):
+    """High-side azimuth (rad) and tilt (deg) of a crooked cap from aligned TableCam depth.
+
+    Backprojects the depth pixels in the detection box, keeps cap surface above the
+    rim within the flange radius of the bore, and fits a plane with outlier rejection.
+    """
+    from src.inspection.vision_pipeline import camera_from_usd_capture
+    cam = camera_from_usd_capture(capture_report['camera'])
+    w, h = cam['size']
+    scale = w / depth.shape[1]
+    x0, y0, x1, y1 = [int(round(v)) for v in bbox_xyxy]
+    vs, us = np.mgrid[max(0, y0 - 6):min(depth.shape[0], y1 + 6), max(0, x0 - 6):min(depth.shape[1], x1 + 6)]
+    z = depth[vs, us].astype(float)
+    pc = np.stack([(us * scale - w / 2) / cam['fx'] * z, (vs * scale - h / 2) / cam['fx'] * z, z], -1).reshape(-1, 3)
+    pc = pc[np.isfinite(pc).all(1) & (pc[:, 2] > 0)]
+    pts = pc @ cam['T'][:3, :3].T + cam['T'][:3, 3]
+    r = np.linalg.norm(pts[:, :2] - bore_xy, axis=1)
+    q = pts[(r < 0.017) & (pts[:, 2] > rim_z + 0.0005)]
+    if len(q) < 30:
+        raise RuntimeError(f'only {len(q)} depth points on the crooked cap')
+    A = np.c_[q[:, :2] - bore_xy, np.ones(len(q))]
+    for _ in range(3):
+        c, *_ = np.linalg.lstsq(A, q[:, 2], rcond=None)
+        res = q[:, 2] - A @ c
+        keep = np.abs(res) < max(0.0015, 2 * res.std())
+        A, q = A[keep], q[keep]
+    return float(np.arctan2(c[1], c[0])), float(np.degrees(np.arctan(np.hypot(c[0], c[1])))), int(len(q))
+
+
+def tilted_press_pose(planner, q, xy, z_high, z_low, tool_for, azimuth=None):
+    """Tool axis, spread axis and tool point for the tilted back-edge press.
+
+    The tool axis leans PRESS_TILT_DEG from vertical toward heading h and is rolled so
+    J6 -Y points down-back: the -Y finger's back-face fingertip edge (along J6 Z) is
+    then the lowest point, and the cap pocket mouth lies just forward (along h) of it.
+    With a measured tilt, h points to the cap's high side and the edge runs across the
+    tilt direction, so the edge lands on the outermost high flange and the pocket mouth
+    is beyond the cap.  `tool_for(along)` returns the J6 tool point on that edge.
+    """
+    b = np.radians(PRESS_TILT_DEG)
+    up = np.array([0., 0., 1.])
+    candidates = []
+    if azimuth is not None:
+        a = np.array([np.cos(azimuth), np.sin(azimuth), 0.])
+        candidates.append((np.cross(a, up), True))           # h = up x z_dir = a
+    radial = np.r_[xy / np.linalg.norm(xy), 0.]
+    candidates += [(z, False) for z in (radial, -radial, np.cross(up, radial), -np.cross(up, radial))]
+    tool = tool_for(0.0)
+    for z_dir, aligned in candidates:
+        h = np.cross(up, z_dir)                # gives J6 Z = d x Y = z_dir
+        d = np.sin(b) * h - np.cos(b) * up
+        y = np.cos(b) * h + np.sin(b) * up     # J6 +Y up-forward, so -Y (back face) is down-back
+        try:
+            planner.solve(q, np.r_[xy, z_high], d, y, tool)
+            planner.solve(q, np.r_[xy, z_low], d, y, tool)
+            return d, y, tool, aligned
+        except RuntimeError:
             continue
-        if child.HasAPI(UsdPhysics.CollisionAPI):
-            UsdPhysics.CollisionAPI(child).CreateCollisionEnabledAttr().Set(enabled)
+    raise RuntimeError(f'no reachable {PRESS_TILT_DEG:.0f} deg press heading at {np.round(xy, 4)}')
+
+
+def high_flange_edge(bore_xy, rim_world_z, azimuth):
+    """Horizontal offset (m, along the high side) and height of a balanced cap's outer high flange edge."""
+    from src.remediation.geometry import SPEC, perched_cap_pose
+    rim = np.r_[bore_xy, rim_world_z]
+    a = np.array([np.cos(azimuth), np.sin(azimuth)])
+    best = None
+    for yaw in np.arange(0., 360., 5.):
+        p, R, _ = perched_cap_pose(rim, yaw)
+        hi = R @ np.array([0., 1., 0.])
+        if best is None or hi[:2] @ a > best[0]:
+            ring = np.array([[SPEC.flange_radius * np.cos(t), SPEC.flange_radius * np.sin(t), SPEC.flange_thickness]
+                             for t in np.linspace(0, 2 * np.pi, 180, endpoint=False)]) @ R.T + p
+            k = np.argmax((ring[:, :2] - bore_xy) @ a)
+            best = (hi[:2] @ a, float((ring[k, :2] - bore_xy) @ a), float(ring[k, 2] - rim_world_z))
+    return best[1], best[2]
+
+
+class ContactMeter:
+    """Per-step contact forces from PhysX contact reports (impulse / dt)."""
+
+    def __init__(self, stage, body_paths):
+        from omni.physx import get_physx_simulation_interface
+        from pxr import PhysxSchema
+        for path in body_paths:
+            prim = stage.GetPrimAtPath(path)
+            if prim.IsValid():
+                PhysxSchema.PhysxContactReportAPI.Apply(prim).CreateThresholdAttr().Set(0.)
+        self.sim = get_physx_simulation_interface()
+
+    def read(self):
+        """List of (path_a, path_b, force_vector_N) for every contact pair this step."""
+        from pxr import PhysicsSchemaTools
+        headers, data = self.sim.get_contact_report()
+        pairs = []
+        for h in headers:
+            impulse = np.zeros(3)
+            for i in range(h.contact_data_offset, h.contact_data_offset + h.num_contact_data):
+                impulse += np.asarray(data[i].impulse, float)
+            a = str(PhysicsSchemaTools.intToSdfPath(h.collider0))
+            b = str(PhysicsSchemaTools.intToSdfPath(h.collider1))
+            pairs.append((a, b, impulse / DT))
+        return pairs
 
 
 class VialBreakabilityMonitor:
-    """Simulates physical glass vial breakability and fracture limits under robot contact.
-    
-    A vial fractures if:
-    - Normal axial compressive force exceeds VIAL_AXIAL_FRACTURE_LIMIT_N (65.0 N).
-    - Lateral wedge shear stress exceeds VIAL_LATERAL_FRACTURE_LIMIT_N (40.0 N).
-    Normal compliant seating forces (15.0 - 35.0 N) are safely withstood without damage.
+    """Glass vial fracture check from measured contact loads.
+
+    A vial fractures if the measured axial (vertical) load exceeds
+    VIAL_AXIAL_FRACTURE_LIMIT_N or the lateral load exceeds VIAL_LATERAL_FRACTURE_LIMIT_N.
     """
-    def __init__(self, stage, slots=('G11', 'G09')):
+
+    def __init__(self, stage):
         self.stage = stage
-        self.axial_limit = VIAL_AXIAL_FRACTURE_LIMIT_N
-        self.lateral_limit = VIAL_LATERAL_FRACTURE_LIMIT_N
-        self.vial_states = {
-            s: {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False} for s in slots
-        }
+        self.vial_states = {}
 
-    def record_interaction(self, slot_id, axial_force_N, lateral_force_N=0.0):
-        if slot_id not in self.vial_states:
-            self.vial_states[slot_id] = {'status': 'INTACT', 'peak_force_N': 0.0, 'fractured': False}
-        vial = self.vial_states[slot_id]
-        total_effective_force = axial_force_N + 1.2 * lateral_force_N
-        if total_effective_force > vial['peak_force_N']:
-            vial['peak_force_N'] = total_effective_force
+    def state(self, slot):
+        return self.vial_states.setdefault(slot, {'status': 'INTACT', 'peak_axial_N': 0.0,
+                                                  'peak_lateral_N': 0.0, 'fractured': False})
 
-        if axial_force_N > self.axial_limit or lateral_force_N > self.lateral_limit:
-            vial['fractured'] = True
-            vial['status'] = 'FRACTURED'
-            self._trigger_fracture_geometry(slot_id)
-            return False
-        return True
+    def record(self, pairs):
+        """Accumulate this step's tube loads; returns {slot: (axial_N, lateral_N)}."""
+        loads = {}
+        for a, b, f in pairs:
+            for path in (a, b):
+                if path.startswith('/World/RemediationTray/') and '_tube' in path:
+                    slot = path.split('/')[3].split('_tube')[0]
+                    loads[slot] = loads.get(slot, np.zeros(3)) + f
+        out = {}
+        for slot, f in loads.items():
+            axial, lateral = abs(float(f[2])), float(np.linalg.norm(f[:2]))
+            vial = self.state(slot)
+            vial['peak_axial_N'] = max(vial['peak_axial_N'], axial)
+            vial['peak_lateral_N'] = max(vial['peak_lateral_N'], lateral)
+            if not vial['fractured'] and (axial > VIAL_AXIAL_FRACTURE_LIMIT_N or lateral > VIAL_LATERAL_FRACTURE_LIMIT_N):
+                vial['fractured'] = True
+                vial['status'] = 'FRACTURED'
+                self._trigger_fracture_geometry(slot)
+            out[slot] = (axial, lateral)
+        return out
 
     def _trigger_fracture_geometry(self, slot_id):
         """Displace and tilt the broken vial mesh to visually reflect the damaged_vial state."""
@@ -354,24 +384,117 @@ class VialBreakabilityMonitor:
         tube_prim = self.stage.GetPrimAtPath(f'/World/RemediationTray/{slot_id}_tube')
         if tube_prim.IsValid():
             xf = UsdGeom.Xformable(tube_prim)
-            rot_op = None
-            for op in xf.GetOrderedXformOps():
-                if 'rotate' in op.GetOpName():
-                    rot_op = op
+            rot_op = next((op for op in xf.GetOrderedXformOps() if 'rotate' in op.GetOpName()), None)
             if rot_op is None:
                 rot_op = xf.AddRotateXYZOp()
             rot_op.Set(Gf.Vec3f(18.5, -12.0, 45.0))
 
 
+class Executor:
+    """Drives the arm through PD targets, steps PhysX, measures loads and records frames."""
+
+    def __init__(self, world, arm, names, arm_idx, camera, frame_dir, meter, monitor, slots, tracked=()):
+        self.world, self.arm, self.names, self.arm_idx = world, arm, names, arm_idx
+        self.tracked = list(tracked)   # cap prims whose pose and gripper contacts are logged each step
+        self.trace = []
+        self.camera, self.frame_dir, self.meter, self.monitor = camera, frame_dir, meter, monitor
+        self.slots = slots
+        self.q = arm.get_joint_positions()[arm_idx].copy()
+        self.frames = 0
+        self.loads = {}
+        self.status = ''
+
+    def step(self, phase, q, jaw):
+        positions = set_jaw_separation(self.arm, self.names, jaw)
+        positions[self.arm_idx] = q
+        velocities = np.zeros(len(self.names))
+        velocities[self.arm_idx] = (q - self.q) / DT
+        self.q = np.asarray(q, float).copy()
+        from isaacsim.core.utils.types import ArticulationAction
+        self.arm.apply_action(ArticulationAction(joint_positions=positions, joint_velocities=velocities))
+        self.world.step(render=True)
+        pairs = self.meter.read()
+        self.loads = self.monitor.record(pairs)
+        self._log(phase, jaw, pairs)
+        self._frame(phase)
+
+    def _log(self, phase, jaw, pairs):
+        entry = {'step': len(self.trace), 'phase': phase, 'jaw_m': float(jaw), 'caps': {},
+                 'q_cmd': np.round(self.q, 5).tolist(),
+                 'q_act': np.round(self.arm.get_joint_positions()[self.arm_idx], 5).tolist()}
+        for prim in self.tracked:
+            path = str(prim.GetPath())
+            pos, quat = get_cap_pose(prim)
+            touching = sorted({(b if a.startswith(path) else a).replace('/World/ER4iA', '')
+                               for a, b, f in pairs if (a.startswith(path) or b.startswith(path))
+                               and '/World/ER4iA' in a + b and np.linalg.norm(f) > 1e-6})
+            entry['caps'][path] = {'pos_world_m': np.round(np.asarray(pos), 5).tolist(), 'quat_wxyz': np.round(quat, 4).tolist(),
+                                   'gripper_contacts': touching}
+        self.trace.append(entry)
+
+    def run(self, phase, path, jaw):
+        for q in path:
+            self.step(phase, q, jaw)
+
+    def hold(self, phase, jaw, n):
+        for _ in range(n):
+            self.step(phase, self.q, jaw)
+
+    def jaws(self, phase, j0, j1, n=20):
+        for j in np.linspace(j0, j1, n):
+            self.step(phase, self.q, j)
+
+    def press(self, phase, path, jaw, slot, max_hold=90):
+        """Advance along `path` only while the measured vial load is under the press limit."""
+        i, held, peak = 0, 0, 0.0
+        while i < len(path):
+            self.step(phase, path[i], jaw)
+            axial = self.loads.get(slot, (0.0, 0.0))[0]
+            peak = max(peak, axial)
+            if axial < PRESS_FORCE_LIMIT_N:
+                i += 1
+            else:
+                held += 1
+                if held > max_hold:
+                    break
+        return {'completed_waypoints': i, 'waypoints': len(path), 'force_limited_steps': held, 'peak_axial_N': peak}
+
+    def _frame(self, phase):
+        rgba = self.camera.get_rgba()
+        if rgba is None or not rgba.size:
+            return
+        frame = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
+        cv2.putText(frame, 'PHYSICS-BASED REMEDIATION | TableCam', (20, 32), cv2.FONT_HERSHEY_SIMPLEX, .65, (30, 230, 255), 2)
+        cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 60), cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
+        for k, slot in enumerate(self.slots):
+            axial, lateral = self.loads.get(slot, (0.0, 0.0))
+            st = self.monitor.state(slot)['status']
+            color = (100, 255, 100) if st == 'INTACT' else (50, 50, 255)
+            cv2.putText(frame, f'Vial {slot} measured load: {axial:5.1f} N axial, {lateral:5.1f} N lateral [{st}]',
+                        (20, 90 + 24 * k), cv2.FONT_HERSHEY_SIMPLEX, .50, color, 1)
+        if not cv2.imwrite(str(self.frame_dir / f'{self.frames:04d}.png'), frame):
+            raise RuntimeError('could not write output frame')
+        self.frames += 1
+
+
+def measure_cap(prim, rim_world, slot):
+    from src.remediation.geometry import cap_state
+    pos, (w, x, y, z) = get_cap_pose(prim)
+    R = ScipyRot.from_quat([x, y, z, w]).as_matrix()
+    state = cap_state(np.asarray(pos), R, rim_world)
+    state.update({'prim': str(prim.GetPath()), 'slot': slot, 'position_world_m': np.asarray(pos).tolist(),
+                  'seated': state['class_name'] == 'good_cap'})
+    return state
+
+
 def main():
-    global SIMULATION_TOOL_OFFSET_M
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scene', type=Path, required=True)
     parser.add_argument('--detections', type=Path, required=True)
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--simulation-tool-offset-m', type=float, default=SIMULATION_TOOL_OFFSET_M)
+    parser.add_argument('--depth', type=Path, help='aligned TableCam depth .npy (metres) for the crooked-cap tilt')
+    parser.add_argument('--capture-report', type=Path, help='capture_report.json with the TableCam model')
     args = parser.parse_args()
-    SIMULATION_TOOL_OFFSET_M = args.simulation_tool_offset_m
 
     current_observation = json.loads(args.detections.read_text())
     if current_observation.get('source') != 'current_loaded_scene_tablecam':
@@ -379,9 +502,18 @@ def main():
     observed = current_observation.get('targets', [])
     args.out.mkdir(parents=True, exist_ok=True)
 
-    spare = choose_candidate(observed, 'table_cap')
-    missing = choose_candidate(observed, 'missing_cap')
-    crooked = choose_candidate(observed, 'crooked_cap')
+    from src.remediation.geometry import load_layout
+    targets = choose_targets(observed, load_layout())
+    missing_slot, crooked_slot = targets['missing_slot'], targets['crooked_slot']
+    crooked_tilt = None
+    if args.depth and args.capture_report:
+        from src.remediation.geometry import rim_base_z
+        az, tilt, n = cap_tilt_from_depth(np.load(args.depth), json.loads(args.capture_report.read_text()),
+                                          targets['crooked']['bbox_xyxy'], targets['crooked_xy'], rim_base_z())
+        crooked_tilt = {'high_side_azimuth_deg': float(np.degrees(az)), 'tilt_deg': tilt, 'depth_points': n}
+        print(f'[remediation] crooked cap from depth: high side {np.degrees(az):.1f} deg, tilt {tilt:.1f} deg ({n} points)', flush=True)
+    print(f"[remediation] tray centre {np.round(targets['tray_center_base_m'], 4)} "
+          f"(fit error {targets['tray_fit_error_m']*1000:.1f} mm); missing={missing_slot}, crooked={crooked_slot}", flush=True)
 
     # Prevent argparse flags being passed to Kit
     sys.argv = [sys.argv[0]]
@@ -389,295 +521,188 @@ def main():
     app = SimulationApp({'headless': True, 'renderer': 'RayTracedLighting'})
     try:
         app.update()
-        print('[compliant-remediation] SimulationApp ready', flush=True)
         import omni.usd
         from isaacsim.core.api import World
         from isaacsim.core.prims import SingleArticulation
-        from isaacsim.core.utils.types import ArticulationAction
         from isaacsim.sensors.camera import Camera
         import cell
         import scene_config as C
-        import fk
-        from src.remediation.custom_gripper import attach_collision_proxies, attach_visual_pair
-        from src.remediation.geometry import SPEC, rim_base_z
+        from src.remediation.custom_gripper import (attach_collision_proxies, attach_visual_pair,
+                                                    finger_back_edge_tcp, finger_tip_tcp)
+        from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
 
         omni.usd.get_context().open_stage(str(args.scene))
         app.update()
         stage = omni.usd.get_context().get_stage()
-        print('[compliant-remediation] scene open', flush=True)
-
-        world = World(stage_units_in_meters=1.0, physics_dt=1/60., rendering_dt=1/60.)
+        world = World(stage_units_in_meters=1.0, physics_dt=DT, rendering_dt=DT)
         mount = attach_visual_pair(stage)
         attach_collision_proxies(stage)
         col_report = configure_stage_collisions(stage)
-        print(f'[compliant-remediation] custom gripper mounted; stage collisions configured: {col_report}', flush=True)
+
+        spare_prim = find_closest_cap_prim(stage, np.r_[targets['spare_xy'], 0.])
+        crooked_prim = find_closest_cap_prim(stage, np.r_[targets['crooked_xy'], 0.])
+        meter = ContactMeter(stage, [str(spare_prim.GetPath()), str(crooked_prim.GetPath()),
+                                     cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE])
         world.reset()
+        print(f'[remediation] gripper mounted; collisions {col_report}; spare {spare_prim.GetPath()}, '
+              f'crooked {crooked_prim.GetPath()}', flush=True)
 
         arm = SingleArticulation(C.ROBOT_PRIM)
         arm.initialize()
         names = list(arm.dof_names)
         arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
 
-        tool_offset = tuple(mount['cap_seat_tcp_j6_m'])
-        if SIMULATION_TOOL_OFFSET_M is not None:
-            tool_offset = (float(SIMULATION_TOOL_OFFSET_M),) + tool_offset[1:]
+        ledge = tuple(mount['cap_seat_tcp_j6_m'])      # held cap origin (flange underside)
+        tip = finger_tip_tcp(ledge)                    # closed fingertip face centre
         jaw_grip = mount['cap_grip_jaw_m']
-        print(f'[compliant-remediation] CAD tool point {tool_offset}, flange grip jaw {jaw_grip:.5f} m', flush=True)
+        back_edge = lambda along: finger_back_edge_tcp(ledge, C.JAW_CLOSED, jaw_grip, along)
+        rim_z = rim_base_z()
+        seated_top_z = rim_z + SPEC.flange_thickness
+        transit_z = transit_base_z()
+        spare_xy, missing_xy, crooked_xy = targets['spare_xy'], targets['missing_xy'], targets['crooked_xy']
+        spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom
 
-        # Identify physical cap prims in USD stage
-        spare_prim = find_closest_cap_prim(stage, spare['base_pos_m'])
-        crooked_prim = find_closest_cap_prim(stage, crooked['base_pos_m'])
-        print(f'[compliant-remediation] spare cap prim: {spare_prim.GetPath() if spare_prim else "None"}', flush=True)
-        print(f'[compliant-remediation] crooked cap prim: {crooked_prim.GetPath() if crooked_prim else "None"}', flush=True)
-
-        # Capture initial crooked cap pose
-        initial_cr_pos, initial_cr_quat_wxyz = get_cap_pose(crooked_prim)
-        q_init_xyzw = [initial_cr_quat_wxyz[1], initial_cr_quat_wxyz[2], initial_cr_quat_wxyz[3], initial_cr_quat_wxyz[0]]
-        q_upright_xyzw = [0.0, 0.0, 0.0, 1.0]
-        slerp_crooked = Slerp([0.0, 1.0], ScipyRot.from_quat([q_init_xyzw, q_upright_xyzw]))
-
-        # Plan trajectories
-        print('[compliant-remediation] planning trajectories for spare cap placement and crooked cap press-reseat...', flush=True)
+        # ---- plan (raises before any motion if a waypoint is unreachable) ----
+        P = Planner()
         try:
-            paths, p_mi_bore, p_cr_bore, missing_slot, crooked_slot = plan_realistic_remediation_trajectories(
-                spare, missing, initial_cr_pos, tool_offset
-            )
+            q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
+                         np.array([.24, .25, transit_z]), DOWN, SPREAD_Y, ledge)
+            plan = {}
+            q = q0
+            high_sp, low_sp = np.r_[spare_xy, transit_z], np.r_[spare_xy, spare_flange_z - 0.001]
+            q_high_sp = P.solve(q, high_sp, DOWN, SPREAD_Y, ledge)
+            plan['approach_spare'] = s_curve_joints(q, q_high_sp, 40)
+            plan['descend_spare'] = P.line(q_high_sp, high_sp, low_sp, DOWN, SPREAD_Y, ledge, 60)
+            plan['lift_spare'] = P.line(plan['descend_spare'][-1], low_sp, high_sp, DOWN, SPREAD_Y, ledge, 50)
+            high_mi = np.r_[missing_xy, transit_z]
+            release_mi = np.r_[missing_xy, rim_z + SPEC.plug_depth - 0.006]  # plug 6 mm into the mouth
+            q_high_mi = P.solve(plan['lift_spare'][-1], high_mi, DOWN, SPREAD_Y, ledge)
+            plan['carry_spare'] = s_curve_joints(plan['lift_spare'][-1], q_high_mi, 50)
+            plan['lower_into_mouth'] = P.line(q_high_mi, high_mi, release_mi, DOWN, SPREAD_Y, ledge, 60)
+            # Switch the tool point to the fingertip face for the press.
+            q_rel = plan['lower_into_mouth'][-1]
+            tip_above = np.r_[missing_xy, seated_top_z + 0.012]
+            q_tip_above = P.solve(q_rel, tip_above, DOWN, SPREAD_Y, tip)
+            plan['retreat_to_press_missing'] = s_curve_joints(q_rel, q_tip_above, 30)
+            plan['press_missing'] = P.steady(q_tip_above, tip_above, np.r_[missing_xy, seated_top_z - 0.0005],
+                                             DOWN, SPREAD_Y, tip, 0.0002)
+            q_up = P.solve(plan['press_missing'][-1], np.r_[missing_xy, transit_z], DOWN, SPREAD_Y, tip)
+            plan['retreat_missing'] = s_curve_joints(plan['press_missing'][-1], q_up, 40)
+            # Crooked cap: tilted press with the fingertip edge.
+            d_t, s_t, edge, aligned = tilted_press_pose(P, q_up, crooked_xy, transit_z, seated_top_z, back_edge,
+                                                        np.radians(crooked_tilt['high_side_azimuth_deg']) if crooked_tilt else None)
+            if crooked_tilt:
+                az = np.radians(crooked_tilt['high_side_azimuth_deg'])
+                a2 = np.array([np.cos(az), np.sin(az)])
+                reach, top = high_flange_edge(crooked_xy, rim_z, az)
+                # Land 1 mm inboard of the outer high flange edge, then drag toward the high side.
+                land_xy = crooked_xy + (reach - 0.001) * a2
+                end_xy = land_xy + PRESS_DRAG_M * a2
+            else:
+                top, land_xy = 0.016, crooked_xy
+                end_xy = crooked_xy
+            high_cr = np.r_[land_xy, transit_z]
+            start_cr = np.r_[land_xy, rim_z + top + 0.008]
+            touch_cr = np.r_[land_xy, rim_z + top + 0.001]
+            end_cr = np.r_[end_xy, seated_top_z - 0.0005]
+            q_high_cr = P.solve(q_up, high_cr, d_t, s_t, edge)
+            plan['tilt_to_crooked'] = s_curve_joints(q_up, q_high_cr, 50)
+            plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, d_t, s_t, edge, 40)
+            plan['press_crooked'] = P.steady(plan['descend_crooked'][-1], start_cr, touch_cr, d_t, s_t, edge, 0.00025)
+            plan['press_crooked'] += P.steady(plan['press_crooked'][-1], touch_cr, end_cr, d_t, s_t, edge, 0.00025)
+            # Back away along +Y (the back face normal points down-back) before lifting.
+            away_cr = end_cr + 0.010 * s_t
+            plan['retreat_crooked'] = P.line(plan['press_crooked'][-1], end_cr, away_cr, d_t, s_t, edge, 25)
+            plan['retreat_crooked'] += P.line(plan['retreat_crooked'][-1], away_cr, np.r_[away_cr[:2], transit_z],
+                                              d_t, s_t, edge, 40)
         except BaseException as exc:
-            # Isaac can otherwise close cleanly for SystemExit-like failures,
-            # leaving the pipeline to fail later with an empty frame directory.
-            failure = {
-                'stage': 'trajectory_planning',
-                'scene': str(args.scene),
-                'error_type': type(exc).__name__,
-                'error': str(exc),
-                'selected_targets': {
-                    'table_cap': spare,
-                    'missing_cap': missing,
-                    'crooked_cap': crooked,
-                },
-            }
-            (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2) + '\n')
-            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
-                raise RuntimeError('trajectory planning exited before producing a path') from exc
+            failure = {'stage': 'trajectory_planning', 'scene': str(args.scene), 'error_type': type(exc).__name__,
+                       'error': str(exc), 'targets': {k: v for k, v in targets.items() if k in ('spare', 'missing', 'crooked')}}
+            (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2, default=str) + '\n')
             raise
-        print(f'[compliant-remediation] all trajectories planned successfully for missing={missing_slot}, crooked={crooked_slot}', flush=True)
-
-        breakability_monitor = VialBreakabilityMonitor(stage, slots=(missing_slot, crooked_slot))
+        print(f'[remediation] all motions planned; crooked press heading {np.round(d_t, 3)}', flush=True)
 
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
         camera.initialize()
-        init_positions = set_jaw_separation(arm, names, C.JAW_OPEN)
-        # Warm up at the first planned waypoint so step 0 is not a ~30 deg
-        # home-to-start snap with a huge feedforward velocity.
-        init_positions[arm_idx] = paths['approach_spare'][0]
-        arm.set_joint_positions(init_positions)
+        positions = set_jaw_separation(arm, names, C.JAW_OPEN)
+        positions[arm_idx] = q0
+        arm.set_joint_positions(positions)
         arm.set_joint_velocities(np.zeros(len(names)))
-        arm.apply_action(ArticulationAction(joint_positions=init_positions))
-        print('[compliant-remediation] arm and TableCam ready', flush=True)
-
         for _ in range(30):
             world.step(render=True)
-        print('[compliant-remediation] camera warmup complete', flush=True)
 
         frame_dir = args.out / 'frames'
         frame_dir.mkdir(exist_ok=True)
+        monitor = VialBreakabilityMonitor(stage)
+        ex = Executor(world, arm, names, arm_idx, camera, frame_dir, meter, monitor, (missing_slot, crooked_slot),
+                      tracked=(spare_prim, crooked_prim))
+        presses = {}
 
-        # The half-pockets are coaxial at jaw_grip; fully closed would drive the
-        # vial lip 0.65 mm into the glass on each side.
-        clamp_jaws = np.linspace(C.JAW_OPEN, jaw_grip, 20)
-        release_jaws = np.linspace(jaw_grip, C.JAW_OPEN, 20)
+        ex.run('approach_spare', plan['approach_spare'], C.JAW_OPEN)
+        ex.run('descend_around_spare', plan['descend_spare'], C.JAW_OPEN)
+        ex.jaws('capture_spare_flange', C.JAW_OPEN, jaw_grip)
+        ex.hold('capture_spare_flange', jaw_grip, 15)
+        ex.run('lift_spare', plan['lift_spare'], jaw_grip)
+        ex.run(f'carry_spare_to_{missing_slot}', plan['carry_spare'], jaw_grip)
+        ex.run(f'lower_plug_into_{missing_slot}', plan['lower_into_mouth'], jaw_grip)
+        ex.jaws(f'release_into_{missing_slot}', jaw_grip, C.JAW_OPEN)
+        ex.hold(f'release_into_{missing_slot}', C.JAW_OPEN, 40)
+        ex.run('reposition_for_press', plan['retreat_to_press_missing'], C.JAW_OPEN)
+        ex.jaws('close_fingertips', C.JAW_OPEN, jaw_grip)
+        presses['missing'] = ex.press(f'press_seat_{missing_slot}', plan['press_missing'], jaw_grip, missing_slot)
+        ex.hold(f'press_seat_{missing_slot}', jaw_grip, 15)
+        ex.run('retreat', plan['retreat_missing'], jaw_grip)
+        ex.jaws('close_for_edge_press', jaw_grip, C.JAW_CLOSED)
+        ex.run(f'tilt_{PRESS_TILT_DEG:.0f}deg_over_{crooked_slot}', plan['tilt_to_crooked'], C.JAW_CLOSED)
+        ex.run(f'descend_to_{crooked_slot}', plan['descend_crooked'], C.JAW_CLOSED)
+        presses['crooked'] = ex.press(f'edge_press_{crooked_slot}', plan['press_crooked'], C.JAW_CLOSED, crooked_slot)
+        ex.hold(f'edge_press_{crooked_slot}', C.JAW_CLOSED, 15)
+        # Jaws stay closed: opening would drive the pressing back face further into the cap.
+        ex.run('retreat', plan['retreat_crooked'], C.JAW_CLOSED)
+        ex.hold('settle', C.JAW_CLOSED, 30)
+        print(f'[remediation] wrote {ex.frames} frames; presses {presses}', flush=True)
 
-        # 15-phase authentic remediation sequence
-        phases = [
-            ('approach_spare', paths['approach_spare'], [C.JAW_OPEN]*len(paths['approach_spare']), 'free'),
-            ('clamp_spare', [None]*20, clamp_jaws, 'clamping_spare'),
-            ('lift_spare', paths['lift_spare'], [jaw_grip]*len(paths['lift_spare']), 'carrying_spare'),
-            ('carry_spare', paths['carry_spare'], [jaw_grip]*len(paths['carry_spare']), 'carrying_spare'),
-            ('engage_missing_bore', paths['engage_missing_bore'], [jaw_grip]*len(paths['engage_missing_bore']), 'engage_spare'),
-            ('staged_insertion_missing', paths['staged_insertion_missing'], [jaw_grip]*len(paths['staged_insertion_missing']), 'staged_spare'),
-            ('dwell_missing', [None]*15, [jaw_grip]*15, 'dwell_spare'),
-            ('release_spare', [None]*20, release_jaws, 'releasing_spare'),
-            ('retreat_from_placed', paths['retreat_from_placed'], [C.JAW_OPEN]*len(paths['retreat_from_placed']), 'free'),
-            ('transit_to_crooked', paths['transit_to_crooked'], [jaw_grip]*len(paths['transit_to_crooked']), 'free'),
-            ('approach_crooked', paths['approach_crooked'], [jaw_grip]*len(paths['approach_crooked']), 'approach_crooked'),
-            ('staged_reseat_crooked', paths['staged_reseat_crooked'], [jaw_grip]*len(paths['staged_reseat_crooked']), 'staged_crooked'),
-            ('dwell_crooked', [None]*15, [jaw_grip]*15, 'dwell_crooked'),
-            ('release_crooked', [None]*20, release_jaws, 'releasing_crooked'),
-            ('retreat_home', paths['retreat_home'], [C.JAW_OPEN]*len(paths['retreat_home']), 'free'),
-        ]
-
-        frames = 0
-        mi_force_N = 0.0
-        cr_force_N = 0.0
-        cap_status_text = 'SPARE APPROACH'
-        q_hold = arm.get_joint_positions()[arm_idx].copy()
-        q_prev = q_hold.copy()
-
-        for phase, path, jaw_vals, mode in phases:
-            print(f'[compliant-remediation] phase: {phase}', flush=True)
-
-            if mode == 'clamping_spare' and spare_prim is not None:
-                set_cap_collision(spare_prim, False)
-                set_cap_kinematic(spare_prim, True)
-
-            if mode == 'approach_crooked' and crooked_prim is not None:
-                set_cap_collision(crooked_prim, False)
-                set_cap_kinematic(crooked_prim, True)
-
-            for step_idx, joints in enumerate(path):
-                jaw_pos = jaw_vals[step_idx]
-                positions = set_jaw_separation(arm, names, jaw_pos)
-                if joints is not None:
-                    q_hold = joints.copy()
-                positions[arm_idx] = q_hold
-
-                # Continuous velocity feedforward matching trajectory derivative
-                dt = 1.0 / 60.0
-                vel_arm = (q_hold - q_prev) / dt
-                q_prev = q_hold.copy()
-
-                velocities = np.zeros(len(names))
-                velocities[arm_idx] = vel_arm
-
-                # Drive through the joint PD targets only. Teleporting the joints
-                # (set_joint_positions) every step re-inserts any contacting
-                # collider into the static tray, and PhysX's depenetration impulse
-                # then fights the weak wrist drives -- the rim chatter.
-                arm.apply_action(ArticulationAction(joint_positions=positions, joint_velocities=velocities))
-
-                # ---------------- SPARE CAP (MISSING SLOT) ----------------
-                if (mode == 'carrying_spare' or mode == 'engage_spare') and spare_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = p_tcp_base + np.array([0., 0., SPEC.world_base_z])
-                    set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
-                    cap_status_text = f'CARRY SPARE TO {missing_slot}'
-
-                if mode == 'staged_spare' and spare_prim is not None:
-                    _, p_tcp_base = fk.tool_pose(positions[arm_idx], tool_offset)
-                    p_cap_world = p_tcp_base + np.array([0., 0., SPEC.world_base_z])
-                    set_cap_pose(spare_prim, p_cap_world, (1.0, 0.0, 0.0, 0.0))
-                    # Staged resistance force building from 10 N -> 22.4 N
-                    progress = (step_idx + 1) / float(len(path))
-                    mi_force_N = 10.0 + progress * 12.4
-                    breakability_monitor.record_interaction(missing_slot, mi_force_N)
-                    cap_status_text = f'STAGED FRICTION INSERTION {missing_slot}'
-
-                if mode == 'dwell_spare' and spare_prim is not None:
-                    mi_force_N = 22.4
-                    cap_status_text = f'COMPRESSIVE DWELL {missing_slot} (SETTLING)'
-
-                if mode == 'releasing_spare' and spare_prim is not None:
-                    seated_world_z = rim_base_z() + SPEC.world_base_z
-                    p_mi_world = np.array([p_mi_bore[0], p_mi_bore[1], seated_world_z])
-                    set_cap_pose(spare_prim, p_mi_world, (1.0, 0.0, 0.0, 0.0))
-                    mi_force_N = max(0.0, 22.4 * (1.0 - (step_idx + 1) / 20.0))
-                    cap_status_text = f'RELEASE SPARE (SEATED FLUSH {missing_slot})'
-                    if step_idx == len(path) - 1:
-                        set_cap_collision(spare_prim, True)
-                        set_cap_kinematic(spare_prim, False)
-                        mi_force_N = 0.0
-
-                # ---------------- CROOKED CAP (CROOKED SLOT) ----------------
-                if mode == 'approach_crooked' and crooked_prim is not None:
-                    cap_status_text = f'APPROACH CROOKED FLANGE {crooked_slot}'
-
-                # Compliant press reseat: smoothly slerp orientation to upright and press to rim
-                if mode == 'staged_crooked' and crooked_prim is not None:
-                    progress = (step_idx + 1) / float(len(path))
-                    interp_rot = slerp_crooked(progress).as_quat()
-                    interp_quat_wxyz = (interp_rot[3], interp_rot[0], interp_rot[1], interp_rot[2])
-                    seated_world_z = rim_base_z() + SPEC.world_base_z
-                    interp_z = initial_cr_pos[2] + progress * (seated_world_z - initial_cr_pos[2])
-                    interp_pos = np.array([
-                        initial_cr_pos[0] + progress * (p_cr_bore[0] - initial_cr_pos[0]),
-                        initial_cr_pos[1] + progress * (p_cr_bore[1] - initial_cr_pos[1]),
-                        interp_z
-                    ])
-                    set_cap_pose(crooked_prim, interp_pos, interp_quat_wxyz)
-                    cr_force_N = 12.0 + progress * 12.8
-                    breakability_monitor.record_interaction(crooked_slot, cr_force_N)
-                    cap_status_text = f'COMPLIANT PRESS RESEAT {crooked_slot}: {43.9*(1-progress):4.1f} deg -> 0.0 deg'
-
-                if mode == 'dwell_crooked' and crooked_prim is not None:
-                    cr_force_N = 24.8
-                    cap_status_text = f'COMPRESSIVE DWELL {crooked_slot} (SETTLING)'
-
-                if mode == 'releasing_crooked' and crooked_prim is not None:
-                    seated_world_z = rim_base_z() + SPEC.world_base_z
-                    p_cr_world = np.array([p_cr_bore[0], p_cr_bore[1], seated_world_z])
-                    set_cap_pose(crooked_prim, p_cr_world, (1.0, 0.0, 0.0, 0.0))
-                    cr_force_N = max(0.0, 24.8 * (1.0 - (step_idx + 1) / 20.0))
-                    cap_status_text = f'RELEASE RE-SEATED CAP {crooked_slot} (FLUSH)'
-                    if step_idx == len(path) - 1:
-                        set_cap_collision(crooked_prim, True)
-                        set_cap_kinematic(crooked_prim, False)
-                        cr_force_N = 0.0
-
-                if phase == 'retreat_home':
-                    cap_status_text = 'RETREAT HOME (ALL REMEDIATIONS COMPLETE)'
-
-                world.step(render=True)
-                rgba = camera.get_rgba()
-                if rgba is None or not rgba.size:
-                    continue
-                frame = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
-
-                # TableCam HUD Overlay
-                cv2.putText(frame, 'COMPLIANT ROBOTIC REMEDIATION | TableCam', (20, 32),
-                            cv2.FONT_HERSHEY_SIMPLEX, .65, (30, 230, 255), 2)
-                cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 60),
-                            cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
-
-                # Real-time physical force and vial integrity readouts
-                mi_stat = breakability_monitor.vial_states[missing_slot]['status']
-                cr_stat = breakability_monitor.vial_states[crooked_slot]['status']
-                mi_color = (100, 255, 100) if mi_stat == 'INTACT' else (50, 50, 255)
-                cr_color = (100, 255, 100) if cr_stat == 'INTACT' else (50, 50, 255)
-
-                cv2.putText(frame, f'Vial {missing_slot} Force: {mi_force_N:4.1f} N [{mi_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
-                            (20, 90), cv2.FONT_HERSHEY_SIMPLEX, .50, mi_color, 1)
-                cv2.putText(frame, f'Vial {crooked_slot} Force: {cr_force_N:4.1f} N [{cr_stat} | Limit: {VIAL_AXIAL_FRACTURE_LIMIT_N:.0f} N]',
-                            (20, 114), cv2.FONT_HERSHEY_SIMPLEX, .50, cr_color, 1)
-                cv2.putText(frame, f'State: {cap_status_text}',
-                            (20, 138), cv2.FONT_HERSHEY_SIMPLEX, .50, (230, 230, 100), 1)
-
-                if not cv2.imwrite(str(frame_dir / f'{frames:04d}.png'), frame):
-                    raise RuntimeError('could not write output frame')
-                frames += 1
-
-        print(f'[compliant-remediation] wrote {frames} frames', flush=True)
+        for _ in range(120):
+            world.step(render=False)
+        # Classify against the actual tube rims in the scene, not the perceived ones.
+        def tube_rim(slot):
+            from pxr import UsdGeom
+            m = np.asarray(UsdGeom.Xformable(stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube'))
+                           .ComputeLocalToWorldTransform(0.))
+            return m[3, :3] + np.array([0., 0., SPEC.vial_height])
+        seating = {'missing_slot_cap': measure_cap(spare_prim, tube_rim(missing_slot), missing_slot),
+                   'crooked_slot_cap': measure_cap(crooked_prim, tube_rim(crooked_slot), crooked_slot)}
+        for k, v in seating.items():
+            print(f'[remediation] {k}: {v}', flush=True)
 
         report = {
-            'mode': 'wrist_reorientation_staged_insertion_remediation',
+            'mode': 'physics_contact_remediation',
             'physical_robot_authorized': False,
             'scene': str(args.scene),
             'current_scene_detections': str(args.detections),
-            'current_scene_tablecam_observation': current_observation,
-            'simulation_tool_offset_j6_m': list(tool_offset),
-            'cap_grip_jaw_m': jaw_grip,
+            'targets': {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in targets.items()},
             'missing_slot': missing_slot,
             'crooked_slot': crooked_slot,
-            'vial_breakability': {
-                'axial_fracture_threshold_N': VIAL_AXIAL_FRACTURE_LIMIT_N,
-                'lateral_fracture_threshold_N': VIAL_LATERAL_FRACTURE_LIMIT_N,
-                'missing_slot_peak_contact_force_N': float(breakability_monitor.vial_states[missing_slot]['peak_force_N']),
-                'missing_slot_status': breakability_monitor.vial_states[missing_slot]['status'],
-                'crooked_slot_peak_contact_force_N': float(breakability_monitor.vial_states[crooked_slot]['peak_force_N']),
-                'crooked_slot_status': breakability_monitor.vial_states[crooked_slot]['status'],
-                'all_vials_intact': (not breakability_monitor.vial_states[missing_slot]['fractured'] and not breakability_monitor.vial_states[crooked_slot]['fractured'])
-            },
-            'crooked_cap_remediation': {
-                'strategy': 'wrist_tilt_grasp_and_midair_reorientation',
-                'tilted_grasp_angle_deg': 44.1,
-                'wrist_correction': 'active_j4_j5_j6_reorientation',
-                'insertion_dynamics': 'staged_friction_resistance',
-                'teleportation': False,
-                'final_tilt_deg': 0.0
-            },
+            'tool_points_j6_m': {'pocket_ledge': list(ledge), 'fingertip_face': list(tip), 'back_edge': list(edge)},
+            'crooked_press': {'tilt_from_vertical_deg': PRESS_TILT_DEG, 'tool_axis': d_t.tolist(),
+                              'edge_direction': s_t.tolist(), 'edge_aligned_with_cap_tilt': aligned,
+                              'drag_toward_high_side_m': PRESS_DRAG_M if crooked_tilt else 0.0,
+                              'cap_tilt_from_depth': crooked_tilt,
+                              'contact': 'fingertip edge of the -Y finger outer back face (solid, no pocket notch)'},
+            'cap_motion': 'PhysX contact only; no cap pose is written by the script',
+            'press_force_limit_N': PRESS_FORCE_LIMIT_N,
+            'presses': presses,
+            'vial_breakability': {'axial_fracture_threshold_N': VIAL_AXIAL_FRACTURE_LIMIT_N,
+                                  'lateral_fracture_threshold_N': VIAL_LATERAL_FRACTURE_LIMIT_N,
+                                  'load_source': 'PhysX contact report impulses / dt',
+                                  'vials': monitor.vial_states,
+                                  'all_vials_intact': not any(v['fractured'] for v in monitor.vial_states.values())},
+            'seating_check_after_120_settle_steps': seating,
             'frame_directory': str(frame_dir),
-            'frames_written': frames
+            'frames_written': ex.frames,
         }
-        (args.out / 'attempt_report.json').write_text(json.dumps(report, indent=2) + '\n')
+        (args.out / 'trace.json').write_text(json.dumps(ex.trace) + '\n')
+        (args.out / 'attempt_report.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
     finally:
         app.close()
 
