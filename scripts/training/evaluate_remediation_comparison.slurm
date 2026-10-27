@@ -38,7 +38,7 @@ BASE="shared/inspection_models/remediation_yolo_best.pt"
 ROOT="runs/remediation_finetune"
 OUT="${COMPARE_OUT:-$ROOT/model_comparison}"
 
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models \
     "baseline=$BASE" \
     "synthetic=$ROOT/synthetic_ft/weights/best.pt" \

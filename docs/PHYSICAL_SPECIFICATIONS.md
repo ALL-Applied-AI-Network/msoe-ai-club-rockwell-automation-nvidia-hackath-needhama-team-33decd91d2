@@ -53,6 +53,13 @@ instead of using the prior constant 0.80-inch inner-diameter approximation. This
 changes the physical configuration hash, so the synthetic dataset and checkpoint
 must be regenerated before a later release decision.
 
+**Materials and priority (October 26, 2026):** This document takes priority over the
+CAD models in `cad_models/` wherever they disagree (the CAD vial is 1.070/1.038 in
+OD/ID and the CAD flange 1.25 in). Simulation materials are a black tray base and
+standoffs, a silver perforated plate, clear glass vials, and semi-smooth (satin)
+caps. With these dimensions a settled crooked cap sits at about 45 degrees, so the
+qualifier accepts crooked tilts of 8-50 degrees.
+
 ---
 
 ## 1. Vial Dimensions (Glass Cylinder, Flat Bottom)
@@ -164,3 +171,33 @@ To eliminate mesh interpenetration or solver clipping with the $0.635\text{ mm}$
   * Cylinder top flange ($D = 1.24\text{ in}, T = 0.08\text{ in}$).
   * Tapered insert plug ($D_{bot} = 0.90\text{ in}, D_{top} = 0.99\text{ in}$).
 * **Gripper Finger Pads**: Elastic contact model with friction ($\mu_s = 1.2$) for non-slip physical pinch grasps without numerical jitter.
+
+---
+
+## 7. Simulation Materials, Source Priority & Run Conventions (October 26, 2026)
+
+### Source priority
+1. This document is authoritative. `src/remediation/geometry.py` (`SPEC`) mirrors sections 1-3.
+2. The CAD models in `cad_models/` are used only where this document is silent: the vial inner floor (3.327 mm, CAD 0890-01) and visual appearance reference.
+3. Where they disagree, this document wins. CAD values that were *not* adopted: vial 1.070 in OD / 1.038 in ID / 7.992 in length, and flange 1.250 in.
+
+### Materials
+| Part | Material | Settings |
+|---|---|---|
+| Tray base (10 mm) and four 80 mm standoffs | Black | roughness 0.42 |
+| Perforated top plate (3 mm) | Silver metal | metallic 1.0, roughness 0.30 |
+| Vials | Clear glass | opacity 0.08, roughness 0.02, IOR 1.5 |
+| Caps | Semi-smooth (satin) silicone | roughness 0.45, cavity roughness 0.55 |
+
+Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Visual values are defined in `src/remediation/scene.py`.
+
+### Measured with these dimensions
+- A settled crooked cap sits at about **45.0 degrees**, above both the 31.5-34.0 degree reference band and the 40-44 degrees noted earlier. The qualifier therefore accepts crooked tilts of 8-50 degrees (`cap_state` in `geometry.py`). The discrepancy with the reference band remains unresolved.
+- Vial rim height is 213.2 mm above the work surface (10 mm base + 203.2 mm vial).
+- The YOLO checkpoint predates these dimensions and materials; retrain it before treating detection results as meaningful (see the cap-wall update above).
+
+### Run conventions
+- All outputs go under `shared/runs/YYYY-MM-DD_<task>/` (the pipeline script forces this).
+- Build the scene with `qualify_scene.py --fixed --scene-out shared/runs/<run>/scene.usda`, then pass it as the first argument to `scripts/run_compliant_breakable_pipeline.slurm`.
+- Reference run: `shared/runs/2026-10-26_docspec_compliant_remediation/`.
+

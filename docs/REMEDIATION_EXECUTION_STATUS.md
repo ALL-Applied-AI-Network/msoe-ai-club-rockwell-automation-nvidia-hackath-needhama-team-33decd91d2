@@ -73,19 +73,19 @@ uses a 260 mm transit plane. Its report is:
 This is deliberately a non-contact approach. It does not pick a spare, insert a
 cap, reseat a crooked cap, or report a repair as successful.
 
-## Current TableCam closed-loop pipeline
+## Current TableCam pipeline
 
-The current simulation pipeline is intentionally organized around the same
-fixed TableCam that supplies the initial decision. Its single Slurm submission
-script is `scripts/run_closed_loop_pipeline.slurm`:
+The simulation pipeline is organized around the fixed TableCam that supplies
+the initial decision. Its single Slurm submission script is
+`scripts/run_compliant_breakable_pipeline.slurm`:
 
 1. Isaac captures native 1920 × 1080 RGB, aligned depth, and camera metadata
    from the loaded remediation scene with `capture_live_tablecam.py`.
 2. The project Conda environment runs the remediation YOLO checkpoint on that
    capture with `inspect_remediation_capture.py`.
-3. Isaac selects only from that fresh prediction JSON, plans fixed-down routes,
-   and renders the attempted action from TableCam with
-   `run_best_effort_closed_loop.py`.
+3. Isaac selects only from that fresh prediction JSON and runs the compliant,
+   breakable-vial PhysX simulation from TableCam with
+   `run_compliant_breakable_remediation.py`.
 4. The Conda environment runs YOLO on every rendered TableCam frame and writes
    the labelled review video.
 
@@ -95,10 +95,9 @@ registrations. This is a runtime isolation detail, not a split perception/action
 workflow. A pipeline invocation is:
 
 ```bash
-sbatch scripts/run_closed_loop_pipeline.slurm \
-  shared/scenes/black_silver_remediation_qualified_v3.usda \
-  runs/archive/2026-10-22_black_silver_fixture_yolo/training/weights/best.pt \
-  runs/archive/2026-10-22_remediation/<run_name>
+sbatch scripts/run_compliant_breakable_pipeline.slurm \
+  shared/inspection_models/remediation_yolo_best.pt \
+  shared/runs/$(date +%F)_compliant_remediation
 ```
 
 The first frame inventories defects and starts one action plan. The current

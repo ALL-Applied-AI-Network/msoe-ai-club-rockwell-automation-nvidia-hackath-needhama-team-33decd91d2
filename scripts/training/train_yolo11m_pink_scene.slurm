@@ -40,7 +40,7 @@ test -f "$DATA/data.yaml"
 test -f "$BASELINE"
 
 echo '[train] YOLO11m on 800 corrected pink-paper deployment scenes'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model yolo11m.pt \
   --data "$DATA/data.yaml" \
   --eval-data "$DATA/data.yaml" \
@@ -48,7 +48,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 50 --batch 32 --imgsz 640 --device 0,1,2,3
 
 echo '[evaluate] untouched 100-image synthetic test and current hand-reviewed real tests'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models \
     "yolo11n_baseline=$BASELINE" \
     "yolo11m_pink_scene=$MODEL_OUT/weights/best.pt" \
@@ -60,7 +60,7 @@ srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py 
   --out "$COMPARE_OUT"
 
 echo '[render] comparable predictions on real and held-out synthetic frames'
-srun --export=ALL --ntasks=1 python3 scripts/render_remediation_prediction_samples.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/render_remediation_prediction_samples.py \
   --models \
     "yolo11n_baseline=$BASELINE" \
     "yolo11m_pink_scene=$MODEL_OUT/weights/best.pt" \

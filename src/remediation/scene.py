@@ -30,13 +30,16 @@ def randomize_table_camera(stage, rng):
     return {'eye_world_m':eye.tolist(),'look_at_world_m':target.tolist(),'translation_sigma_m':[.008,.008,.012]}
 
 
-def material(stage, name, color, opacity=1., roughness=.35):
+def material(stage, name, color, opacity=1., roughness=.35, metallic=0., ior=None):
     mat = UsdShade.Material.Define(stage, '/World/RemediationLooks/' + name)
     shader = UsdShade.Shader.Define(stage, str(mat.GetPath()) + '/Surface')
     shader.CreateIdAttr('UsdPreviewSurface')
     shader.CreateInput('diffuseColor', Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
     shader.CreateInput('roughness', Sdf.ValueTypeNames.Float).Set(float(roughness))
     shader.CreateInput('opacity', Sdf.ValueTypeNames.Float).Set(opacity)
+    shader.CreateInput('metallic', Sdf.ValueTypeNames.Float).Set(float(metallic))
+    if ior is not None:
+        shader.CreateInput('ior', Sdf.ValueTypeNames.Float).Set(float(ior))
     mat.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), 'surface')
     return mat
 
@@ -188,10 +191,12 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
     cap_color=np.clip(np.array((.96,.76,.04))+rng.normal(0,.035,3),0,1)
-    yellow=material(stage,'Cap',cap_color,roughness=float(rng.uniform(.22,.48)))
-    cavity=material(stage,'CapCavity',np.clip(cap_color*np.array((.52,.48,.22)),0,1),roughness=.58)
-    glass=material(stage,'Glass',(.92,.96,1.),.45,roughness=float(rng.uniform(.12,.35)))
-    metal=material(stage,'Fixture',np.clip(np.array((.65,.67,.69))+rng.normal(0,.04,3),0,1),roughness=float(rng.uniform(.25,.65)))
+    # Stipulated materials: semi-smooth (satin) silicone caps, clear glass vials,
+    # a black base/standoffs, and a silver perforated plate.
+    yellow=material(stage,'Cap',cap_color,roughness=.45)
+    cavity=material(stage,'CapCavity',np.clip(cap_color*np.array((.52,.48,.22)),0,1),roughness=.55)
+    glass=material(stage,'Glass',(.97,.99,1.),.08,roughness=.02,ior=1.5)
+    metal=material(stage,'Fixture',(.72,.74,.76),roughness=.3,metallic=1.)
     black=material(stage,'TrayBase',(.025,.028,.032),roughness=.42)
     physics_mat=UsdShade.Material.Define(stage,'/World/RemediationLooks/Contact')
     pm=UsdPhysics.MaterialAPI.Apply(physics_mat.GetPrim())

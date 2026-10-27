@@ -12,21 +12,23 @@ LAYOUT_PATH = Path(__file__).with_name('config') / 'dataset1_layout.json'
 
 @dataclass(frozen=True)
 class PhysicalSpec:
-    # Official CAD Part 0890-01 (csi-vial.usda)
-    vial_outer_radius: float = 0.0271780 / 2  # 1.070 in OD = 27.1780 mm (R = 13.589 mm)
-    vial_inner_radius: float = 0.0263652 / 2  # 1.038 in ID = 26.3652 mm (R = 13.1826 mm)
-    vial_height: float = 0.20300              # 7.9921 in length = 203.00 mm
-    vial_bottom: float = 0.003327             # 0.131 in inner floor = 3.327 mm (CAD inner_floor)
+    # docs/PHYSICAL_SPECIFICATIONS.md is authoritative. The CAD models in cad_models/
+    # are used only where the document is silent (vial_bottom floor, appearance).
+    # Vial: 1.00 in ID, 1.05 in OD, 8.00 in tall (CAD 0890-01 is 1.038/1.070/7.992 in).
+    vial_outer_radius: float = 0.02667 / 2    # 1.05 in OD = 26.67 mm
+    vial_inner_radius: float = 0.02540 / 2    # 1.00 in ID = 25.40 mm
+    vial_height: float = 0.20320              # 8.00 in = 203.20 mm
+    vial_bottom: float = 0.003327             # not in doc; CAD inner_floor = 3.327 mm
 
-    # Official CAD MOCAP TWF.820/.930 YW1 (csi-vial-cap.usda)
-    flange_radius: float = 0.031750 / 2       # 1.250 in flange_d = 31.750 mm (R = 15.875 mm)
-    flange_thickness: float = 0.002235        # 0.088 in flange_t = 2.235 mm
-    plug_bottom_radius: float = 0.020828 / 2  # 0.820 in plug_bot_d = 20.828 mm (R = 10.414 mm)
-    plug_top_radius: float = 0.023622 / 2     # 0.930 in plug_top_d = 23.622 mm (R = 11.811 mm)
-    plug_wall_thickness: float = 0.000826     # 0.0325 in uniform plug wall = 0.8255 mm
-    flange_inner_radius: float = 0.021971 / 2 # 0.865 in flange top aperture = 21.971 mm (R = 10.9855 mm)
-    plug_bottom_face_thickness: float = 0.001041 # 0.041 in closed plug bottom floor = 1.0414 mm
-    plug_depth: float = 0.013462              # 0.530 in plug_l = 13.462 mm
+    # Cap: MOCAP tapered flanged insert plug, 2.00 mm walls and 2.00 mm closed base.
+    flange_radius: float = 0.03150 / 2        # 1.24 in = 31.50 mm
+    flange_thickness: float = 0.002032        # 0.08 in = 2.032 mm
+    plug_bottom_radius: float = 0.02286 / 2   # 0.90 in = 22.86 mm
+    plug_top_radius: float = 0.025146 / 2     # 0.99 in = 25.146 mm
+    plug_wall_thickness: float = 0.002        # 2.00 mm
+    flange_inner_radius: float = 0.02115 / 2  # top opening 21.15 mm
+    plug_bottom_face_thickness: float = 0.002 # 2.00 mm
+    plug_depth: float = 0.01346               # 0.53 in = 13.46 mm
     tray_base_thickness: float = 0.010
     tray_top_clearance: float = 0.080
     tray_top_thickness: float = 0.003
@@ -141,7 +143,8 @@ def cap_state(position, orientation, rim_position=None, spec=SPEC):
     cls = 'invalid'
     if offset < .002 and tilt < 5 and abs(elevation) < .001:
         cls = 'good_cap'
-    elif offset < spec.vial_inner_radius and 8 <= tilt <= 45 and -.001 < elevation < .018:
+    # Upper bound 50 deg: with docs/PHYSICAL_SPECIFICATIONS.md geometry the cap wedges at ~45 deg.
+    elif offset < spec.vial_inner_radius and 8 <= tilt <= 50 and -.001 < elevation < .018:
         cls = 'crooked_cap'
     return {'tilt_deg': tilt, 'rim_offset_m': offset, 'rim_elevation_m': elevation, 'class_name': cls,
             'documented_tilt_band': 31.5 <= tilt <= 34.0}

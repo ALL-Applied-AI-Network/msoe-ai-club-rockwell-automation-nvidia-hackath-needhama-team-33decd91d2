@@ -32,7 +32,7 @@ else
 fi
 
 ROOT="runs/remediation_finetune"
-srun --export=ALL --ntasks=1 python3 scripts/render_remediation_prediction_samples.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/render_remediation_prediction_samples.py \
   --models \
     "baseline=shared/inspection_models/remediation_yolo_best.pt" \
     "synthetic=$ROOT/synthetic_ft/weights/best.pt" \

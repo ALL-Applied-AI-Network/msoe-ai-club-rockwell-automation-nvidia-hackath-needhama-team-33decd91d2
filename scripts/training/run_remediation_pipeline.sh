@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Submit generation, then training only after the dataset qualification succeeds.
 set -euo pipefail
-REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_DIR"
-OUT_DIR="${1:?Usage: run_remediation_pipeline.sh runs/archive/YYYY-MM-DD_task [scenes]}"
+OUT_DIR="${1:?Usage: scripts/training/run_remediation_pipeline.sh shared/runs/YYYY-MM-DD_task [scenes]}"
 SCENES="${2:-100}"
 mkdir -p logs
 if [[ -e "$OUT_DIR" ]]; then

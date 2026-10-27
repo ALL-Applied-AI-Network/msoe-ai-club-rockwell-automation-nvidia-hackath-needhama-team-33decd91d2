@@ -21,10 +21,16 @@ fi
 mkdir -p "${SHARED_SCENES}" "${SHARED_CACHE}" "${SHARED_RUNS}"
 
 # 2. Make the entire team workspace owner/group-readable, writable, and
-# executable recursively.  The set-group-ID bit keeps newly created entries in
-# the ai_club group.  Raw data is made read-only again immediately below.
+# executable recursively.  The set-group-ID bit on directories keeps newly
+# created entries in the ai_club group.  Raw data is made read-only again immediately below.
 chgrp -R ai_club "${TEAM_DIR}" 2>/dev/null || true
-chmod -R u+rwx,g+rwxs "${TEAM_DIR}" 2>/dev/null || true
+# Capital X grants execute only to directories and already-executable files.
+# setgid (g+s) goes on directories only: on executables it makes Linux run them
+# in secure-execution mode, which strips LD_PRELOAD/LD_LIBRARY_PATH and breaks
+# Isaac Sim's bundled python (libcarb.so: cannot open shared object file).
+chmod -R u+rwX,g+rwX "${TEAM_DIR}" 2>/dev/null || true
+find "${TEAM_DIR}" -type d -exec chmod g+s {} + 2>/dev/null || true
+find "${TEAM_DIR}" -type f -perm -2000 -exec chmod g-s {} + 2>/dev/null || true
 
 # 3. Enforce strictly read-only raw competition data (extracted from zip).
 if [ -d "${SHARED_DATA}" ]; then

@@ -38,7 +38,7 @@ REAL_DATA="$ROOT/real_dataset"
 MIXED_DATA="$ROOT/mixed_dataset"
 EVAL_DATA="shared/inspection_models/remediation_detection_dataset/data.yaml"
 
-srun --export=ALL --ntasks=1 python3 scripts/prepare_remediation_finetune_data.py \
+srun --export=ALL --ntasks=1 python3 scripts/datasets/prepare_remediation_finetune_data.py \
   --synthetic-source images/yolo_detection_dataset_800 \
   --base-remediation shared/inspection_models/remediation_detection_dataset \
   --synthetic-out "$SYNTH_DATA" \
@@ -50,13 +50,13 @@ srun --export=ALL --ntasks=1 python3 scripts/prepare_remediation_finetune_data.p
   --mixed-out "$MIXED_DATA"
 
 echo '[stage baseline] evaluating existing remediation checkpoint'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_detector.py \
   --model shared/inspection_models/remediation_yolo_best.pt \
   --data "$EVAL_DATA" \
   --out "$ROOT/baseline.json"
 
 echo '[stage synthetic] fine-tuning on translated synthetic data'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model shared/inspection_models/remediation_yolo_best.pt \
   --data "$SYNTH_DATA/data.yaml" \
   --eval-data "$EVAL_DATA" \
@@ -64,7 +64,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 30 --batch 8 --imgsz 640
 
 echo '[stage mixed] fine-tuning synthetic checkpoint with accepted Qwen/GPT frames'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$ROOT/synthetic_ft/weights/best.pt" \
   --data "$MIXED_DATA/data.yaml" \
   --eval-data "$EVAL_DATA" \

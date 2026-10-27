@@ -53,7 +53,7 @@ for name in baseline synthetic synthetic_plus_real table_background; do
         exit 2
     fi
     echo "[stage eval] $name"
-    srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_detector.py \
+    srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_detector.py \
       --model "$model" --data "$TEST_DATA/data.yaml" --split test \
       --out "$EVAL_ROOT/$name.json" --imgsz 640
 done

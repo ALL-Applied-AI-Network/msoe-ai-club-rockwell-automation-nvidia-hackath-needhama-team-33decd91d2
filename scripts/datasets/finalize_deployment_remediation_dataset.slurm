@@ -22,6 +22,6 @@ TRAIN_COUNT="${3:-800}"
 VAL_COUNT="${4:-100}"
 SHARDS="${5:-4}"
 
-srun --ntasks=1 python3 scripts/finalize_deployment_remediation_dataset.py \
+srun --ntasks=1 python3 scripts/datasets/finalize_deployment_remediation_dataset.py \
   --out "$OUT" --scenes "$SCENES" --train-count "$TRAIN_COUNT" \
   --val-count "$VAL_COUNT" --num-shards "$SHARDS"

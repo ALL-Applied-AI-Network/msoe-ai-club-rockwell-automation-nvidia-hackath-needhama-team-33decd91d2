@@ -17,7 +17,7 @@ from ultralytics import YOLO
 
 # Running a script by path puts its directory, rather than the repository
 # root, first on sys.path. Add the root so the evaluator helper is importable.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.evaluate_remediation_comparison import (

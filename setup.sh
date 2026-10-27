@@ -80,15 +80,7 @@ if [ -d "$FANUC_SOURCE" ] && [ -f "$FANUC_SOURCE/bootstrap.sh" ]; then
     (cd "$FANUC_DIR" && bash bootstrap.sh)
 fi
 
-# Ensure Isaac Sim 6.1 standalone is available
-if [ -f "scripts/install_isaac_standalone.sh" ]; then
-    if [ -x "shared/isaacsim_6.1/python.sh" ] || [ -x "${HOME}/isaacsim/python.sh" ]; then
-        echo "Isaac Sim 6.1 is already installed."
-    else
-        echo "Installing Isaac Sim 6.1 standalone into ./shared/isaacsim_6.1..."
-        ./scripts/install_isaac_standalone.sh
-    fi
-fi
+# Isaac Sim 6.1 is provided by the team workspace at ./shared/isaacsim_6.1 (see scripts/run_isaac.sh).
 
 # Scene construction is an explicit Slurm job, never a login-node side effect.
 echo "Build/qualify remediation scenes with scripts/submit_isaac_job.slurm."

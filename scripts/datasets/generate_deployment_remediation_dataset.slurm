@@ -44,10 +44,10 @@ export REMEDIATION_PINK_TABLE_PAPER="$PINK_TABLE_PAPER"
 export REMEDIATION_DOMAIN_RANDOMIZATION="$DOMAIN_RANDOMIZATION"
 
 srun --ntasks="$WORKERS" --cpus-per-task=6 --gpu-bind=single:1 \
-  bash scripts/run_deployment_remediation_generator_worker.sh
+  bash scripts/datasets/run_deployment_remediation_generator_worker.sh
 
 if [[ "$FINALIZE" == "1" ]]; then
-  srun --ntasks=1 --cpus-per-task=2 python3 scripts/finalize_deployment_remediation_dataset.py \
+  srun --ntasks=1 --cpus-per-task=2 python3 scripts/datasets/finalize_deployment_remediation_dataset.py \
     --out "$OUT" --scenes "$SCENES" --train-count "$TRAIN_COUNT" \
     --val-count "$VAL_COUNT" --num-shards "$SHARDS"
   echo "[generation] complete: $OUT/data.yaml"

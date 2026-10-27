@@ -32,6 +32,13 @@ else
     exit 2
 fi
 
+# All outputs live under shared/runs/ (bare names are placed there).
+case "$out" in
+    shared/runs/*) ;;
+    *) out="shared/runs/${out#/}" ;;
+esac
+echo "[pipeline] outputs: $out"
+
 if [[ ! -f "$scene" ]]; then
     echo "Scene does not exist: $scene" >&2
     exit 2

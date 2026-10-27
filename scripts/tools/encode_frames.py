@@ -2,10 +2,10 @@
 """Encode a directory of image frames into an MP4 video using OpenCV.
 
 Usage:
-    ./scripts/encode_frames.py --frames <path_to_frames_dir> --out <output.mp4> [--fps 20]
+    ./scripts/tools/encode_frames.py --frames <path_to_frames_dir> --out <output.mp4> [--fps 20]
 
 Example:
-    ./scripts/encode_frames.py --frames runs/compliant_remediation_test/action/frames --out demo.mp4
+    ./scripts/tools/encode_frames.py --frames runs/compliant_remediation_test/action/frames --out demo.mp4
 """
 import argparse
 from pathlib import Path

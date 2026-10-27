@@ -15,30 +15,24 @@ set -euo pipefail
 #   ./run.sh [script_or_command] [args...]
 #
 # Examples:
-#   ./run.sh scripts/render.py --target vial --state filled
-#   ./run.sh scripts/run_all.sh
-#   ./run.sh scripts/run_generate_fullframe_data.sh --scenes 30
-#   ./run.sh scripts/run_train_detector.sh --epochs 35
-#   ./run.sh scripts/run_inspection.sh
+#   ./run.sh src/remediation/capture_live_tablecam.py --scene <scene.usda> --out <dir>
 # ==============================================================================
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
-# Default to scripts/render.py if no arguments are provided
-TARGET_SCRIPT="${1:-scripts/render.py}"
-shift || true
+if [ "$#" -eq 0 ]; then
+    echo "Usage: ./run.sh [script_or_command] [args...]" >&2
+    exit 1
+fi
+TARGET_SCRIPT="$1"
+shift
 
 # Handle help locally without submitting a batch job
 if [ "$TARGET_SCRIPT" = "-h" ] || [ "$TARGET_SCRIPT" = "--help" ]; then
     echo "Usage: ./run.sh [script_or_command] [args...]"
     echo ""
-    echo "Available scripts:"
-    echo "  scripts/render.py                    - Standalone / twin rendering"
-    echo "  scripts/run_all.sh                   - Full pipeline (golden + data gen + train + inspect)"
-    echo "  scripts/run_generate_fullframe_data.sh - Generate synthetic full-frame YOLO dataset"
-    echo "  scripts/run_train_detector.sh        - Train YOLOv11 detector on GPU"
-    echo "  scripts/run_inspection.sh            - Run real-time detection & slot assignment"
+    echo "For the main pipeline, use: sbatch scripts/run_compliant_breakable_pipeline.slurm (see README.md)"
     exit 0
 fi
 

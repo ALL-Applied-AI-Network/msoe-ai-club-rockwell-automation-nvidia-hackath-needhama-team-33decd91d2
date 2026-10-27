@@ -48,11 +48,11 @@ if [[ ! -f "$RAW/data.yaml" ]]; then
       --paper-colors '0.85,0.15,0.12;0.10,0.45,0.85;0.18,0.65,0.25;0.78,0.48,0.08'
 fi
 
-srun --export=ALL --ntasks=1 python3 scripts/merge_remediation_datasets.py \
+srun --export=ALL --ntasks=1 python3 scripts/datasets/merge_remediation_datasets.py \
   --base "$BASE_DATA" --extra "$RAW" --out "$TABLE_DATA"
 
 echo '[stage table background] fine-tuning the saved mixed checkpoint'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$CHECKPOINT" --data "$TABLE_DATA/data.yaml" --eval-data "$EVAL_DATA" \
   --out "$ROOT/table_background_ft" --epochs 20 --batch 8 --imgsz 640
 

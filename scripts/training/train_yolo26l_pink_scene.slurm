@@ -40,7 +40,7 @@ test -f "$DATA/data.yaml"
 test -f "$BASELINE"
 
 echo '[train] YOLO26l at 960px on 800 corrected deployment scenes'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model yolo26l.pt \
   --data "$DATA/data.yaml" \
   --eval-data "$DATA/data.yaml" \
@@ -48,7 +48,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 50 --batch 4 --imgsz 960 --device 0
 
 echo '[evaluate] both models at 960px on identical synthetic and real tests'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models \
     "yolo11n_baseline=$BASELINE" \
     "yolo26l_pink_960=$MODEL_OUT/weights/best.pt" \
@@ -61,7 +61,7 @@ srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py 
   --out "$COMPARE_OUT"
 
 echo '[render] prediction audit at deployment resolution'
-srun --export=ALL --ntasks=1 python3 scripts/render_remediation_prediction_samples.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/render_remediation_prediction_samples.py \
   --models \
     "yolo11n_baseline=$BASELINE" \
     "yolo26l_pink_960=$MODEL_OUT/weights/best.pt" \

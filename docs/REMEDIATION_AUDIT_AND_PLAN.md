@@ -12,7 +12,7 @@ The remediation review path now has one Slurm submission that preserves the
 actual decision boundary: capture the **current loaded scene** from TableCam,
 run YOLO on that image, plan from those predictions, render the attempted
 action through TableCam, then overlay YOLO on every action frame. The entry
-point is `scripts/run_closed_loop_pipeline.slurm`. It runs Isaac Sim and
+point is `scripts/run_compliant_breakable_pipeline.slurm`. It runs Isaac Sim and
 Ultralytics as sequential child processes because they cannot share one Python
 interpreter without a protobuf registration crash.
 

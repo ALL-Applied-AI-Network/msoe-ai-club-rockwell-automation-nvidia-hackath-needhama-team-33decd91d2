@@ -22,7 +22,7 @@ echo "Running on $(hostname) with GPU allocation:"
 nvidia-smi
 echo "=========================================================="
 
-TARGET="${1:-scripts/render.py}"
+TARGET="${1:?usage: sbatch scripts/submit_isaac_job.slurm <script> [args...]}"
 shift || true
 
 if [ -x "$TARGET" ] && [[ "$TARGET" == *.sh ]]; then

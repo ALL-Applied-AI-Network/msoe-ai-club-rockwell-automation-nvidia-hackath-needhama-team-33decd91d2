@@ -53,7 +53,7 @@ test -f "$BASELINE"
 test -f "$REAL_DATA/data.yaml"
 
 echo '[dataset] merging 1,600 CAD simulation frames across balanced and true-lighting domains'
-srun --export=ALL --ntasks=1 python3 scripts/merge_multiple_remediation_datasets.py \
+srun --export=ALL --ntasks=1 python3 scripts/datasets/merge_multiple_remediation_datasets.py \
   --dataset "balanced=$SIM_BALANCED" \
   --dataset "true_light_pink=$SIM_TRUE_LIGHT" \
   --out "$SIM_DATA"
@@ -66,12 +66,12 @@ if [[ -f "$OTHER_REAL_DATA/data.yaml" ]]; then
 else
     echo "[dataset] other-arm dataset is not present yet: $OTHER_REAL_DATA"
 fi
-srun --export=ALL --ntasks=1 python3 scripts/merge_multiple_remediation_datasets.py \
+srun --export=ALL --ntasks=1 python3 scripts/datasets/merge_multiple_remediation_datasets.py \
   "${MERGE_DATASETS[@]}" --out "$MIXED_DATA"
 
 echo '[stage 1/5] nano baseline is preserved and will be evaluated unchanged'
 echo '[stage 2/5] fine-tuning the nano baseline on both corrected CAD lighting domains'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$BASELINE" \
   --data "$SIM_DATA/data.yaml" \
   --eval-data "$SIM_DATA/data.yaml" \
@@ -79,7 +79,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 30 --batch 32 --imgsz 640 --device 0,1,2,3
 
 echo '[stage 3/5] fine-tuning the saved nano checkpoint on simulation + real labels'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$NANO_SIM_MODEL/weights/best.pt" \
   --data "$MIXED_DATA/data.yaml" \
   --eval-data "$SIM_DATA/data.yaml" \
@@ -87,7 +87,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 30 --batch 32 --imgsz 640 --device 0,1,2,3
 
 echo '[stage 4/5] fine-tuning a higher-capacity YOLO11m from its pretrained checkpoint'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$MEDIUM_PRETRAINED" \
   --data "$SIM_DATA/data.yaml" \
   --eval-data "$SIM_DATA/data.yaml" \
@@ -95,7 +95,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 30 --batch 32 --imgsz 640 --device 0,1,2,3
 
 echo '[stage 5/5] fine-tuning the saved medium checkpoint on simulation + real labels'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$MEDIUM_SIM_MODEL/weights/best.pt" \
   --data "$MIXED_DATA/data.yaml" \
   --eval-data "$SIM_DATA/data.yaml" \
@@ -103,7 +103,7 @@ srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
   --epochs 30 --batch 32 --imgsz 640 --device 0,1,2,3
 
 echo '[evaluation] same held-out CAD simulation test and same two hand-reviewed real frames for every checkpoint'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models \
     "baseline=$BASELINE" \
     "yolo11n_cad_simulation=$NANO_SIM_MODEL/weights/best.pt" \
@@ -118,7 +118,7 @@ srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py 
   --out "$COMPARE_OUT"
 
 echo '[render] prediction examples on the two real images and four held-out CAD simulation images'
-srun --export=ALL --ntasks=1 python3 scripts/render_remediation_prediction_samples.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/render_remediation_prediction_samples.py \
   --models \
     "baseline=$BASELINE" \
     "yolo11n_cad_simulation=$NANO_SIM_MODEL/weights/best.pt" \

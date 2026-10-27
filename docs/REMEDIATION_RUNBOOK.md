@@ -83,7 +83,7 @@ This helper submits a physics-qualified dataset-generation job followed by a
 dependent training job. The training job starts only if generation succeeds.
 
 ```bash
-scripts/run_remediation_pipeline.sh "$RUN_DIR/yolo" 100
+scripts/training/run_remediation_pipeline.sh "$RUN_DIR/yolo" 100
 ```
 
 The first argument must be a fresh directory; `100` is the scene count. The
@@ -112,44 +112,7 @@ Required checks:
    [SHARED_MODEL_REGISTRY.md](SHARED_MODEL_REGISTRY.md). Do not put models in
    the read-only `shared/data/` directory.
 
-## 4. Run the current full TableCam-to-action simulation sequence
-
-The command below submits **one Slurm job** that performs these sequential
-stages using the exact same saved scene:
-
-1. Open the qualified scene and capture current TableCam colour and depth data.
-2. Run YOLO on that capture.
-3. Select reachable predicted targets and render the attempted action through
-   TableCam.
-4. Run YOLO on every rendered TableCam frame and encode a labelled video.
-
-```bash
-sbatch scripts/run_closed_loop_pipeline.slurm \
-  "$RUN_DIR/qualification/scene.usda" \
-  "$RUN_DIR/yolo/training/weights/best.pt" \
-  "$RUN_DIR/closed_loop"
-```
-
-Isaac Sim and YOLO are separate child processes within this single job because
-their Python runtimes conflict when loaded together. They share the same job,
-scene, output directory, and GPU allocation.
-
-Review these outputs:
-
-- `closed_loop/perception/current_scene_tablecam.png` — the initial image used
-  to select targets.
-- `closed_loop/perception/current_scene_detections.json` — YOLO boxes, classes,
-  confidence, and derived robot-base candidate positions.
-- `closed_loop/action/attempt_report.json` — selected/rejected targets, tool
-  orientation check, and explicit limitations.
-- `closed_loop/action/yolo_frames/` — every TableCam action frame with YOLO
-  labels drawn on it.
-- `closed_loop/tablecam_yolo_per_frame.mp4` — review video.
-
-Do not infer successful contact from this video. The controller must eventually
-reinspect after every pickup, placement, and press before it can claim repair.
-
-### Compliant black-and-silver fixture simulation
+## 4. Run the compliant TableCam-to-action simulation
 
 For the fracture-aware compliant simulation, use the canonical shared fixture.
 The scene argument is optional because the Slurm script selects it by default:

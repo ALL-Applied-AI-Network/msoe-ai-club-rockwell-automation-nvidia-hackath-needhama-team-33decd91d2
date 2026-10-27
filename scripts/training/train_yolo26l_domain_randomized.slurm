@@ -45,7 +45,7 @@ test -f "$BASE_MODEL"
 test -f "$ORIGINAL_BASELINE"
 
 echo '[train] continuing corrected-scene YOLO26l on 800 domain-randomized scenes'
-srun --export=ALL --ntasks=1 python3 scripts/finetune_remediation_detector.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/finetune_remediation_detector.py \
   --model "$BASE_MODEL" \
   --data "$DOMAIN_DATA/data.yaml" \
   --eval-data "$DOMAIN_DATA/data.yaml" \
@@ -59,21 +59,21 @@ MODELS=(
 )
 
 echo '[evaluate] all preserved stages on the fixed corrected-scene synthetic test'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models "${MODELS[@]}" \
   --synthetic-data "$BASE_DATA/data.yaml" --synthetic-split test --imgsz 960 \
   --hand-dir images/Hand_Samples --image-dir images/pruned_images \
   --apertures src/inspection/config/fixture_g_apertures.json --out "$BASE_EVAL_OUT"
 
 echo '[evaluate] all preserved stages on the fixed domain-randomized synthetic test'
-srun --export=ALL --ntasks=1 python3 scripts/evaluate_remediation_comparison.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/evaluate_remediation_comparison.py \
   --models "${MODELS[@]}" \
   --synthetic-data "$DOMAIN_DATA/data.yaml" --synthetic-split test --imgsz 960 \
   --hand-dir images/Hand_Samples --image-dir images/pruned_images \
   --apertures src/inspection/config/fixture_g_apertures.json --out "$DOMAIN_EVAL_OUT"
 
 echo '[render] prediction audit for the domain-randomized test and real samples'
-srun --export=ALL --ntasks=1 python3 scripts/render_remediation_prediction_samples.py \
+srun --export=ALL --ntasks=1 python3 scripts/training/render_remediation_prediction_samples.py \
   --models "${MODELS[@]}" \
   --synthetic-data "$DOMAIN_DATA/data.yaml" --synthetic-split test \
   --synthetic-count 4 --imgsz 960 \
