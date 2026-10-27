@@ -159,14 +159,14 @@ observe TableCam → run YOLO → choose one safe action → execute a short chu
 
 The supported Isaac pipeline now selects `--controller-policy shared` and imports
 the same `src.remediation.controller.RemediationController` used by the physical
-client. The Isaac adapter renders fresh TableCam and wrist-camera observations,
+client. The Isaac adapter renders fresh TableCam observations,
 runs the configured YOLO checkpoint at decision gates, and translates only the
 returned TCP/W/P/R/gripper command into IK. The controller accepts only:
 
-- TableCam/wrist-camera-derived detections and feature estimates.
+- TableCam RGB-D detections.
 - Current TCP pose, robot joints and gripper state.
 - Configured calibration and pick/place/press offsets.
-- Camera verification of pickup, upright table placement and final repair.
+- TableCam verification of pickup and final repair.
 
 USD prims, PhysX poses, true cap axes, contact reports, generated labels and vial
 loads are rejected at the policy boundary. In simulation they are written only to
@@ -174,9 +174,9 @@ the evaluator artifacts after commands have been selected.
 
 The shared missing-cap sequence is pick, camera-verify, place, release,
 position-limited press and camera verification. The shared crooked-cap sequence is
-wrist-axis observation, axis-aligned flange grasp, lift, turn upright, camera-selected
-table placement, camera-confirmed vertical regrasp, replace, position-limited press
-and camera verification. Missing caps are handled first.
+a TableCam-targeted vertical press and camera verification. Its W/P/R remains fixed
+at `(-180, 0, 0)` for the complete route: transit open, close above the cap, descend,
+press, retreat, then open. Missing caps are handled first.
 
 The Isaac adapter expands each TCP destination into a simultaneous Cartesian and
 shortest-path wrist transition limited to 1 mm and 0.5 degree per 60 Hz physics
@@ -349,7 +349,7 @@ from the repository root, replacing `TRACE_DIR` with the printed directory:
 ```bash
 TRACE_DIR="shared/runs/YYYY-MM-DD_HH-MM-SS_physical_policy"
 FFMPEG_BIN=$(./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())')
-"$FFMPEG_BIN" -y -framerate 20 -i "$TRACE_DIR/tablecam_annotated/%04d.png" \
+"$FFMPEG_BIN" -y -framerate 60 -i "$TRACE_DIR/tablecam_annotated/%04d.png" \
   -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$TRACE_DIR/tablecam_yolo_trace.mp4"
 ```
 

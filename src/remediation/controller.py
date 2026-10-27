@@ -16,8 +16,7 @@ from src.remediation.geometry import base_to_uf0, transit_base_z, uf0_to_base
 # no USD prim, PhysX pose/contact/load, generated label or true cap axis crosses
 # this boundary.
 ALLOWED_OBSERVATION_FIELDS = frozenset({
-    "tcp_pose", "joints", "grasp_verified", "crooked_axis_base",
-    "upright_cap_base_pos", "table_regrasp_base_pos", "timestamp",
+    "tcp_pose", "joints", "grasp_verified", "timestamp",
 })
 ALLOWED_DETECTION_FIELDS = frozenset({
     "class_name", "confidence", "base_pos_m", "bbox_xyxy", "pixel",
@@ -136,7 +135,6 @@ class RemediationController:
         self.attempts = {}
         self.events = []
         self.decision_records = []
-        self.camera_verified_free_table_spots = []
         self.state = "inspect"
         self.confirmations = 0
         self.verify_frames = 0
@@ -170,10 +168,16 @@ class RemediationController:
         target_pos = np.asarray(target["base_pos_m"], dtype=float)
         self._add([current[0], current[1], height], False)
         if spare is None:
+            # Crooked-cap remediation is a straight, fixed-orientation press.
+            # Close above the cap, descend vertically, press, then retreat before
+            # opening.  Every action is emitted by checked_action(), so W/P/R is
+            # held at the standard down pose for the entire route.
+            self._add([target_pos[0], target_pos[1], height], False)
             self._add([target_pos[0], target_pos[1], height], True)
             self._add(target_pos + [0, 0, 0.025], True)
             self._add(target_pos + [0, 0, self.tool.press_offset_m], True)
-            self._add(target_pos + [0, 0, self.tool.press_offset_m], False)
+            self._add(target_pos + [0, 0, 0.025], True)
+            self._add([target_pos[0], target_pos[1], height], True)
             self._add([target_pos[0], target_pos[1], height], False)
             self.state = "repair"
         else:
@@ -205,65 +209,11 @@ class RemediationController:
             return self.queue.popleft()
         if self.state == "failed":
             return self.hold(obs)
-        if self.state == "crooked_observe_axis":
-            axis = obs.get("crooked_axis_base")
-            table = obs.get("table_regrasp_base_pos")
-            if table is None and self.camera_verified_free_table_spots:
-                table = self.camera_verified_free_table_spots[-1]
-            if axis is None or table is None:
-                self.events.append({"event": "hold", "reason": "crooked_camera_observation_required"})
-                return self.hold(obs)
-            target = np.asarray(self.pending["target"]["base_pos_m"], dtype=float)
-            axis = np.asarray(axis, dtype=float)
-            axis /= np.linalg.norm(axis)
-            if axis[2] < 0:
-                axis = -axis
-            table = np.asarray(table, dtype=float)
-            wpr = axis_to_wpr(axis)
-            height = self.pending["height"]
-            grasp = target + axis * self.tool.pick_offset_m
-            self._add_pose(target + axis * 0.025, wpr, False)
-            self._add_pose(grasp, wpr, False)
-            self._add_pose(grasp, wpr, True)
-            self._add_pose(target + axis * 0.050, wpr, True)
-            self._add([target[0], target[1], height], True)
-            self._add([table[0], table[1], height], True)
-            self._add(table + [0, 0, self.tool.place_offset_m], True)
-            self._add(table + [0, 0, self.tool.place_offset_m], False)
-            self.state = "crooked_verify_table"
-            self.pending["table_regrasp_base_pos"] = table.tolist()
-            self.pending["crooked_axis_base"] = axis.tolist()
-            return self.queue.popleft()
-        if self.state == "crooked_verify_table":
-            upright = obs.get("upright_cap_base_pos")
-            if upright is None:
-                self.state = "failed"
-                self.events.append({"event": "crooked_table_regrasp_aborted",
-                                    "reason": "upright cap not confirmed by camera"})
-                return self.hold(obs)
-            upright = np.asarray(upright, dtype=float)
-            target = np.asarray(self.pending["target"]["base_pos_m"], dtype=float)
-            height = self.pending["height"]
-            self._add(upright + [0, 0, 0.025], False)
-            self._add(upright + [0, 0, self.tool.pick_offset_m], False)
-            self._add(upright + [0, 0, self.tool.pick_offset_m], True)
-            self._add([upright[0], upright[1], height], True)
-            self._add([target[0], target[1], height], True)
-            self._add(target + [0, 0, 0.025], True)
-            self._add(target + [0, 0, self.tool.place_offset_m], True)
-            self._add(target + [0, 0, self.tool.place_offset_m], False)
-            self._add(target + [0, 0, self.tool.press_offset_m], True)
-            self._add(target + [0, 0, self.tool.press_offset_m], False)
-            self._add([target[0], target[1], height], False)
-            self.state = "repair"
-            return self.queue.popleft()
         if self.state == "pickup":
             if obs.get("grasp_verified") is not True:
                 self.state = "failed"
                 self.events.append({"event": "pickup_unverified"})
                 return self.hold(obs)
-            self.camera_verified_free_table_spots.append(
-                list(map(float, self.pending["spare"]["base_pos_m"])))
             p = np.asarray(self.pending["target"]["base_pos_m"], dtype=float)
             self._add([p[0], p[1], self.pending["height"]], True)
             self._add(p + [0, 0, 0.025], True)
@@ -310,17 +260,7 @@ class RemediationController:
                 spare = min(spares, key=lambda s: np.linalg.norm(
                     np.asarray(s["base_pos_m"]) - np.asarray(target["base_pos_m"])))
             try:
-                if target["class_name"] == "crooked_cap":
-                    current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
-                    height = max(transit_base_z(), current[2])
-                    target_pos = np.asarray(target["base_pos_m"], dtype=float)
-                    self._add([current[0], current[1], height], False)
-                    self._add([target_pos[0], target_pos[1], height], False)
-                    self._add(target_pos + [0, 0, 0.15], False)
-                    self.pending = {"target": target, "spare": None, "height": height}
-                    self.state = "crooked_observe_axis"
-                else:
-                    self._route(obs, target, spare)
+                self._route(obs, target, spare)
             except ValueError as exc:
                 self.attempts[key] = self.max_attempts
                 self.events.append({"event": "target_rejected", "reason": str(exc),

@@ -19,8 +19,12 @@ Missing cap (tool pointing straight down):
      cap drops under gravity.
   3. The closed fingertip face presses the flange down, force limited.
 
-Crooked cap (leaning on the rim, sec. 5 of the spec: flange dipped into the mouth,
-plug bottom corner on the opposite rim), default `--crooked-press regrip`:
+The supported shared controller handles a crooked cap with a straight vertical,
+position-limited press while holding W/P/R at (-180, 0, 0). Its target comes
+from the current TableCam RGB-D detection and it does not request a wrist camera.
+
+Legacy crooked-cap comparison mode (`--controller-policy legacy`, with
+`--crooked-press regrip`) remains available for archived experiments:
   1. The wrist camera is servoed onto the cap axis (servo_crooked_cap.servo_cap_axis);
      TableCam supplies only the vial position.
   2. Open fingers approach along that axis, spread axis horizontal, until the pocket
@@ -34,7 +38,7 @@ plug bottom corner on the opposite rim), default `--crooked-press regrip`:
   5. It is placed and pressed exactly like the missing cap.
   The crooked-cap motions are planned after the servo, since they depend on its result.
 
-Older strategies, kept for comparison (`--crooked-press tilted|vertical`):
+Other legacy strategies, kept for comparison (`--crooked-press tilted|vertical`):
   The cap's high side is measured from TableCam depth.  The tool tilts
   PRESS_TILT_DEG off vertical toward the cap's high side, rolled so one finger's
   solid outer back face points down; it presses with that face PRESS_FACE_UP_M up
@@ -1044,12 +1048,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     from isaacsim.sensors.camera import Camera
     from src.remediation.controller import (ContactTool, RemediationController,
                                             wpr_to_rotation)
-    from src.remediation.geometry import SPEC, base_to_uf0, transit_base_z, uf0_to_base
+    from src.remediation.geometry import base_to_uf0, transit_base_z, uf0_to_base
     from src.remediation.policy_driver import PolicyDriver
-    from src.remediation.policy_observations import (estimate_crooked_axis,
-                                                     find_free_table_spot,
-                                                     upright_cap_near)
-    from src.remediation.servo_crooked_cap import read_wrist, wrist_camera
 
     P = Planner()
     tip = tuple(__import__('src.remediation.custom_gripper', fromlist=['finger_tip_tcp'])
@@ -1080,7 +1080,6 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     table = Camera(cell.TABLE_CAM_PATH, resolution=(1920, 1080))
     table.initialize()
     table.add_distance_to_image_plane_to_frame()
-    wrist = wrist_camera(stage)
     positions = set_jaw_separation(arm, names, C.JAW_OPEN)
     positions[arm_idx] = q0
     arm.set_joint_positions(positions)
@@ -1166,34 +1165,6 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                                 np.linalg.norm(np.asarray(item['base_pos_m'])[:2] - spare[:2]) < .040
                                 for item in detections)
             obs['grasp_verified'] = not still_present
-        if ctrl.state == 'crooked_observe_axis' and not ctrl.queue and ctrl.pending is not None:
-            for _ in range(20):
-                world.step(render=True)
-            rgb, wrist_depth = read_wrist(wrist)
-            Rj, pj = fk.fk(ex.q)
-            T = np.eye(4)
-            T[:3, :3], T[:3, 3] = Rj, pj
-            try:
-                axis, report = estimate_crooked_axis(
-                    rgb, wrist_depth, ctrl.pending['target']['base_pos_m'], T)
-                obs['crooked_axis_base'] = axis.tolist()
-                (decision_dir / f'wrist_axis_{len(controller.decision_records):04d}.json').write_text(
-                    json.dumps(report, indent=2) + '\n')
-            except ValueError:
-                pass
-            points, _ = tablecam_points(depth, capture)
-            anchors = [item['base_pos_m'] for item in detections
-                       if item['class_name'] == 'table_cap' and item.get('depth_available')]
-            exclusions = [item['base_pos_m'] for item in detections if item['class_name'] != 'table_cap']
-            try:
-                obs['table_regrasp_base_pos'] = find_free_table_spot(
-                    points, anchors, exclusions, SPEC.surface_base_z).tolist()
-            except ValueError:
-                pass
-        if ctrl.state == 'crooked_verify_table' and not ctrl.queue and ctrl.pending is not None:
-            upright = upright_cap_near(detections, ctrl.pending.get('table_regrasp_base_pos'))
-            if upright is not None:
-                obs['upright_cap_base_pos'] = upright.tolist()
         return obs, detections
 
     def execute(action, state):

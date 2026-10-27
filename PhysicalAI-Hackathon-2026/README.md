@@ -80,9 +80,9 @@ uv run run.py --mode hover
 ```
 
 Full mode uses the same simulator-independent controller as the supported Isaac
-pipeline. It requests TableCam and wrist RGB/depth, handles missing caps before
-crooked caps, and uses the same remove/upright/table-regrasp/replace sequence for a
-crooked cap. The controller rejects simulator-only fields; Isaac truth and contact
+pipeline. It requests TableCam RGB/depth, handles missing caps before crooked caps,
+and uses a fixed-down, straight vertical press for a crooked cap. W/P/R remains
+`-180, 0, 0` throughout that press route. The controller rejects simulator-only fields; Isaac truth and contact
 loads exist only in separate evaluation output. Because the real cell provides no
 force measurement, shared-policy pressing is position-limited in both environments.
 

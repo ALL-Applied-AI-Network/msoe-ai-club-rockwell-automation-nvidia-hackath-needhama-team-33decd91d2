@@ -20,10 +20,7 @@ sys.path.insert(0, str(ROOT))
 from src.inspection.vision_pipeline import RemediationVisionDetector
 from src.remediation.geometry import base_to_uf0, transit_base_z
 from src.remediation.controller import ContactTool, RemediationController
-from src.remediation.policy_observations import (estimate_crooked_axis, find_free_table_spot,
-                                                 upright_cap_near)
 from calibration.geometry import depth_to_base, load as load_cameras, project
-from calibration.geometry import flange_pose
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
@@ -49,8 +46,8 @@ def provisional_contact_tool(allowed, pick_offset_m, place_offset_m, press_offse
 
 
 class Policy:
-    CAMERAS = ["table", "wrist"]
-    DEPTH = ["table", "wrist"]
+    CAMERAS = ["table"]
+    DEPTH = ["table"]
     IMAGE_SIZE = (1920, 1080)
     IMAGE_FORMAT = "png"
     ACTION = "tcp"
@@ -87,8 +84,6 @@ class Policy:
         (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
         (self.trace_dir / "depth").mkdir(exist_ok=True)
-        (self.trace_dir / "wrist_raw").mkdir(exist_ok=True)
-        (self.trace_dir / "wrist_depth").mkdir(exist_ok=True)
         self.trace_file = self.trace_dir / "trace.jsonl"
         self.frame_count = 0
         self.last_saved_action = None
@@ -181,12 +176,6 @@ class Policy:
         depth = obs.get("depth", {}).get("table")
         if depth is not None:
             cv2.imwrite(str(self.trace_dir / "depth" / raw_name), np.asarray(depth))
-        wrist = obs.get("images", {}).get("wrist")
-        if wrist is not None:
-            cv2.imwrite(str(self.trace_dir / "wrist_raw" / raw_name), cv2.cvtColor(wrist, cv2.COLOR_RGB2BGR))
-        wrist_depth = obs.get("depth", {}).get("wrist")
-        if wrist_depth is not None:
-            cv2.imwrite(str(self.trace_dir / "wrist_depth" / raw_name), np.asarray(wrist_depth))
         self._write_trace({"t": stamp, "controller_state": state,
                            "action_tcp": action, "tcp_pose_before": obs.get("tcp_pose"),
                            "detections": detections, "events": self.events[-20:],
@@ -248,7 +237,7 @@ class Policy:
         return fused
 
     def _full_act(self, obs, image, stamp, fresh):
-        """Pick a spare for a missing vial, then reseat a crooked cap.
+        """Pick a spare for a missing vial or press a crooked cap vertically.
 
         The controller emits one short TCP action per observation.  After the
         pickup route completes, a new TableCam snapshot must show that the cap
@@ -264,38 +253,6 @@ class Policy:
         self.last_observation_time = stamp
         detections = self._snapshot_detections(image, stamp)
         detections = self._fuse_table_depth(detections, observed.get("depth", {}).get("table"))
-        if self.controller.state == "crooked_observe_axis" and self.controller.pending is not None:
-            target = self.controller.pending["target"]["base_pos_m"]
-            wrist_rgb = observed.get("images", {}).get("wrist")
-            wrist_depth = observed.get("depth", {}).get("wrist")
-            if wrist_rgb is not None and wrist_depth is not None:
-                try:
-                    axis, report = estimate_crooked_axis(
-                        wrist_rgb, wrist_depth, target, flange_pose(observed["joints"]))
-                    observed["crooked_axis_base"] = axis.tolist()
-                    self.events.append({"event": "wrist_cap_axis", **report})
-                except ValueError as exc:
-                    self.events.append({"event": "wrist_cap_axis_unavailable", "reason": str(exc)})
-            table_depth = observed.get("depth", {}).get("table")
-            if table_depth is not None:
-                try:
-                    points = depth_to_base(self.cameras["table_depth"], table_depth, stride=2)
-                    anchors = [item["base_pos_m"] for item in detections
-                               if item["class_name"] == "table_cap" and item.get("depth_available")]
-                    exclusions = [item["base_pos_m"] for item in detections
-                                  if item["class_name"] != "table_cap"]
-                    spot = find_free_table_spot(points, anchors, exclusions)
-                    observed["table_regrasp_base_pos"] = spot.tolist()
-                    self.events.append({"event": "table_regrasp_spot", "base_pos_m": spot.tolist()})
-                except ValueError as exc:
-                    self.events.append({"event": "table_regrasp_spot_unavailable", "reason": str(exc)})
-        elif self.controller.state == "crooked_verify_table" and self.controller.pending is not None:
-            expected = self.controller.pending.get("table_regrasp_base_pos")
-            upright = upright_cap_near(detections, expected) if expected is not None else None
-            if upright is not None:
-                observed["upright_cap_base_pos"] = upright.tolist()
-                self.events.append({"event": "upright_table_cap_confirmed",
-                                    "base_pos_m": upright.tolist()})
         if self.controller.state == "pickup" and self.controller.pending is not None:
             spare = np.asarray(self.controller.pending["spare"]["base_pos_m"], dtype=float)
             still_on_table = any(

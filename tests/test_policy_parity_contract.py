@@ -38,6 +38,17 @@ class PolicyParityContractTests(unittest.TestCase):
         self.assertIn('--checkpoint "$checkpoint"', pipeline)
         self.assertIn("verify_policy_parity_run.py", pipeline)
         self.assertIn("oracle_evaluation_trace.json", pipeline)
+        self.assertIn("-framerate 60", pipeline)
+
+    def test_active_policy_uses_tablecam_and_fixed_wrist_press(self):
+        physical = (ROOT / "PhysicalAI-Hackathon-2026/policy.py").read_text()
+        controller = (ROOT / "src/remediation/controller.py").read_text()
+        self.assertIn('CAMERAS = ["table"]', physical)
+        self.assertIn('DEPTH = ["table"]', physical)
+        self.assertNotIn('state == "crooked_observe_axis"', physical)
+        self.assertNotIn("ctrl.state == 'crooked_observe_axis'", (
+            ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text())
+        self.assertNotIn('self.state = "crooked_observe_axis"', controller)
 
     def test_live_true_axis_is_not_passed_to_servo(self):
         runner = (ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text()

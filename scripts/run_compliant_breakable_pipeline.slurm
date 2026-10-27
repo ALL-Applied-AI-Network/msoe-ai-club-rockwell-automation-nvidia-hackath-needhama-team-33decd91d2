@@ -60,7 +60,7 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --capture-report "$perception/capture_report.json" \
     --out "$perception/current_scene_detections.json" --device 0
 
-echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement, wrist-servoed crooked-cap regrip)..."
+echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement, fixed-wrist crooked-cap press)..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json" \
@@ -91,7 +91,7 @@ echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
 # No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
 FFMPEG_BIN=$(command -v ffmpeg || ./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
 if [[ -x "$FFMPEG_BIN" ]]; then
-    "$FFMPEG_BIN" -y -framerate 20 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
+    "$FFMPEG_BIN" -y -framerate 60 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
     echo "[pipeline] Video compiled successfully at $out/tablecam_yolo_compliant_remediation.mp4"
 else
     echo "[pipeline] Note: ffmpeg not found on compute node; login node will compile the video."
