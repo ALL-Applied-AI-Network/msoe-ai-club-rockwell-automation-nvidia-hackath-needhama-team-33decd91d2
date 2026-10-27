@@ -84,9 +84,13 @@ REGRIP_LEDGE_GAP_M = 0.0005
 REGRIP_STANDOFFS_M = (0.08, 0.06, 0.04, 0.03)
 REGRIP_SLOW_M = 0.02
 # Near the base a cap leaning toward the robot needs J3 past its limit for a coaxial
-# grip; the tool is then tilted toward vertical (about the spread axis) in 2 deg steps
-# up to this much, still centred on the cap origin.
-REGRIP_MAX_MISALIGN_DEG = 10.
+# grip, and at the far tray edge a cap leaning away needs the wrist beyond reach; the
+# tool is then tilted toward vertical (about the spread axis) in 2 deg steps up to this
+# much, still centred on the cap origin.  The smallest reachable tilt is used.  An
+# offline check on 31 qualified crooked caps: 21 reachable within 10 deg, all but one
+# within 30 deg, the last at 40 deg.  Past ~8 deg the 4.76 mm flange slot no longer
+# matches the flange plane, so the closing jaws must rotate the cap into the pocket.
+REGRIP_MAX_MISALIGN_DEG = 40.
 # Per-jaw closing past the coaxial grip value while a cap is held.  At the coaxial value
 # the flange has 0.125 mm radial play in its 4.76 mm slot and rocks ~5 deg onto one lip;
 # this squeeze (~11 N per jaw at the 4e4 N/m jaw drive) clamps the flange rim square.
