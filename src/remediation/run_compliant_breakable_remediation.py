@@ -117,6 +117,7 @@ FIT_MIN_CAPS = 6
 SLOT_RIM_MIN_PTS = 60
 SLOT_ABOVE_MIN_PTS = 200
 SLOT_CAP_TOP_MIN_PTS = 20
+SLOT_ABOVE_MAX_M = 0.040
 DT = 1.0 / 60.0
 DOWN = np.array([0., 0., -1.])
 SPREAD_Y = np.array([0., 1., 0.])
@@ -309,7 +310,10 @@ def classify_slots_from_depth(grid, depth, capture_report):
         rim = int(((r > SPEC.vial_inner_radius - 0.0005) & (r < SPEC.vial_outer_radius + 0.0008)
                    & (np.abs(pts[:, 2] - rim_z) < 0.0015)).sum())
         top = int(((r < SPEC.flange_radius + 0.001) & (np.abs(pts[:, 2] - rim_z - SPEC.flange_thickness) < 0.0015)).sum())
-        above = int(((r < SPEC.vial_inner_radius) & (pts[:, 2] > rim_z + 0.003)).sum())
+        # Up to SLOT_ABOVE_MAX_M over the rim: a leaning cap stays lower, while the parked
+        # gripper hanging over the back row would otherwise count as cap material.
+        above = int(((r < SPEC.vial_inner_radius) & (pts[:, 2] > rim_z + 0.003)
+                     & (pts[:, 2] < rim_z + SLOT_ABOVE_MAX_M)).sum())
         if rim >= SLOT_RIM_MIN_PTS:
             state = 'crooked' if above >= SLOT_ABOVE_MIN_PTS else 'missing' if top < SLOT_CAP_TOP_MIN_PTS else 'crooked'
         else:
