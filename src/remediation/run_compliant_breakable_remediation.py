@@ -48,12 +48,14 @@ measured poses are classified with geometry.cap_state.
 """
 import argparse
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 
 import cv2
 import numpy as np
-from scipy.spatial.transform import Rotation as ScipyRot
+from scipy.spatial.transform import Rotation as ScipyRot, Slerp
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [
@@ -83,6 +85,18 @@ REGRIP_LEDGE_GAP_M = 0.0005
 # reach, e.g. far tray edge), slow over the last REGRIP_SLOW_M.
 REGRIP_STANDOFFS_M = (0.08, 0.06, 0.04, 0.03)
 REGRIP_SLOW_M = 0.02
+# At the simulation's 60 Hz control rate, limit shared-policy TCP transitions
+# to 1 mm and 0.5 degree per step.  A physical-policy TCP action is a
+# destination; the Isaac adapter must not snap to its final wrist orientation.
+POLICY_MAX_LINEAR_STEP_M = 0.001
+POLICY_MAX_ANGULAR_STEP_DEG = 0.5
+POLICY_MAX_JOINT_STEP_DEG = 0.5
+# Closed-loop following-error limits for the simulated articulation.  PhysX's
+# drive retains roughly 0.3--0.4 degree steady-state bias under gravity, so the
+# trajectory may stream while error is bounded, pauses above 2 degrees, and
+# resumes/finally settles below 0.5 degree.
+POLICY_MAX_FOLLOWING_ERROR_DEG = 2.0
+POLICY_RESUME_ERROR_DEG = 0.5
 # Near the base a cap leaning toward the robot needs J3 past its limit for a coaxial
 # grip, and at the far tray edge a cap leaning away needs the wrist beyond reach; the
 # tool is then tilted toward vertical (about the spread axis) in 2 deg steps up to this
@@ -153,6 +167,39 @@ def s_curve_joints(q0, q1, steps):
         s = 0.5 * (1.0 - np.cos(np.pi * t))
         pts.append(q0 + s * (q1 - q0))
     return pts
+
+
+def pose_interpolation(p0, R0, p1, R1, min_steps=60):
+    """Cosine-eased position and shortest-path orientation TCP samples."""
+    p0, p1 = np.asarray(p0, float), np.asarray(p1, float)
+    R0, R1 = np.asarray(R0, float), np.asarray(R1, float)
+    relative = ScipyRot.from_matrix(R0).inv() * ScipyRot.from_matrix(R1)
+    angle_deg = float(np.degrees(relative.magnitude()))
+    # Cosine easing has a peak derivative of pi/2 times its average.
+    easing_peak = np.pi / 2.0
+    steps = max(int(min_steps),
+                int(np.ceil(easing_peak * np.linalg.norm(p1 - p0) /
+                            POLICY_MAX_LINEAR_STEP_M)),
+                int(np.ceil(easing_peak * angle_deg / POLICY_MAX_ANGULAR_STEP_DEG)))
+    u = np.asarray(s_curve_pts([0.0], [1.0], steps), float).reshape(-1)
+    rotations = Slerp([0.0, 1.0], ScipyRot.from_matrix([R0, R1]))(u).as_matrix()
+    positions = p0[None, :] + u[:, None] * (p1 - p0)[None, :]
+    return list(zip(positions, rotations))
+
+
+def speed_limited_joints(q0, q1, min_steps=60):
+    """Cosine-eased joint transition whose peak step respects the policy limit."""
+    q0, q1 = np.asarray(q0, float), np.asarray(q1, float)
+    peak_delta_deg = float(np.degrees(np.max(np.abs(q1 - q0))))
+    steps = max(int(min_steps), int(np.ceil((np.pi / 2.0) * peak_delta_deg /
+                                            POLICY_MAX_JOINT_STEP_DEG)))
+    return s_curve_joints(q0, q1, steps)
+
+
+def joint_step_deg(q0, q1):
+    """Largest shortest-angle change between two six-axis commands."""
+    delta = (np.asarray(q1, float) - np.asarray(q0, float) + np.pi) % (2.0 * np.pi) - np.pi
+    return float(np.degrees(np.max(np.abs(delta))))
 
 
 def plate_center_from_depth(depth, capture_report):
@@ -412,6 +459,18 @@ class Planner:
         path = []
         for p in s_curve_pts(p0, p1, steps):
             q = self.solve(q, p, d, s, tool)
+            path.append(q.copy())
+        return path
+
+    def pose_line(self, q, p0, R0, p1, R1, tool, min_steps=60):
+        """Cartesian path with simultaneous speed-limited orientation change."""
+        path = []
+        for p, R in pose_interpolation(p0, R0, p1, R1, min_steps):
+            q_next = self.solve(q, p, R[:, 2], R[:, 1], tool)
+            step_deg = joint_step_deg(q, q_next)
+            if step_deg > POLICY_MAX_JOINT_STEP_DEG + 1e-6:
+                raise RuntimeError(f'Cartesian IK changed joint branch ({step_deg:.1f} deg step)')
+            q = q_next
             path.append(q.copy())
         return path
 
@@ -808,7 +867,9 @@ class VialBreakabilityMonitor:
 class Executor:
     """Drives the arm through PD targets, steps PhysX, measures loads and records frames."""
 
-    def __init__(self, world, arm, names, arm_idx, camera, frame_dir, meter, monitor, slots, tracked=()):
+    def __init__(self, world, arm, names, arm_idx, camera, frame_dir, meter, monitor, slots,
+                 tracked=(), press_control='position-limited', eoat_paths=(),
+                 closed_loop_tracking=False):
         self.world, self.arm, self.names, self.arm_idx = world, arm, names, arm_idx
         self.tracked = list(tracked)   # cap prims whose pose and gripper contacts are logged each step
         self.trace = []
@@ -818,20 +879,76 @@ class Executor:
         self.frames = 0
         self.loads = {}
         self.status = ''
+        self.press_control = press_control
+        self.eoat_paths = tuple(eoat_paths)
+        self.eoat_reference = self._eoat_distances() if self.eoat_paths else ()
+        self.closed_loop_tracking = bool(closed_loop_tracking)
+
+    def _eoat_distances(self):
+        """Distances from each moving jaw root to the flange in world space."""
+        from pxr import UsdGeom
+        if len(self.eoat_paths) != 3:
+            return ()
+        positions = []
+        for path in self.eoat_paths:
+            prim = self.monitor.stage.GetPrimAtPath(path)
+            if not prim.IsValid():
+                raise RuntimeError(f'EOAT coherence prim is missing: {path}')
+            matrix = np.asarray(UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(0.), float)
+            positions.append(matrix[3, :3])
+        return tuple(float(np.linalg.norm(position - positions[2])) for position in positions[:2])
+
+    def _tracking_error_deg(self):
+        actual = np.asarray(self.arm.get_joint_positions()[self.arm_idx], float)
+        if not np.isfinite(actual).all():
+            raise RuntimeError('robot articulation produced non-finite joint positions')
+        delta = (actual - self.q + np.pi) % (2.0 * np.pi) - np.pi
+        return float(np.degrees(np.max(np.abs(delta))))
+
+    def _check_eoat(self):
+        if self.eoat_reference:
+            current = self._eoat_distances()
+            drift = max(abs(a - b) for a, b in zip(current, self.eoat_reference))
+            if not np.isfinite(current).all() or drift > 0.050:
+                raise RuntimeError(f'EOAT detached from flange (relative-distance drift {drift:.3f} m)')
 
     def step(self, phase, q, jaw):
+        command_step_deg = joint_step_deg(self.q, q)
+        if self.closed_loop_tracking and command_step_deg > POLICY_MAX_JOINT_STEP_DEG + 1e-6:
+            raise RuntimeError(f'unsafe joint command discontinuity ({command_step_deg:.1f} deg)')
         positions = set_jaw_separation(self.arm, self.names, jaw)
         positions[self.arm_idx] = q
         velocities = np.zeros(len(self.names))
-        velocities[self.arm_idx] = (q - self.q) / DT
+        if not self.closed_loop_tracking:
+            velocities[self.arm_idx] = (q - self.q) / DT
         self.q = np.asarray(q, float).copy()
         from isaacsim.core.utils.types import ArticulationAction
-        self.arm.apply_action(ArticulationAction(joint_positions=positions, joint_velocities=velocities))
-        self.world.step(render=True)
-        pairs = self.meter.read()
-        self.loads = self.monitor.record(pairs)
-        self._log(phase, jaw, pairs)
-        self._frame(phase)
+        action = ArticulationAction(joint_positions=positions, joint_velocities=velocities)
+        settle_steps = 30 if self.closed_loop_tracking else 1
+        for settle in range(settle_steps):
+            self.arm.apply_action(action)
+            self.world.step(render=True)
+            self._check_eoat()
+            error_deg = self._tracking_error_deg()
+            pairs = self.meter.read()
+            self.loads = self.monitor.record(pairs)
+            self._log(phase, jaw, pairs)
+            self.trace[-1]['tracking_error_deg'] = error_deg
+            self.trace[-1]['waypoint_settle_step'] = settle
+            self._frame(phase)
+            if not self.closed_loop_tracking:
+                if error_deg > 15.0:
+                    raise RuntimeError(f'robot articulation lost command tracking ({error_deg:.1f} deg)')
+                return
+            # Stream one sample per waypoint while following error is bounded.
+            if settle == 0 and error_deg < POLICY_MAX_FOLLOWING_ERROR_DEG:
+                return
+            # Once backpressure engages, do not advance until the drive has
+            # recovered close to the trajectory.
+            if settle > 0 and error_deg <= POLICY_RESUME_ERROR_DEG:
+                return
+        raise RuntimeError(f'robot articulation did not settle on waypoint within {settle_steps} steps '
+                           f'({error_deg:.1f} deg error)')
 
     def _log(self, phase, jaw, pairs):
         entry = {'step': len(self.trace), 'phase': phase, 'jaw_m': float(jaw), 'caps': {},
@@ -850,6 +967,17 @@ class Executor:
     def run(self, phase, path, jaw):
         for q in path:
             self.step(phase, q, jaw)
+        if self.closed_loop_tracking and path:
+            # Endpoint accuracy matters even when intermediate following error
+            # was bounded. Hold the final command until the physical drive bias
+            # is reached or fail rather than claiming the TCP destination.
+            for _ in range(60):
+                if self._tracking_error_deg() <= POLICY_RESUME_ERROR_DEG:
+                    break
+                self.step(phase + '_endpoint_settle', self.q, jaw)
+            else:
+                raise RuntimeError('robot articulation did not settle at action endpoint '
+                                   f'({self._tracking_error_deg():.1f} deg error)')
 
     def hold(self, phase, jaw, n):
         for _ in range(n):
@@ -860,19 +988,23 @@ class Executor:
             self.step(phase, self.q, j)
 
     def press(self, phase, path, jaw, slot, max_hold=90):
-        """Advance along `path` only while the measured vial load is under the press limit."""
+        """Execute a press; force is evaluator-only in physical-parity mode."""
         i, held, peak = 0, 0, 0.0
         while i < len(path):
             self.step(phase, path[i], jaw)
             axial = self.loads.get(slot, (0.0, 0.0))[0]
             peak = max(peak, axial)
-            if axial < PRESS_FORCE_LIMIT_N:
+            if self.press_control == 'position-limited' or axial < PRESS_FORCE_LIMIT_N:
                 i += 1
             else:
                 held += 1
                 if held > max_hold:
                     break
-        return {'completed_waypoints': i, 'waypoints': len(path), 'force_limited_steps': held, 'peak_axial_N': peak}
+        return {'control': self.press_control,
+                'force_used_for_control': self.press_control == 'force-limited',
+                'completed_waypoints': i, 'waypoints': len(path),
+                'force_limited_steps': held, 'peak_axial_N': peak,
+                'would_exceed_operational_limit': peak >= PRESS_FORCE_LIMIT_N}
 
     def _frame(self, phase):
         rgba = self.camera.get_rgba()
@@ -902,6 +1034,242 @@ def measure_cap(prim, rim_world, slot):
     return state
 
 
+def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial_observed,
+                            capture, target_summary):
+    """Drive Isaac exclusively through the same observation-driven controller as the cell."""
+    import cell
+    import fk
+    import scene_config as C
+    from isaacsim.core.prims import SingleArticulation
+    from isaacsim.sensors.camera import Camera
+    from src.remediation.controller import (ContactTool, RemediationController,
+                                            wpr_to_rotation)
+    from src.remediation.geometry import SPEC, base_to_uf0, transit_base_z, uf0_to_base
+    from src.remediation.policy_driver import PolicyDriver
+    from src.remediation.policy_observations import (estimate_crooked_axis,
+                                                     find_free_table_spot,
+                                                     upright_cap_near)
+    from src.remediation.servo_crooked_cap import read_wrist, wrist_camera
+
+    P = Planner()
+    tip = tuple(__import__('src.remediation.custom_gripper', fromlist=['finger_tip_tcp'])
+                .finger_tip_tcp(tuple(mount['cap_seat_tcp_j6_m'])))
+    q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
+                 np.array([.24, .25, transit_base_z()]), DOWN, SPREAD_Y, tip)
+
+    # Oracle association is constructed for evaluator/tracing only and is never
+    # included in the controller observation or detection dictionaries.
+    evaluator_caps = []
+    for item in target_summary['missing']:
+        prim = find_closest_cap_prim(stage, np.r_[item['spare_xy'], 0.])
+        if prim is not None:
+            evaluator_caps.append((f"missing_{item['slot']}", item['slot'], prim))
+    for item in target_summary['crooked']:
+        prim = find_closest_cap_prim(stage, np.r_[item['xy'], 0.])
+        if prim is not None:
+            evaluator_caps.append((f"crooked_{item['slot']}", item['slot'], prim))
+    tracked = [item[2] for item in evaluator_caps]
+    meter = ContactMeter(stage, [str(prim.GetPath()) for prim in tracked] +
+                         [cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE])
+
+    world.reset()
+    arm = SingleArticulation(C.ROBOT_PRIM)
+    arm.initialize()
+    names = list(arm.dof_names)
+    arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
+    table = Camera(cell.TABLE_CAM_PATH, resolution=(1920, 1080))
+    table.initialize()
+    table.add_distance_to_image_plane_to_frame()
+    wrist = wrist_camera(stage)
+    positions = set_jaw_separation(arm, names, C.JAW_OPEN)
+    positions[arm_idx] = q0
+    arm.set_joint_positions(positions)
+    arm.set_joint_velocities(np.zeros(len(names)))
+    for _ in range(30):
+        world.step(render=True)
+
+    frame_dir = args.out / 'frames'
+    frame_dir.mkdir(exist_ok=True)
+    monitor = VialBreakabilityMonitor(stage)
+    slots = tuple(item[1] for item in evaluator_caps)
+    ex = Executor(world, arm, names, arm_idx, table, frame_dir, meter, monitor, slots,
+                  tracked=tracked, press_control='position-limited',
+                  eoat_paths=(cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE),
+                  closed_loop_tracking=True)
+    controller = RemediationController(
+        ContactTool(args.pick_offset_m, args.place_offset_m, args.press_offset_m, validated=True),
+        max_attempts=1, min_confidence=args.confidence)
+    decision_dir = args.out / 'policy_observations'
+    decision_dir.mkdir(exist_ok=True)
+    checkpoint = Path(args.checkpoint).resolve()
+    conda_python = ROOT / '.conda_env/bin/python'
+    inspect_script = ROOT / 'src/inspection/inspect_remediation_capture.py'
+    capture_report = Path(args.capture_report).resolve()
+    last_action = [*base_to_uf0((np.array([.24, .25, transit_base_z()]))), -180., 0., 0.]
+    current_jaw = C.JAW_OPEN
+    inference_index = 0
+    cached = {'detections': None, 'depth': None}
+
+    def fresh_perception():
+        nonlocal inference_index
+        for _ in range(5):
+            world.step(render=True)
+        rgba = table.get_rgba()
+        depth = np.asarray(table.get_depth(device='cpu'), np.float32)
+        image_path = decision_dir / f'table_{inference_index:04d}.png'
+        depth_path = decision_dir / f'table_{inference_index:04d}_depth.npy'
+        result_path = decision_dir / f'table_{inference_index:04d}_detections.json'
+        if rgba is None or not rgba.size or depth.shape[:2] != rgba.shape[:2]:
+            raise RuntimeError('physical-parity TableCam RGB-D capture failed')
+        cv2.imwrite(str(image_path), cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR))
+        np.save(depth_path, depth)
+        command = [str(conda_python), str(inspect_script), '--checkpoint', str(checkpoint),
+                   '--image', str(image_path), '--depth', str(depth_path),
+                   '--capture-report', str(capture_report), '--out', str(result_path),
+                   '--device', args.inference_device]
+        # Isaac sets its embedded Python paths in the process environment.  Do
+        # not leak those paths into the separate conda interpreter used for
+        # YOLO, or its extension modules and stdlib can come from incompatible
+        # Python builds (for example, Python 3.12's re with conda's _sre).
+        inference_env = os.environ.copy()
+        inference_env.pop('PYTHONHOME', None)
+        inference_env.pop('PYTHONPATH', None)
+        subprocess.run(command, cwd=ROOT, check=True, env=inference_env)
+        raw = json.loads(result_path.read_text())['targets']
+        detections = []
+        for item in refine_caps_with_depth(raw, depth, capture):
+            clean = dict(item)
+            clean['contact_qualified'] = True
+            clean['depth_available'] = bool(item.get('depth_available', True))
+            detections.append(clean)
+        inference_index += 1
+        cached.update(detections=detections, depth=depth)
+        return detections, depth
+
+    def tcp_observation():
+        return {'tcp_pose': list(last_action),
+                'joints': [*np.degrees(ex.q).tolist(),
+                           1.0 if current_jaw != C.JAW_OPEN else 0.0],
+                'timestamp': len(controller.decision_records)}
+
+    def observe(ctrl):
+        # Queue steps do not inspect detections; decision gates always receive a
+        # fresh rendered RGB-D observation and real YOLO inference.
+        if ctrl.queue and cached['detections'] is not None:
+            detections, depth = cached['detections'], cached['depth']
+        else:
+            detections, depth = fresh_perception()
+        obs = tcp_observation()
+        if ctrl.state == 'pickup' and not ctrl.queue and ctrl.pending is not None:
+            spare = np.asarray(ctrl.pending['spare']['base_pos_m'], float)
+            still_present = any(item['class_name'] == 'table_cap' and
+                                np.linalg.norm(np.asarray(item['base_pos_m'])[:2] - spare[:2]) < .040
+                                for item in detections)
+            obs['grasp_verified'] = not still_present
+        if ctrl.state == 'crooked_observe_axis' and not ctrl.queue and ctrl.pending is not None:
+            for _ in range(20):
+                world.step(render=True)
+            rgb, wrist_depth = read_wrist(wrist)
+            Rj, pj = fk.fk(ex.q)
+            T = np.eye(4)
+            T[:3, :3], T[:3, 3] = Rj, pj
+            try:
+                axis, report = estimate_crooked_axis(
+                    rgb, wrist_depth, ctrl.pending['target']['base_pos_m'], T)
+                obs['crooked_axis_base'] = axis.tolist()
+                (decision_dir / f'wrist_axis_{len(controller.decision_records):04d}.json').write_text(
+                    json.dumps(report, indent=2) + '\n')
+            except ValueError:
+                pass
+            points, _ = tablecam_points(depth, capture)
+            anchors = [item['base_pos_m'] for item in detections
+                       if item['class_name'] == 'table_cap' and item.get('depth_available')]
+            exclusions = [item['base_pos_m'] for item in detections if item['class_name'] != 'table_cap']
+            try:
+                obs['table_regrasp_base_pos'] = find_free_table_spot(
+                    points, anchors, exclusions, SPEC.surface_base_z).tolist()
+            except ValueError:
+                pass
+        if ctrl.state == 'crooked_verify_table' and not ctrl.queue and ctrl.pending is not None:
+            upright = upright_cap_near(detections, ctrl.pending.get('table_regrasp_base_pos'))
+            if upright is not None:
+                obs['upright_cap_base_pos'] = upright.tolist()
+        return obs, detections
+
+    def execute(action, state):
+        nonlocal last_action, current_jaw
+        action = np.asarray(action, dtype=float)
+        target = uf0_to_base(action[:3])
+        rotation = wpr_to_rotation(action[3:6])
+        Rj, pj = fk.fk(ex.q)
+        start = pj + Rj @ np.asarray(tip)
+        target_jaw = mount['cap_grip_jaw_m'] - JAW_CLAMP_M if action[6] >= .5 else C.JAW_OPEN
+        same_position = np.linalg.norm(target - start) < 1e-5
+        same_orientation = (ScipyRot.from_matrix(Rj).inv() *
+                            ScipyRot.from_matrix(rotation)).magnitude() < 1e-5
+        if same_position and same_orientation and target_jaw != current_jaw:
+            ex.jaws(f'policy_{state}_gripper', current_jaw, target_jaw, n=20)
+        else:
+            phase = f'policy_{state}'
+            try:
+                path = P.pose_line(ex.q, start, Rj, target, rotation, tip, min_steps=60)
+            except RuntimeError as cartesian_error:
+                # Some reachable endpoint pairs straddle an ER-4iA wrist IK
+                # singularity.  Do not snap orientation or fail on an artificial
+                # intermediate pose: interpolate the reachable joint endpoints
+                # with the same bounded angular step and retain physics collision
+                # checking throughout the executed path.
+                q_target = P.solve(ex.q, target, rotation[:, 2], rotation[:, 1], tip)
+                path = speed_limited_joints(ex.q, q_target, min_steps=60)
+                phase += '_joint_fallback'
+                print(f'[remediation] Cartesian pose interpolation unavailable; '
+                      f'using speed-limited joint fallback: {cartesian_error}', flush=True)
+            ex.run(phase, path, target_jaw)
+        current_jaw = target_jaw
+        last_action = action[:6].tolist()
+
+    driver = PolicyDriver(controller, observe, execute, max_decisions=240, max_idle=8)
+    driver.run()
+    ex.hold('policy_settle', current_jaw, 30)
+    for _ in range(120):
+        world.step(render=False)
+
+    def tube_rim(slot):
+        from pxr import UsdGeom
+        matrix = np.asarray(UsdGeom.Xformable(
+            stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube')).ComputeLocalToWorldTransform(0.))
+        return matrix[3, :3] + np.array([0., 0., SPEC.vial_height])
+
+    seating = {label: measure_cap(prim, tube_rim(slot), slot)
+               for label, slot, prim in evaluator_caps}
+    report = {
+        'mode': 'shared_physical_policy_in_isaac',
+        'controller_module': 'src.remediation.controller.RemediationController',
+        'force_available_to_controller': False,
+        'press_control': 'position-limited',
+        'controller_input_contract': 'camera RGB-D, detections, joints, TCP and gripper only',
+        'decision_provenance': controller.decision_records,
+        'oracle_evaluator_only': True,
+        'physical_robot_authorized': False,
+        'collision_configuration': collision_report,
+        'command_count': len(controller.decision_records),
+        'vial_breakability_evaluator': {'vials': monitor.vial_states,
+                                        'all_vials_intact': not any(
+                                            value['fractured'] for value in monitor.vial_states.values())},
+        'seating_evaluator': seating,
+        'seated_count': sum(value['seated'] for value in seating.values()),
+        'remediated_count': len(seating),
+        'frames_written': ex.frames,
+    }
+    # The deployable trace contains policy inputs/actions only. Simulator poses,
+    # contacts and loads are deliberately segregated into an oracle evaluator file.
+    (args.out / 'trace.json').write_text(json.dumps(controller.decision_records) + '\n')
+    (args.out / 'oracle_evaluation_trace.json').write_text(json.dumps(ex.trace) + '\n')
+    (args.out / 'policy_decisions.json').write_text(json.dumps(driver.records, indent=2) + '\n')
+    (args.out / 'attempt_report.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scene', type=Path, required=True)
@@ -909,11 +1277,25 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--depth', type=Path, help='aligned TableCam depth .npy (metres) for the crooked-cap tilt')
     parser.add_argument('--capture-report', type=Path, help='capture_report.json with the TableCam model')
+    parser.add_argument('--controller-policy', choices=('shared', 'legacy'), default='shared',
+                        help='shared uses the physical robot controller; legacy is retained for comparison only')
+    parser.add_argument('--checkpoint', type=Path,
+                        help='YOLO checkpoint required by the shared policy for fresh camera observations')
+    parser.add_argument('--confidence', type=float, default=.70)
+    parser.add_argument('--inference-device', default='0')
+    parser.add_argument('--pick-offset-m', type=float, default=0.0)
+    parser.add_argument('--place-offset-m', type=float, default=0.0)
+    parser.add_argument('--press-offset-m', type=float, default=0.0)
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
                         help='regrip: wrist-camera servo onto the cap axis, coaxial grip, lift, turn upright and '
                              're-place; vertical: closed fingertips pressed straight down; tilted: PRESS_TILT_DEG '
                              'back-face press toward the TableCam high side')
+    parser.add_argument('--press-control', choices=('position-limited', 'force-limited'),
+                        default='position-limited',
+                        help='position-limited matches the physical robot; force remains recorded for evaluation')
     args = parser.parse_args()
+    if args.controller_policy == 'shared' and not args.checkpoint:
+        parser.error('--checkpoint is required with --controller-policy shared')
 
     current_observation = json.loads(args.detections.read_text())
     if current_observation.get('source') != 'current_loaded_scene_tablecam':
@@ -979,6 +1361,12 @@ def main():
         # The crooked-cap regrips are planned after each wrist servo, since they depend
         # on its result; only the view above each vial is checked here.
         P = Planner()
+        if args.controller_policy == 'shared':
+            report = run_shared_policy_isaac(args, stage, world, mount, col_report,
+                                             observed, capture, targets)
+            print(f"[remediation] shared physical policy completed: "
+                  f"{report['seated_count']}/{report['remediated_count']} seated", flush=True)
+            return
         try:
             q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
                          np.array([.24, .25, transit_z]), DOWN, SPREAD_Y, ledge)
@@ -1081,7 +1469,9 @@ def main():
         frame_dir.mkdir(exist_ok=True)
         monitor = VialBreakabilityMonitor(stage)
         ex = Executor(world, arm, names, arm_idx, camera, frame_dir, meter, monitor,
-                      tuple(missing_slots + crooked_slots), tracked=caps)
+                      tuple(missing_slots + crooked_slots), tracked=caps,
+                      press_control=args.press_control,
+                      eoat_paths=(cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE))
         presses = {}
 
         jaw = C.JAW_OPEN
@@ -1155,15 +1545,11 @@ def main():
                 tilt = np.degrees(np.arccos(np.clip(ScipyRot.from_quat([x, y, z, w]).as_matrix()[2, 2], -1, 1)))
                 return {'cap_minus_ledge_tool_point_m': held.tolist(), 'cap_tilt_deg': float(tilt)}
 
-            def true_axis():   # scoring only; never fed back into the estimate
-                _, (w, x, y, z) = get_cap_pose(crooked_prim)
-                return ScipyRot.from_quat([x, y, z, w]).as_matrix()[:, 2]
-
             regrip = regrips[crooked_slot] = {}
             moved = False
             try:
-                axis, q_view, servo_report = servo_cap_axis(P, ex.q, crooked_xy, wrist, move, capture, servo_dir,
-                                                            truth=true_axis)
+                axis, q_view, servo_report = servo_cap_axis(
+                    P, ex.q, crooked_xy, wrist, move, capture, servo_dir)
                 plan_r, info = plan_regrip(P, q_view, crooked_xy, axis, ledge, tip, putdown_xy)
                 regrip.update(info, servo=servo_report)
                 c['press_pose'] = (np.asarray(info['tool_axis']), np.asarray(info['spread_axis']), ledge, False)
@@ -1258,6 +1644,8 @@ def main():
                                           f'-Y finger outer back face, {PRESS_FACE_UP_M*1000:.0f} mm up from the tip')},
             'cap_motion': 'PhysX contact only; no cap pose is written by the script',
             'press_force_limit_N': PRESS_FORCE_LIMIT_N,
+            'press_control': args.press_control,
+            'force_available_to_controller': args.press_control == 'force-limited',
             'presses': presses,
             'vial_breakability': {'axial_fracture_threshold_N': VIAL_AXIAL_FRACTURE_LIMIT_N,
                                   'lateral_fracture_threshold_N': VIAL_LATERAL_FRACTURE_LIMIT_N,
@@ -1273,11 +1661,20 @@ def main():
         (args.out / 'trace.json').write_text(json.dumps(ex.trace) + '\n')
         (args.out / 'attempt_report.json').write_text(json.dumps(report, indent=2, default=str) + '\n')
     except BaseException:
-        # app.close() exits the process, so print the traceback before it.
+        # SimulationApp.close() terminates Kit with status zero on this cluster,
+        # which would mask a policy failure.  Persist the failure and terminate
+        # nonzero before close so Slurm and the pipeline cannot report success.
         import traceback
-        traceback.print_exc()
+        detail = traceback.format_exc()
+        print(detail, file=sys.stderr, flush=True)
+        args.out.mkdir(parents=True, exist_ok=True)
+        (args.out / 'failure_report.json').write_text(json.dumps({
+            'mode': args.controller_policy,
+            'error': detail,
+        }, indent=2) + '\n')
         sys.stdout.flush()
-        raise
+        sys.stderr.flush()
+        os._exit(1)
     finally:
         app.close()
 

@@ -28,7 +28,7 @@ The ground-truth path is the collision-physics, fracture-aware remediation simul
 ```bash
 # One Slurm job: TableCam capture -> YOLO -> compliant PhysX press simulation -> per-frame YOLO overlay -> mp4
 sbatch scripts/run_compliant_breakable_pipeline.slurm \
-    shared/inspection_models/remediation_yolo_best.pt \
+    shared/yolo26x/best.pt \
     shared/runs/$(date +%F)_compliant_remediation
 
 # Optional: supply a different scene as the first argument
@@ -39,6 +39,8 @@ Default scene: `shared/scenes/black_silver_remediation_qualified_v3.usda`. Monit
 
 Outputs in `<out_dir>`:
 - `perception/` - TableCam image, depth, `current_scene_detections.json`
+- `action/trace.json` and `action/policy_decisions.json` - shared-policy inputs/actions
+- `action/oracle_evaluation_trace.json` - segregated PhysX evaluation only
 - `action/attempt_report.json` and `action/frames/` - simulation result and frames
 - `action/yolo_frames/` and `tablecam_yolo_compliant_remediation.mp4` - annotated review video
 

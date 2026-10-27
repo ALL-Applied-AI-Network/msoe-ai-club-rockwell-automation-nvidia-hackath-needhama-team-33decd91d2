@@ -119,7 +119,7 @@ The scene argument is optional because the Slurm script selects it by default:
 
 ```bash
 sbatch scripts/run_compliant_breakable_pipeline.slurm \
-  shared/inspection_models/remediation_yolo_best.pt \
+  shared/yolo26x/best.pt \
   shared/runs/$(date +%F)_compliant_remediation
 ```
 
@@ -155,6 +155,63 @@ The physical policy must use the same state machine as the simulator:
 ```text
 observe TableCam → run YOLO → choose one safe action → execute a short chunk
 → observe again → confirm, retry within a limit, or stop
+```
+
+The supported Isaac pipeline now selects `--controller-policy shared` and imports
+the same `src.remediation.controller.RemediationController` used by the physical
+client. The Isaac adapter renders fresh TableCam and wrist-camera observations,
+runs the configured YOLO checkpoint at decision gates, and translates only the
+returned TCP/W/P/R/gripper command into IK. The controller accepts only:
+
+- TableCam/wrist-camera-derived detections and feature estimates.
+- Current TCP pose, robot joints and gripper state.
+- Configured calibration and pick/place/press offsets.
+- Camera verification of pickup, upright table placement and final repair.
+
+USD prims, PhysX poses, true cap axes, contact reports, generated labels and vial
+loads are rejected at the policy boundary. In simulation they are written only to
+the evaluator artifacts after commands have been selected.
+
+The shared missing-cap sequence is pick, camera-verify, place, release,
+position-limited press and camera verification. The shared crooked-cap sequence is
+wrist-axis observation, axis-aligned flange grasp, lift, turn upright, camera-selected
+table placement, camera-confirmed vertical regrasp, replace, position-limited press
+and camera verification. Missing caps are handled first.
+
+The Isaac adapter expands each TCP destination into a simultaneous Cartesian and
+shortest-path wrist transition limited to 1 mm and 0.5 degree per 60 Hz physics
+step. If otherwise-reachable endpoints cross an unsolvable intermediate wrist
+orientation, it uses a cosine-eased endpoint joint transition limited to 0.5
+degree per joint per step; PhysX collision checking remains active throughout.
+Any Cartesian IK branch change that would exceed the same 0.5-degree joint
+command limit is rejected before execution and routed through that fallback.
+Shared-policy execution uses closed-loop following error: the 0.5-degree
+trajectory streams below 2 degrees of error, pauses to recover below 0.5 degree
+when that bound is reached, and requires each action endpoint to settle below
+0.5 degree. It aborts if tracking cannot recover or either moving jaw
+drifts more than 50 mm from its initialized flange-relative distance. An abrupt
+wrist command or detached EOAT therefore cannot be encoded as a valid run.
+
+For every shared-policy simulation run, review:
+
+- `action/trace.json`: permitted policy fields, states and TCP actions only.
+- `action/policy_decisions.json`: environment-neutral observe/decide/execute loop.
+- `action/policy_observations/`: fresh RGB-D captures and YOLO detections.
+- `action/oracle_evaluation_trace.json`: segregated simulator poses/contacts/loads.
+- `action/attempt_report.json`: `force_available_to_controller` must be `false`,
+  `press_control` must be `position-limited`, and every decision must report an
+  empty `oracle_inputs_used` list.
+
+Force and fracture estimates remain useful evaluation evidence, but they do not
+stop or alter shared-policy motion. The optional legacy comparison mode is not used
+by `run_compliant_breakable_pipeline.slurm`.
+
+After a run, enforce the contract mechanically:
+
+```bash
+.conda_env/bin/python src/remediation/verify_policy_parity_run.py \
+  shared/runs/YYYY-MM-DD_task/action \
+  --out shared/runs/YYYY-MM-DD_task/action/policy_parity_verification.json
 ```
 
 The required implementation location is `PhysicalAI-Hackathon-2026/policy.py`.

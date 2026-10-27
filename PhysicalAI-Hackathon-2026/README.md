@@ -79,6 +79,13 @@ srun --partition=teaching --gres=gpu:1 --cpus-per-task=4 --mem=16G \
 uv run run.py --mode hover
 ```
 
+Full mode uses the same simulator-independent controller as the supported Isaac
+pipeline. It requests TableCam and wrist RGB/depth, handles missing caps before
+crooked caps, and uses the same remove/upright/table-regrasp/replace sequence for a
+crooked cap. The controller rejects simulator-only fields; Isaac truth and contact
+loads exist only in separate evaluation output. Because the real cell provides no
+force measurement, shared-policy pressing is position-limited in both environments.
+
 For supervised provisional contact, use CLI options rather than environment variables:
 
 ```bash

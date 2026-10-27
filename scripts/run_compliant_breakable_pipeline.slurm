@@ -63,7 +63,17 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
 echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement, wrist-servoed crooked-cap regrip)..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
-    --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json"
+    --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json" \
+    --controller-policy shared --checkpoint "$checkpoint" --confidence 0.70 --inference-device 0
+
+for required in attempt_report.json trace.json policy_decisions.json oracle_evaluation_trace.json; do
+    if [[ ! -s "$action/$required" ]]; then
+        echo "[pipeline] remediation did not produce required audit artifact: $action/$required" >&2
+        [[ -f "$action/failure_report.json" ]] && cat "$action/failure_report.json" >&2
+        exit 1
+    fi
+done
+./.conda_env/bin/python src/remediation/verify_policy_parity_run.py "$action"
 
 if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
     echo "[pipeline] compliant simulation produced no frames; refusing to run overlay" >&2
