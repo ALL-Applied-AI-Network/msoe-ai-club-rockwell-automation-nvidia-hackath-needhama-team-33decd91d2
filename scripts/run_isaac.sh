@@ -35,6 +35,22 @@ done
 if [ -n "$FOUND_ISAAC" ]; then
     echo "[run_isaac] Detected Isaac Sim at: $FOUND_ISAAC"
     export ISAAC="$FOUND_ISAAC"
+    # Seed the essential kernel/library paths explicitly before handing off to
+    # NVIDIA's generated environment script.
+    export LD_LIBRARY_PATH="$FOUND_ISAAC/kit:$FOUND_ISAAC/kit/kernel/plugins${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export PYTHONPATH="$FOUND_ISAAC/kit/kernel/py:$FOUND_ISAAC/python_packages:$FOUND_ISAAC/exts/isaacsim.simulation_app${PYTHONPATH:+:$PYTHONPATH}"
+    # The shared bundle's Python executable currently carries a setgid bit.
+    # Linux secure-execution mode then discards the library variables Isaac
+    # needs. Run an ordinary-permission copy of the same 330-KiB executable,
+    # while PYTHONHOME keeps its standard library in the shared bundle.
+    if [ -n "${SLURM_JOB_ID:-}" ]; then
+        ISAAC_JOB_TMP="${SLURM_TMPDIR:-/tmp}"
+        ISAAC_PYTHON_COPY="$ISAAC_JOB_TMP/isaac-python3-${SLURM_JOB_ID}-${SLURM_PROCID:-0}"
+        install -m 0755 "$FOUND_ISAAC/kit/python/bin/python3" "$ISAAC_PYTHON_COPY"
+        export PYTHONEXE="$ISAAC_PYTHON_COPY"
+        export PYTHONHOME="$FOUND_ISAAC/kit/python"
+        echo "[run_isaac] Using non-setgid job-local Python launcher: $ISAAC_PYTHON_COPY"
+    fi
     exec "$FOUND_ISAAC/python.sh" "$@"
 fi
 

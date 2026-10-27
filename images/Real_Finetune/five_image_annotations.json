@@ -1,0 +1,1250 @@
+{
+  "schema_version": 1,
+  "status": "operator_reviewed",
+  "image_size": [
+    1920,
+    1080
+  ],
+  "class_names": {
+    "0": "good_cap",
+    "1": "crooked_cap",
+    "2": "missing_cap",
+    "3": "table_cap"
+  },
+  "labeling_policy": {
+    "good_cap": "cap is centered and seated squarely on the vial mouth",
+    "crooked_cap": "cap is visibly angled, shifted, or incompletely seated",
+    "missing_cap": "a transparent vial occupies the slot but has no cap",
+    "table_cap": "excluded from all five physical frames because deployment table caps will use pink paper"
+  },
+  "evaluation_warning": "All five frames are used for both fine-tuning and evaluation. Real metrics measure training-set fit and are not an unbiased estimate of physical generalization.",
+  "images": [
+    {
+      "filename": "run_154105_0000.png",
+      "source": "shared/runs/2026-10-26_15-41-05_physical_policy/tablecam_raw/0000.png",
+      "selection_reason": "first physical run; sparse tray, two table caps on image-left, robot centered above tray",
+      "boxes": [
+        {
+          "class_id": 0,
+          "xyxy": [
+            807,
+            556,
+            859,
+            604
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            895,
+            554,
+            947,
+            600
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            981,
+            557,
+            1033,
+            603
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1063,
+            560,
+            1115,
+            608
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1153,
+            566,
+            1207,
+            614
+          ]
+        },
+        {
+          "class_id": 2,
+          "xyxy": [
+            801,
+            622,
+            853,
+            670
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            891,
+            622,
+            943,
+            670
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            980,
+            624,
+            1032,
+            672
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1070,
+            628,
+            1122,
+            676
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1161,
+            632,
+            1213,
+            681
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            793,
+            687,
+            847,
+            739
+          ]
+        },
+        {
+          "class_id": 2,
+          "xyxy": [
+            884,
+            688,
+            936,
+            740
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            978,
+            689,
+            1032,
+            739
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1070,
+            695,
+            1124,
+            745
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1164,
+            701,
+            1220,
+            753
+          ]
+        }
+      ],
+      "review_status": "operator_reviewed",
+      "loose_table_caps_annotated": false
+    },
+    {
+      "filename": "run_155442_0000.png",
+      "source": "shared/runs/2026-10-26_15-54-42_physical_policy/tablecam_raw/0000.png",
+      "selection_reason": "second physical run initial state; balanced mix of seated/crooked caps and three table caps on image-right",
+      "boxes": [
+        {
+          "class_id": 1,
+          "xyxy": [
+            715,
+            552,
+            769,
+            606
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            806,
+            548,
+            860,
+            600
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            901,
+            546,
+            957,
+            596
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            980,
+            555,
+            1036,
+            607
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1070,
+            560,
+            1126,
+            610
+          ]
+        },
+        {
+          "class_id": 2,
+          "xyxy": [
+            704,
+            610,
+            758,
+            664
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            794,
+            610,
+            850,
+            666
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            895,
+            616,
+            951,
+            670
+          ]
+        },
+        {
+          "class_id": 2,
+          "xyxy": [
+            983,
+            616,
+            1039,
+            672
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            1072,
+            616,
+            1128,
+            672
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            705,
+            682,
+            761,
+            736
+          ]
+        },
+        {
+          "class_id": 2,
+          "xyxy": [
+            803,
+            682,
+            859,
+            738
+          ]
+        },
+        {
+          "class_id": 0,
+          "xyxy": [
+            889,
+            686,
+            945,
+            740
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            991,
+            681,
+            1047,
+            739
+          ]
+        },
+        {
+          "class_id": 1,
+          "xyxy": [
+            1085,
+            686,
+            1143,
+            742
+          ]
+        }
+      ],
+      "review_status": "operator_reviewed",
+      "loose_table_caps_annotated": false
+    },
+    {
+      "filename": "run_161143_0027.png",
+      "source": "shared/runs/2026-10-26_16-11-43_physical_policy/tablecam_raw/0027.png",
+      "description": "6x5 tray; mostly crooked caps with some seated caps",
+      "grid": {
+        "rows": 6,
+        "columns": 5
+      },
+      "loose_table_caps_annotated": false,
+      "boxes": [
+        {
+          "slot": "R1C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            845,
+            351,
+            895,
+            397
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            916,
+            354,
+            966,
+            400
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            996,
+            366,
+            1046,
+            412
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1072,
+            366,
+            1122,
+            412
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1143,
+            367,
+            1193,
+            413
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            835,
+            405,
+            887,
+            453
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C2",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            914,
+            414,
+            966,
+            462
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            994,
+            415,
+            1046,
+            463
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1072,
+            415,
+            1124,
+            463
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1152,
+            415,
+            1204,
+            463
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            826,
+            460,
+            880,
+            510
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            908,
+            462,
+            962,
+            512
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            993,
+            466,
+            1047,
+            516
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1073,
+            466,
+            1127,
+            516
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1156,
+            466,
+            1210,
+            516
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C1",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            822,
+            515,
+            878,
+            567
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            908,
+            518,
+            964,
+            570
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C3",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            991,
+            521,
+            1047,
+            573
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1072,
+            522,
+            1128,
+            574
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1159,
+            523,
+            1215,
+            575
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            811,
+            576,
+            869,
+            630
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            896,
+            579,
+            954,
+            633
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            988,
+            579,
+            1046,
+            633
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1075,
+            580,
+            1133,
+            634
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1161,
+            582,
+            1219,
+            636
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            807,
+            638,
+            867,
+            694
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C2",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            895,
+            640,
+            955,
+            696
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            985,
+            641,
+            1045,
+            697
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1075,
+            642,
+            1135,
+            698
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1167,
+            647,
+            1227,
+            703
+          ],
+          "confidence": "operator_reviewed"
+        }
+      ],
+      "review_status": "operator_reviewed"
+    },
+    {
+      "filename": "run_155442_0030.png",
+      "source": "shared/runs/2026-10-26_15-54-42_physical_policy/tablecam_raw/0030.png",
+      "description": "3x5 tray; every present cap is crooked and three vials are uncapped",
+      "grid": {
+        "rows": 3,
+        "columns": 5
+      },
+      "loose_table_caps_annotated": false,
+      "boxes": [
+        {
+          "slot": "R1C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            715,
+            552,
+            769,
+            606
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            806,
+            547,
+            860,
+            601
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            902,
+            544,
+            956,
+            598
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            981,
+            554,
+            1035,
+            608
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1071,
+            558,
+            1125,
+            612
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C1",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            703,
+            609,
+            759,
+            665
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            794,
+            610,
+            850,
+            666
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            895,
+            615,
+            951,
+            671
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C4",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            983,
+            616,
+            1039,
+            672
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1072,
+            616,
+            1128,
+            672
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            704,
+            680,
+            762,
+            738
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C2",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            786,
+            696,
+            844,
+            754
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            888,
+            684,
+            946,
+            742
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            990,
+            681,
+            1048,
+            739
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1085,
+            685,
+            1143,
+            743
+          ],
+          "confidence": "operator_reviewed"
+        }
+      ],
+      "review_status": "operator_reviewed"
+    },
+    {
+      "filename": "run_155442_0225.png",
+      "source": "shared/runs/2026-10-26_15-54-42_physical_policy/tablecam_raw/0225.png",
+      "description": "6x5 tray; mixed seated/crooked caps and two visually uncapped vials",
+      "grid": {
+        "rows": 6,
+        "columns": 5
+      },
+      "loose_table_caps_annotated": false,
+      "boxes": [
+        {
+          "slot": "R1C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            839,
+            337,
+            889,
+            383
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            909,
+            339,
+            959,
+            385
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            990,
+            349,
+            1040,
+            395
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1063,
+            351,
+            1113,
+            397
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R1C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1138,
+            353,
+            1188,
+            399
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            833,
+            390,
+            885,
+            438
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C2",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            908,
+            393,
+            960,
+            441
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            989,
+            394,
+            1041,
+            442
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1064,
+            395,
+            1116,
+            443
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R2C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1144,
+            396,
+            1196,
+            444
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            828,
+            445,
+            882,
+            495
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            905,
+            445,
+            959,
+            495
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C3",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            986,
+            449,
+            1040,
+            499
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1067,
+            452,
+            1121,
+            502
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R3C5",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1150,
+            452,
+            1204,
+            502
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C1",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            822,
+            499,
+            878,
+            551
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            902,
+            501,
+            958,
+            553
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C3",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            987,
+            505,
+            1043,
+            557
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C4",
+          "class_id": 0,
+          "class_name": "good_cap",
+          "xyxy": [
+            1069,
+            506,
+            1125,
+            558
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R4C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1154,
+            507,
+            1210,
+            559
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            813,
+            556,
+            871,
+            610
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C2",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            896,
+            558,
+            954,
+            612
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            985,
+            561,
+            1043,
+            615
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1073,
+            561,
+            1131,
+            615
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R5C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1160,
+            563,
+            1218,
+            617
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C1",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            808,
+            615,
+            868,
+            671
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C2",
+          "class_id": 2,
+          "class_name": "missing_cap",
+          "xyxy": [
+            895,
+            619,
+            955,
+            675
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C3",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            985,
+            622,
+            1045,
+            678
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C4",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1075,
+            623,
+            1135,
+            679
+          ],
+          "confidence": "operator_reviewed"
+        },
+        {
+          "slot": "R6C5",
+          "class_id": 1,
+          "class_name": "crooked_cap",
+          "xyxy": [
+            1167,
+            626,
+            1227,
+            682
+          ],
+          "confidence": "operator_reviewed"
+        }
+      ],
+      "review_status": "operator_reviewed"
+    }
+  ]
+}

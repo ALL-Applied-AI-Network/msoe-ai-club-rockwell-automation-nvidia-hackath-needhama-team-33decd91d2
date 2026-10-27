@@ -18,17 +18,17 @@ REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_DIR"
 mkdir -p logs runs/remediation_scene_finetune
 
-OUT="${1:-runs/remediation_scene_finetune/remediation_sim_1000}"
+OUT="${1:-runs/remediation_scene_finetune/remediation_black_silver_physical_pink_1000}"
 SCENES="${2:-1000}"
 SHARDS="${3:-4}"
 TRAIN_COUNT="${4:-800}"
 VAL_COUNT="${5:-100}"
 WORKERS="${6:-$SHARDS}"
 SHARD_OFFSET="${7:-0}"
-LIGHTING_PRESET="${8:-balanced}"
-PINK_TABLE_PAPER="${9:-0}"
+LIGHTING_PRESET="${8:-physical}"
+PINK_TABLE_PAPER="${9:-1}"
 FINALIZE="${10:-1}"
-DOMAIN_RANDOMIZATION="${11:-0}"
+DOMAIN_RANDOMIZATION="${11:-1}"
 
 echo "[generation] host=$(hostname) job=${SLURM_JOB_ID:-unknown} out=$OUT scenes=$SCENES shards=$SHARDS"
 nvidia-smi

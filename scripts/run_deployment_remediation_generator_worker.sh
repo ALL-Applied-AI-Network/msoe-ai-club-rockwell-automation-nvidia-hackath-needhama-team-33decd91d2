@@ -3,7 +3,7 @@ set -euo pipefail
 
 SHARD_ID="$((${SLURM_PROCID:-0} + ${REMEDIATION_SHARD_OFFSET:-0}))"
 
-EXTRA_ARGS=(--lighting-preset "${REMEDIATION_LIGHTING_PRESET:-balanced}")
+EXTRA_ARGS=(--lighting-preset "${REMEDIATION_LIGHTING_PRESET:-physical}")
 if [[ "${REMEDIATION_PINK_TABLE_PAPER:-0}" == "1" ]]; then
   EXTRA_ARGS+=(--pink-table-paper)
 fi

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Render randomized YOLO samples from the CAD remediation deployment scene.
+"""Render randomized YOLO samples from the qualified remediation scene.
 
-The immutable template is ``remediation_dataset1_v2_cad.usda``: the FANUC
-cell/camera from the original remediation scene plus the corrected Dataset 1
-tray, CAD vials, and hollow MOCAP caps. Each worker loads it once and varies
-only cap state/pose, making 1,000 full-resolution samples practical.
+The immutable template is ``black_silver_remediation_qualified_v3.usda``: the
+FANUC cell/camera and qualified black-base, silver-top tray used by the physical
+remediation setup. Each worker loads it once and varies the cap state/pose and,
+optionally, small deployment-domain details.
 """
 
 from __future__ import annotations
@@ -128,8 +128,8 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=27000)
     parser.add_argument("--shard", type=int, required=True)
     parser.add_argument("--num-shards", type=int, required=True)
-    parser.add_argument("--lighting-preset", choices=("balanced", "true"),
-                        default="balanced")
+    parser.add_argument("--lighting-preset", choices=("balanced", "true", "physical"),
+                        default="physical")
     parser.add_argument("--pink-table-paper", action="store_true",
                         help="Place a matte pink sheet beneath the loose table caps")
     parser.add_argument("--domain-randomization", action="store_true",
@@ -146,7 +146,7 @@ def main() -> int:
         (out / "labels" / split).mkdir(parents=True, exist_ok=True)
     (out / "manifests").mkdir(parents=True, exist_ok=True)
 
-    source_scene = ROOT / "shared" / "scenes" / "remediation_dataset1_v2_cad.usda"
+    source_scene = ROOT / "shared" / "scenes" / "black_silver_remediation_qualified_v3.usda"
     archived_root = "/home/ad.msoe.edu/needhama/Documents/GitHub/innovation-lab-fall-2026"
     localized_scene = out / "manifests" / f"localized_cad_scene_shard_{args.shard:02d}.usda"
     localized_scene.write_text(source_scene.read_text().replace(archived_root, str(ROOT)))
@@ -180,25 +180,56 @@ def main() -> int:
         print(f"[gripper] mounted {gripper_mount['asset']} at {gripper_mount['paths']}",
               flush=True)
 
-        # The source's large studio lights nearly eliminate contact shadows.
-        # "balanced" keeps the first synthetic set readable; "true" uses a
-        # smaller dominant source so loose caps cast unmistakable shadows.
+        # The physical cell is lit by several ceiling fixtures. Their overlapping
+        # soft shadows are visible around loose caps, while broad ambient light
+        # keeps the upward-facing cap cavities yellow instead of nearly black.
         dome = UsdLux.DomeLight(stage.GetPrimAtPath("/World/DomeLight"))
         key = UsdLux.RectLight(stage.GetPrimAtPath("/World/KeyLight"))
         fill = UsdLux.RectLight(stage.GetPrimAtPath("/World/FillLight"))
         rim_light = UsdLux.RectLight(stage.GetPrimAtPath("/World/RimLight"))
-        if args.lighting_preset == "true":
-            lighting = {"dome": 650.0, "key": 475000.0, "key_size": 0.07,
-                        "fill": 30000.0, "rim": 40000.0}
+        ceiling_4 = UsdLux.RectLight.Define(stage, "/World/CeilingLight4")
+        ceiling_4.CreateNormalizeAttr(True)
+        ceiling_4_xform = UsdGeom.Xformable(ceiling_4.GetPrim())
+        ceiling_4_xform.AddTranslateOp()
+        ceiling_4_xform.AddRotateXYZOp()
+
+        if args.lighting_preset == "physical":
+            lighting = {
+                "dome": 320.0,
+                "key": 125000.0, "fill": 108000.0,
+                "rim": 118000.0, "ceiling_4": 102000.0,
+                "rect_width": 0.22, "rect_height": 0.09,
+            }
+            fixtures = (
+                (key, (0.03, -0.50, 2.52), (1.00, 0.965, 0.91)),
+                (fill, (0.76, -0.46, 2.58), (0.93, 0.96, 1.00)),
+                (rim_light, (0.02, 0.56, 2.55), (0.97, 0.985, 1.00)),
+                (ceiling_4, (0.77, 0.52, 2.50), (1.00, 0.95, 0.88)),
+            )
+            for light, position, color in fixtures:
+                light.GetWidthAttr().Set(lighting["rect_width"])
+                light.GetHeightAttr().Set(lighting["rect_height"])
+                light.GetColorAttr().Set(Gf.Vec3f(*color))
+                prim = light.GetPrim()
+                translate = prim.GetAttribute("xformOp:translate")
+                rotate = prim.GetAttribute("xformOp:rotateXYZ")
+                translate.Set(Gf.Vec3d(*position))
+                rotate.Set(Gf.Vec3f(180.0, 0.0, 0.0))
+        elif args.lighting_preset == "true":
+            lighting = {"dome": 650.0, "key": 475000.0,
+                        "fill": 30000.0, "rim": 40000.0, "ceiling_4": 0.0,
+                        "rect_width": 0.07, "rect_height": 0.07}
         else:
-            lighting = {"dome": 650.0, "key": 320000.0, "key_size": 0.18,
-                        "fill": 30000.0, "rim": 40000.0}
+            lighting = {"dome": 650.0, "key": 320000.0,
+                        "fill": 30000.0, "rim": 40000.0, "ceiling_4": 0.0,
+                        "rect_width": 0.18, "rect_height": 0.18}
         dome.GetIntensityAttr().Set(lighting["dome"])
         key.GetIntensityAttr().Set(lighting["key"])
-        key.GetWidthAttr().Set(lighting["key_size"])
-        key.GetHeightAttr().Set(lighting["key_size"])
+        key.GetWidthAttr().Set(lighting["rect_width"])
+        key.GetHeightAttr().Set(lighting["rect_height"])
         fill.GetIntensityAttr().Set(lighting["fill"])
         rim_light.GetIntensityAttr().Set(lighting["rim"])
+        ceiling_4.GetIntensityAttr().Set(lighting["ceiling_4"])
 
         paper = None
         if args.pink_table_paper:
@@ -250,8 +281,16 @@ def main() -> int:
             raise RuntimeError("The complete CAD cap inventory did not compose")
         cap_color = stage.GetPrimAtPath(
             "/World/RemediationLooks/Cap/Surface").GetAttribute("inputs:diffuseColor")
-        cavity_color = stage.GetPrimAtPath(
-            "/World/RemediationLooks/CapCavity/Surface").GetAttribute("inputs:diffuseColor")
+        cavity_shader = UsdShade.Shader(stage.GetPrimAtPath(
+            "/World/RemediationLooks/CapCavity/Surface"))
+        cavity_color = cavity_shader.GetInput("diffuseColor")
+        cavity_emissive = cavity_shader.CreateInput(
+            "emissiveColor", Sdf.ValueTypeNames.Color3f)
+        # Real table-camera frames show a yellow cavity with mild edge shading,
+        # not a dark interior. This tiny ambient lift is deliberately below the
+        # body color so the cavity keeps shape without becoming self-lit.
+        cavity_color.Set(Gf.Vec3f(0.88, 0.68, 0.025))
+        cavity_emissive.Set(Gf.Vec3f(0.025, 0.019, 0.001))
 
         # PreviewSurface opacity rendered these CAD vials as opaque grey.
         # Rebind both wall and bottom meshes to the scene's physically based
@@ -278,6 +317,13 @@ def main() -> int:
         aluminum = UsdShade.Material(stage.GetPrimAtPath("/World/Looks/alu_machined"))
         if not aluminum.GetPrim().IsValid():
             raise RuntimeError("The source scene's machined-aluminum material is missing")
+        aluminum_shader = stage.GetPrimAtPath("/World/Looks/alu_machined/shader")
+        aluminum_shader.GetAttribute("inputs:diffuse_color_constant").Set(
+            Gf.Vec3f(0.84, 0.85, 0.88))
+        aluminum_shader.GetAttribute("inputs:metallic_constant").Set(0.98)
+        aluminum_shader.GetAttribute("inputs:reflection_roughness_constant").Set(0.14)
+        aluminum_shader.GetAttribute(
+            "inputs:reflection_roughness_texture_influence").Set(0.45)
         tray = stage.GetPrimAtPath("/World/RemediationTray")
         for child in tray.GetChildren():
             if child.GetName().endswith("_plate") or child.GetName() == "tray_good_support":
@@ -331,24 +377,41 @@ def main() -> int:
                 # same material while hue/value shift gently between frames.
                 outer_rgb = [rng.uniform(0.90, 1.00), rng.uniform(0.68, 0.84),
                              rng.uniform(0.025, 0.075)]
-                cavity_rgb = [outer_rgb[0] * 0.54, outer_rgb[1] * 0.49,
-                              outer_rgb[2] * 0.28]
+                cavity_rgb = [outer_rgb[0] * 0.93, outer_rgb[1] * 0.90,
+                              max(outer_rgb[2] * 0.82, 0.022)]
+                cavity_emissive_rgb = [component * 0.027 for component in outer_rgb]
                 cap_color.Set(Gf.Vec3f(*outer_rgb))
                 cavity_color.Set(Gf.Vec3f(*cavity_rgb))
+                cavity_emissive.Set(Gf.Vec3f(*cavity_emissive_rgb))
 
-                frame_lighting = {
-                    "dome": rng.uniform(500.0, 820.0),
-                    "key": rng.uniform(390000.0, 560000.0),
-                    "key_size": rng.uniform(0.055, 0.105),
-                    "fill": rng.uniform(22000.0, 43000.0),
-                    "rim": rng.uniform(28000.0, 56000.0),
-                }
+                if args.lighting_preset == "physical":
+                    frame_lighting = {
+                        "dome": rng.uniform(260.0, 390.0),
+                        "key": rng.uniform(105000.0, 145000.0),
+                        "fill": rng.uniform(90000.0, 126000.0),
+                        "rim": rng.uniform(98000.0, 138000.0),
+                        "ceiling_4": rng.uniform(84000.0, 120000.0),
+                        "rect_width": rng.uniform(0.17, 0.27),
+                        "rect_height": rng.uniform(0.07, 0.12),
+                    }
+                else:
+                    frame_lighting = {
+                        "dome": rng.uniform(500.0, 820.0),
+                        "key": rng.uniform(390000.0, 560000.0),
+                        "fill": rng.uniform(22000.0, 43000.0),
+                        "rim": rng.uniform(28000.0, 56000.0),
+                        "ceiling_4": 0.0,
+                        "rect_width": rng.uniform(0.055, 0.105),
+                        "rect_height": rng.uniform(0.055, 0.105),
+                    }
                 dome.GetIntensityAttr().Set(frame_lighting["dome"])
                 key.GetIntensityAttr().Set(frame_lighting["key"])
-                key.GetWidthAttr().Set(frame_lighting["key_size"])
-                key.GetHeightAttr().Set(frame_lighting["key_size"])
+                for light in (key, fill, rim_light, ceiling_4):
+                    light.GetWidthAttr().Set(frame_lighting["rect_width"])
+                    light.GetHeightAttr().Set(frame_lighting["rect_height"])
                 fill.GetIntensityAttr().Set(frame_lighting["fill"])
                 rim_light.GetIntensityAttr().Set(frame_lighting["rim"])
+                ceiling_4.GetIntensityAttr().Set(frame_lighting["ceiling_4"])
 
                 tray_position = TRAY_BASE_POSITION + np.array([
                     rng.uniform(-0.014, 0.014), rng.uniform(-0.014, 0.014), 0.0])
@@ -384,7 +447,8 @@ def main() -> int:
                 arm.apply_action(ArticulationAction(joint_positions=pose))
 
                 randomization = {
-                    "cap_rgb": outer_rgb, "lighting": frame_lighting,
+                    "cap_rgb": outer_rgb, "cap_cavity_rgb": cavity_rgb,
+                    "lighting": frame_lighting,
                     "tray_position_m": tray_position.tolist(), "tray_yaw_deg": tray_angle,
                     "vial_tilts": vial_tilts,
                     "camera_position_m": camera_position.tolist(),
@@ -565,9 +629,9 @@ def main() -> int:
 
         instance.detach([render_product])
         manifest = {
-            "schema_version": 4,
+            "schema_version": 5,
             "source_scene": str(source_scene),
-            "scene_contract": "FANUC remediation cell + Dataset 1 v2 CAD tray/vials/caps",
+            "scene_contract": "qualified v3 black-base, silver-top physical remediation setup",
             "cad_dimensions_m": {"vial_od": 0.027178, "vial_id": 0.0263652,
                                  "vial_height": VIAL_HEIGHT, "cap_flange_od": 0.03175},
             "render_geometry": {"vial_material": "/World/Looks/vial_glass",
@@ -577,7 +641,9 @@ def main() -> int:
                                 "cap_visual": "full Dataset 1 v2 CAD cap",
                                 "gripper": gripper_mount,
                                 "source_cap_hierarchy_active": False,
-                                "tray_top_material": "/World/Looks/alu_machined"},
+                                "tray_top_material": "/World/Looks/alu_machined",
+                                "tray_top_metallic": 0.98,
+                                "tray_top_roughness": 0.14},
             "sample_distribution": {
                 "no_vial_slots": [3, 6], "missing_caps": [6, 9],
                 "crooked_caps": [6, 10], "good_caps": "remainder",
@@ -586,11 +652,13 @@ def main() -> int:
             "lighting": {"preset": args.lighting_preset,
                          "dome_intensity": lighting["dome"],
                          "key_intensity": lighting["key"],
-                         "key_size_m": [lighting["key_size"], lighting["key_size"]],
+                         "rect_size_m": [lighting["rect_width"], lighting["rect_height"]],
                          "fill_intensity": lighting["fill"],
                          "rim_intensity": lighting["rim"],
+                         "ceiling_4_intensity": lighting["ceiling_4"],
+                         "ceiling_fixture_count": 4 if args.lighting_preset == "physical" else 3,
                          "pink_table_paper": args.pink_table_paper,
-                         "purpose": "visible table-cap contact shadows"},
+                         "purpose": "physical multi-source contact shadows with bright cap cavities"},
             "domain_randomization": {
                 "enabled": args.domain_randomization,
                 "cap_rgb": {"r": [0.90, 1.00], "g": [0.68, 0.84],
