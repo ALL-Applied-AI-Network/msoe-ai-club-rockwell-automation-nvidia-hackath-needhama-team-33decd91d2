@@ -31,23 +31,61 @@ MOVE_STEPS = 60
 UPRIGHT_ROUNDNESS = 0.95   # straight-down view of a standing cap (cos 18 deg)
 
 
-def wrist_camera(stage):
-    """Wrist camera handle, intrinsics and its pose in the J6 frame (CV convention:
-    x right, y down, z forward)."""
+def wrist_camera(stage, seed=0):
+    """The wrist camera as the real cell has it (wrist_camera_model): the colour camera
+    and a separate depth camera on J6_link at their calibrated poses, rendering ideal
+    pinhole images that read_wrist turns into the cell's colour and depth streams.
+    K (undistorted colour pixels) and the colour camera's pose in the J6 frame (CV
+    convention: x right, y down, z forward) are what the servo maths uses."""
     from isaacsim.sensors.camera import Camera
-    from pxr import UsdGeom
+    from pxr import Gf, UsdGeom
     import cell
-    import scene_config as C
-    from src.remediation.wrist_servo import intrinsics
-    cam_local = np.asarray(UsdGeom.Xformable(stage.GetPrimAtPath(cell.WRIST_CAM_PATH)).GetLocalTransformation(), float)
-    cam_usd = UsdGeom.Camera(stage.GetPrimAtPath(cell.WRIST_CAM_PATH))
-    W, H = C.WRIST_CAM['resolution']
-    camera = Camera(cell.WRIST_CAM_PATH, resolution=(W, H))
-    camera.initialize()
-    camera.add_distance_to_image_plane_to_frame()
-    return {'camera': camera,
-            'K': intrinsics(W, H, W * cam_usd.GetFocalLengthAttr().Get() / cam_usd.GetHorizontalApertureAttr().Get()),
-            'R_cam_j6': cam_local[:3, :3].T @ np.diag([1., -1., -1.]), 't_cam_j6': cam_local[3, :3]}
+    from src.remediation import wrist_camera_model as M
+    cams = {}
+    for name, path, T in (('colour', cell.WRIST_CAM_PATH, M.T_FLANGE_COLOUR),
+                          ('depth', cell.WRIST_CAM_PATH.rsplit('/', 1)[0] + '/WristDepthCam', M.T_FLANGE_DEPTH)):
+        W, H, fx = M.render_spec()[name]
+        usd = UsdGeom.Camera.Define(stage, path)
+        # USD cameras look down -z with +y up; rows of a USD matrix are the local axes.
+        R_usd = T[:3, :3] @ np.diag([1., -1., -1.])
+        M4 = np.eye(4)
+        M4[:3, :3], M4[3, :3] = R_usd.T, T[:3, 3]
+        UsdGeom.Xformable(usd).MakeMatrixXform().Set(Gf.Matrix4d(M4.tolist()))
+        focal = usd.GetFocalLengthAttr().Get() or 10.0
+        usd.GetFocalLengthAttr().Set(focal)
+        usd.GetHorizontalApertureAttr().Set(W * focal / fx)
+        usd.GetVerticalApertureAttr().Set(H * focal / fx)
+        usd.GetClippingRangeAttr().Set(Gf.Vec2f(0.01, 20.0))
+        cam = Camera(path, resolution=(W, H))
+        cam.initialize()
+        if name == 'depth':
+            cam.add_distance_to_image_plane_to_frame()
+        cams[name] = cam
+    return {'camera': cams['colour'], 'depth_camera': cams['depth'], 'rng': np.random.default_rng(seed),
+            'K': M.colour_K(), 'R_cam_j6': M.T_FLANGE_COLOUR[:3, :3], 't_cam_j6': M.T_FLANGE_COLOUR[:3, 3]}
+
+
+def read_wrist(cam):
+    """(rgb, depth) as the cell serves them: 1280 x 720 colour and 848 x 480 uint16 mm depth."""
+    from src.remediation import wrist_camera_model as M
+    rgb = M.real_colour(np.ascontiguousarray(cam['camera'].get_rgba()[:, :, :3]))
+    depth = M.real_depth(np.asarray(cam['depth_camera'].get_depth(device='cpu'), np.float32), cam['rng'])
+    return rgb, depth
+
+
+def expected_px(cam, R_cam_w, eye_w, point):
+    """Served colour pixel of a base-frame point."""
+    from src.remediation.wrist_camera_model import distort_px
+    p = cam['K'] @ (R_cam_w.T @ (point - eye_w))
+    return distort_px(p[:2] / p[2])[0]
+
+
+def draw_ellipse(img, ellipse, colour=(0, 255, 0)):
+    """Draw an ellipse fitted in undistorted pixels onto the served image."""
+    from src.remediation.wrist_camera_model import distort_px
+    (cx, cy), (w, h), ang = ellipse
+    pts = cv2.ellipse2Poly((int(round(cx)), int(round(cy))), (int(round(w / 2)), int(round(h / 2))), int(round(ang)), 0, 360, 4)
+    cv2.polylines(img, [np.rint(distort_px(pts)).astype(np.int32)], True, colour, 2)
 
 
 def servo_cap_axis(P, q, bore, cam, move, capture, out_dir, truth=None):
@@ -60,6 +98,7 @@ def servo_cap_axis(P, q, bore, cam, move, capture, out_dir, truth=None):
     """
     import fk
     from src.remediation.geometry import CROOKED_TILT_RANGE_DEG, SPEC, leaning_cap_pose, rim_base_z
+    from src.remediation.wrist_camera_model import register_depth, undistort_px
     from src.remediation.wrist_servo import (choose_normal, circle_normals, depth_rise_direction, find_cap_opening,
                                              look_rotation, roundness)
     K, R_cam_j6, t_cam_j6 = cam['K'], cam['R_cam_j6'], cam['t_cam_j6']
@@ -107,8 +146,7 @@ def servo_cap_axis(P, q, bore, cam, move, capture, out_dir, truth=None):
         Rj, pj = fk.fk(q_act)
         R_cam_w = Rj @ R_cam_j6
         eye_w = pj + Rj @ t_cam_j6
-        exp = K @ (R_cam_w.T @ (opening - eye_w))
-        ellipse, ring = find_cap_opening(rgb, exp[:2] / exp[2])
+        ellipse, ring = find_cap_opening(rgb, expected_px(cam, R_cam_w, eye_w, opening), to_pinhole=undistort_px)
         entry = {'iteration': it, 'camera_axis': (-R_cam_w[:, 2]).tolist()}
         t_axis = truth() if truth else None
         if t_axis is not None:
@@ -122,7 +160,7 @@ def servo_cap_axis(P, q, bore, cam, move, capture, out_dir, truth=None):
             print(f'[servo] iteration {it}: {entry}', flush=True)
             break
         cands_cam = circle_normals(ellipse, K)
-        n_cam = choose_normal(cands_cam, depth_rise_direction(depth, ring))
+        n_cam = choose_normal(cands_cam, depth_rise_direction(register_depth(depth), ring))
         if n_cam is None:                      # no depth: fall back to the prior side
             n_cam = max(cands_cam, key=lambda c: (R_cam_w @ c) @ n_prev)
         n_new = R_cam_w @ n_cam
@@ -133,7 +171,7 @@ def servo_cap_axis(P, q, bore, cam, move, capture, out_dir, truth=None):
             entry.update({'new_estimate_error_vs_true_deg': angle(n_new, t_axis),
                           'other_candidate_error_vs_true_deg': min(angle(c, t_axis) for c in others) if others else None})
         img[ring > 0] = (0.6 * img[ring > 0] + 0.4 * np.array([255, 0, 255])).astype(np.uint8)
-        cv2.ellipse(img, ellipse, (0, 255, 0), 2)
+        draw_ellipse(img, ellipse)
         label = f'iter {it}: roundness {entry["roundness"]:.3f}'
         if t_axis is not None:
             label += f', camera axis {entry["camera_axis_error_vs_true_deg"]:.1f} deg off true'
@@ -172,6 +210,7 @@ def locate_upright_cap(P, q, xy_guess, z_top, cam, move, capture, out_path=None)
     straight-down wrist view: the centre of the fitted opening ellipse is back-projected
     onto the flange-top plane.  Returns (xy, joints at the view)."""
     import fk
+    from src.remediation.wrist_camera_model import undistort_px
     from src.remediation.wrist_servo import find_cap_opening, look_rotation, roundness
     K, R_cam_j6, t_cam_j6 = cam['K'], cam['R_cam_j6'], cam['t_cam_j6']
     target = np.r_[xy_guess, z_top]
@@ -194,12 +233,11 @@ def locate_upright_cap(P, q, xy_guess, z_top, cam, move, capture, out_path=None)
     rgb, _, q_act = capture()
     Rj, pj = fk.fk(q_act)
     R_cam_w, eye = Rj @ R_cam_j6, pj + Rj @ t_cam_j6
-    exp = K @ (R_cam_w.T @ (target - eye))
-    ellipse, _ = find_cap_opening(rgb, exp[:2] / exp[2])
+    ellipse, _ = find_cap_opening(rgb, expected_px(cam, R_cam_w, eye, target), to_pinhole=undistort_px)
     if out_path is not None:
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         if ellipse is not None:
-            cv2.ellipse(img, ellipse, (0, 255, 0), 2)
+            draw_ellipse(img, ellipse)
         cv2.imwrite(str(out_path), img)
     if ellipse is None:
         raise RuntimeError(f'upright cap not found in the wrist view near {np.round(target, 4)}')
@@ -291,8 +329,7 @@ def main():
         def capture():
             for _ in range(20):
                 world.step(render=True)
-            rgb = np.ascontiguousarray(cam['camera'].get_rgba()[:, :, :3])
-            depth = np.asarray(cam['camera'].get_depth(device='cpu'), dtype=np.float32)
+            rgb, depth = read_wrist(cam)
             return rgb, depth, arm.get_joint_positions()[idx]
 
         def true_axis():

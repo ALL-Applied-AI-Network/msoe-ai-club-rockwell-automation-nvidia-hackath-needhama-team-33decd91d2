@@ -216,6 +216,28 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 
 The closed-form estimate is accurate from an oblique view (0.3-2.2 deg from the first, straight-down image) but noisy once the opening is nearly round (up to ~14 deg), so the round view's camera axis is used rather than its image estimate. Sim images are noise-free; real wrist RGB-D has not been tested. Runs: `shared/runs/2026-10-26_wrist_servo_v4_G09`, `shared/runs/2026-10-26_servo_test_seed*/servo_v4`.
 
+**Real wrist-camera model (October 27, 2026).** The servo now sees the wrist camera as the cell delivers it (`src/remediation/wrist_camera_model.py`, from `PhysicalAI-Hackathon-2026/calibration/cameras.json`). Colour: 848 x 480 sensor served at 1280 x 720, fx 619.6 px, radial k1 = -0.0196. Depth: a separate camera at its own calibrated pose (21 mm and 2.9 deg from the colour camera), 848 x 480, fx 416.9 px, principal point (421.35, 239.34), uint16 mm with 0 = no depth. Both poses are set from the calibration at runtime, not taken from the scene. The ellipse is fitted to the undistorted opening edge, and depth is registered onto the colour pixels before the ring's depth gradient is taken. Depth noise is an assumption, not a measurement: the calibration's 3.0 mm plane RMS at 0.363 m, scaled with range^2. No colour sensor noise is modelled. Ray-traced depth still returns clear glass as a surface.
+
+| Scene (cap, tilt) | Ideal camera error | Real-camera model error |
+|---|---|---|
+| seed 21 (G07, 53.0 deg) | 1.5 deg | 1.3 deg |
+| seed 22 (G06, 60.8 deg) | 0.3 deg | 0.2 deg (second view unreachable in both) |
+| seed 25 (G11, 64.7 deg) | 0.6 deg | 1.0 deg |
+
+Runs: `shared/runs/2026-10-27_wrist_camera_model/servo_seed*`; ideal-camera figures from `shared/runs/2026-10-27_pipeline_seed*`.
+
+Registering the depth onto the colour pixels needs each depth sample splatted over 3 x 3 colour pixels (nearest wins). With one pixel per sample, the table showed through the gaps between the cap's samples: over 5% of the ring's depth readings came from 0.31-0.41 m. That flipped the depth gradient and made the servo pick the wrong normal on the first view (G05, G04; first pipeline batch, `shared/runs/2026-10-27_regrip_final_results_attempt1_splatbug`).
+
+Full pipeline with the real-camera model, one run per scene (`shared/runs/2026-10-27_regrip_final_results/<cap>/`, videos in `docs/media/regrip_final_results/`):
+
+| Cap (tilt) | Servo axis error | Crooked cap seated | Missing cap seated | Vials |
+|---|---|---|---|---|
+| G04 (70.7 deg) | 0.6 deg | yes | no missing-cap detection | intact |
+| G30 (67.3 deg) | 0.4 deg | no: 1.1 mm high, 1.9 deg tilt | yes | intact |
+| G05 (57.9 deg) | 0.4 deg | yes | yes | intact |
+| G07 (53.0 deg) | 1.6 deg | yes | yes | intact |
+| G09 (47.7 deg) | 3.0 deg | yes | no: released 1 mm high, carried off on retreat (before any wrist view) | intact |
+
 
 ### Crooked cap: wrist-servoed grip, table regrasp and re-place (October 27, 2026)
 Default runner strategy (`--crooked-press regrip`). Sequence:

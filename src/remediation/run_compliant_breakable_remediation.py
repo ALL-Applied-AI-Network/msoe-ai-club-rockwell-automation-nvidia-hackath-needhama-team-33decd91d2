@@ -801,7 +801,7 @@ def main():
         from src.remediation.custom_gripper import (attach_collision_proxies, attach_visual_pair,
                                                     finger_back_face_tcp, finger_tip_tcp)
         from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
-        from src.remediation.servo_crooked_cap import locate_upright_cap, servo_cap_axis, wrist_camera
+        from src.remediation.servo_crooked_cap import locate_upright_cap, read_wrist, servo_cap_axis, wrist_camera
 
         omni.usd.get_context().open_stage(str(args.scene))
         app.update()
@@ -969,8 +969,7 @@ def main():
 
             def capture():
                 ex.hold(f'wrist_servo_{crooked_slot}', C.JAW_CLOSED, 20)
-                rgb = np.ascontiguousarray(wrist['camera'].get_rgba()[:, :, :3])
-                depth = np.asarray(wrist['camera'].get_depth(device='cpu'), dtype=np.float32)
+                rgb, depth = read_wrist(wrist)
                 return rgb, depth, arm.get_joint_positions()[arm_idx]
 
             def held_cap_offset():

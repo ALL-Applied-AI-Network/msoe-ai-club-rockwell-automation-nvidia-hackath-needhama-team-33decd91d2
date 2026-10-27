@@ -61,13 +61,15 @@ def roundness(ellipse):
     return float(min(w, h) / max(w, h))
 
 
-def find_cap_opening(rgb, expected_px, max_dist_px=120, min_value=150):
+def find_cap_opening(rgb, expected_px, max_dist_px=120, min_value=150, to_pinhole=None):
     """Ellipse fitted to the inner edge of the cap's lit flange top nearest `expected_px`.
 
     The flange top is bright yellow; the cavity inside is a darker olive and the
     plug sides are shaded, so a brightness threshold isolates the flange ring.  Its
-    hole (child contour) is the 21.15 mm opening edge.  Returns (ellipse, ring_mask)
-    or (None, None).
+    hole (child contour) is the 21.15 mm opening edge.  `to_pinhole` maps (N, 2) image
+    pixels to undistorted pinhole pixels; the ellipse is fitted to the mapped edge, as
+    a circle images to an ellipse only through a pinhole.  Returns (ellipse, ring_mask)
+    or (None, None); the mask is in image pixels.
     """
     hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
     ring = cv2.inRange(hsv, (15, 80, min_value), (40, 255, 255))
@@ -94,7 +96,10 @@ def find_cap_opening(rgb, expected_px, max_dist_px=120, min_value=150):
     mask = np.zeros(ring.shape, np.uint8)
     cv2.drawContours(mask, contours, hier[0][i][3], 255, -1)
     cv2.drawContours(mask, contours, i, 0, -1)
-    return cv2.fitEllipse(contours[i]), mask
+    edge = contours[i].reshape(-1, 2).astype(np.float32)
+    if to_pinhole is not None:
+        edge = np.asarray(to_pinhole(edge), np.float32)
+    return cv2.fitEllipse(edge), mask
 
 
 def depth_rise_direction(depth, mask):

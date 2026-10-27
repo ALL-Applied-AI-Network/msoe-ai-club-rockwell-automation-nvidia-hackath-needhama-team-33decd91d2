@@ -23,7 +23,7 @@ rm -rf .conda_env
 
 "${REPO_DIR}/.conda_env/bin/python" -m pip install --upgrade pip
 "${REPO_DIR}/.conda_env/bin/python" -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
-"${REPO_DIR}/.conda_env/bin/python" -m pip install ultralytics opencv-python-headless numpy pyyaml scipy
+"${REPO_DIR}/.conda_env/bin/python" -m pip install ultralytics opencv-python-headless numpy pyyaml scipy imageio-ffmpeg
 
 echo "=== Verifying Environment ==="
 "${REPO_DIR}/.conda_env/bin/python" -c "import torch, ultralytics, cv2; print('PyTorch version:', torch.__version__, '| CUDA available:', torch.cuda.is_available(), '| Ultralytics:', ultralytics.__version__)"

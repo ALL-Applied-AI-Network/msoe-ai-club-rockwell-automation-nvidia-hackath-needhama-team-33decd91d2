@@ -78,7 +78,8 @@ echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
 ./.conda_env/bin/python src/remediation/overlay_yolo_frames.py \
     --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0
 
-FFMPEG_BIN=$(command -v ffmpeg || echo /usr/bin/ffmpeg)
+# No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
+FFMPEG_BIN=$(command -v ffmpeg || ./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
 if [[ -x "$FFMPEG_BIN" ]]; then
     "$FFMPEG_BIN" -y -framerate 20 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
     echo "[pipeline] Video compiled successfully at $out/tablecam_yolo_compliant_remediation.mp4"
