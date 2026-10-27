@@ -42,7 +42,7 @@ Outputs in `<out_dir>`:
 - `action/attempt_report.json` and `action/frames/` - simulation result and frames
 - `action/yolo_frames/` and `tablecam_yolo_compliant_remediation.mp4` - annotated review video
 
-Latest reference run (doc-spec dimensions, black/silver tray, clear glass, satin caps): [docs/media/compliant_remediation_docspec.mp4](docs/media/compliant_remediation_docspec.mp4) - click it on GitHub to play in the browser.
+Latest physics-based run: [docs/media/physics_remediation_leaning_press.mp4](docs/media/physics_remediation_leaning_press.mp4) (click it on GitHub to play). The missing cap is picked, placed and seated through contact; the leaning crooked cap is pressed level by the tilted fingertips but is then carried off on retreat, so that step is not yet working (see `docs/PHYSICAL_SPECIFICATIONS.md` sec. 7).
 
 Any other Isaac script: `./run.sh <script.py> [args]` (submits via Slurm on the login node). See `AGENTS.md` for architecture and rules, and `docs/REMEDIATION_RUNBOOK.md` for scene qualification and dataset/training steps.
 
