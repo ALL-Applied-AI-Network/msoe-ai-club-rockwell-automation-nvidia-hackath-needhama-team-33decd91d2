@@ -179,10 +179,10 @@ def _cap_dynamics(prim,dynamic):
 
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
-                paper_color=None, tray_center_xy=None, crooked_tilts=None):
+                paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30):
     import cell
-    if min(crooked,missing,table_caps)<0 or crooked+missing>30 or table_caps>10:
-        raise ValueError('Invalid scene inventory (30 vials, at most 10 separated spares)')
+    if min(crooked,missing,table_caps)<0 or not 0<crooked+missing<=vials<=30 or table_caps>10:
+        raise ValueError('Invalid scene inventory (at most 30 vials, at most 10 separated spares)')
     cell.build(stage,with_objects=False)
     if paper_color is not None:
         # A thin, non-authoritative colored paper sheet under the spare-cap
@@ -233,13 +233,16 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     xs=slots[:,:,0].mean(axis=1); ys=slots[:,:,1].mean(axis=0)
     xe=np.r_[-tray_xy[0]/2,(xs[:-1]+xs[1:])/2,tray_xy[0]/2]
     ye=np.r_[-tray_xy[1]/2,(ys[:-1]+ys[1:])/2,tray_xy[1]/2]
+    # With fewer than 30 vials the remaining apertures are left empty (plate only).
     shuffled=rng.permutation(30)+1
+    loaded_ids=set(shuffled[:vials])
     crooked_ids=set(shuffled[:crooked]); missing_ids=set(shuffled[crooked:crooked+missing])
     inventory={'seed':seed,'tray_center_world_m':center.tolist(),'tray_yaw_deg':yaw,
-               'camera_variation':camera_variation,'slots':{},'caps':[]}
+               'camera_variation':camera_variation,'vials':vials,'slots':{},'caps':[]}
     for index in range(1,31):
         slot=f'G{index:02d}'; p=np.array(layout['slots_m'][slot]); p[2]=base_t; row,col=divmod(index-1,5)
         perforated_cell(stage,str(root.GetPath())+'/'+slot+'_plate',p[:2],(xe[row],xe[row+1],ye[col],ye[col+1]),top_z-top_t/2,top_z+top_t/2,metal)
+        if index not in loaded_ids: continue
         tube=UsdGeom.Xform.Define(stage,str(root.GetPath())+'/'+slot+'_tube')
         tube.AddTranslateOp().Set(Gf.Vec3d(*p))
         annulus(stage,str(tube.GetPath())+'/Wall',SPEC.vial_outer_radius,SPEC.vial_outer_radius,SPEC.vial_inner_radius,0,SPEC.vial_height,glass)

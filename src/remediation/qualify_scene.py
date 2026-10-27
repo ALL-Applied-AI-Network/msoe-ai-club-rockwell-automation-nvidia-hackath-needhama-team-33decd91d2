@@ -69,7 +69,8 @@ def run(args):
             raise ValueError('--paper-color must be r,g,b with values in [0,1]')
         inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
                               paper_color,(args.tray_center_x,args.tray_center_y),
-                              [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None)
+                              [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None,
+                              args.vials)
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -161,6 +162,7 @@ def parser():
     p.add_argument('--tray-center-y',type=float,default=.035,
                    help='Fixture center Y in metres for scene construction (default: 0.035).')
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
+    p.add_argument('--vials',type=int,default=30,help='Vials loaded in the 30-aperture tray (the rest stay empty)')
     p.add_argument('--crooked-tilts',help='Comma-separated spawn tilt (deg) per crooked cap, for tilt sweeps')
     return p
 

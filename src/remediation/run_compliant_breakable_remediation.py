@@ -6,7 +6,9 @@ tray; no cap pose is ever written by this script.
 
 Targets come from the current TableCam detections: the tray grid is fitted to
 the cap detections (no hardcoded tray coordinates) and refined with the
-missing-cap detection.  Dimensions follow docs/PHYSICAL_SPECIFICATIONS.md.
+missing-cap detections.  Dimensions follow docs/PHYSICAL_SPECIFICATIONS.md.
+Every detected missing cap is filled first (each from the nearest unused table cap),
+then every crooked cap is remediated, one after the other.
 
 Missing cap (tool pointing straight down):
   1. Open fingers descend around the spare table cap until the pocket ledge is
@@ -99,6 +101,16 @@ TABLE_FREE_RADIUS_M = 0.030
 TABLE_FREE_HEIGHT_M = 0.003
 # Tray-grid fit: detections farther than this from their nearest slot are outliers.
 FIT_INLIER_M = 0.015
+# Fewest good/crooked cap detections the tray-grid fit accepts (partly loaded trays).
+FIT_MIN_CAPS = 6
+# Per-slot TableCam depth check (point counts at the 1920 x 1080 depth resolution).  A
+# seated cap hides the vial rim; an exposed rim (>= SLOT_RIM_MIN_PTS points on the glass
+# lip at rim height) means the cap is missing, or crooked if cap surface stands over the
+# bore (>= SLOT_ABOVE_MIN_PTS points above the rim inside the bore).  No rim, no cap top
+# and nothing over the bore is an empty aperture (no vial).
+SLOT_RIM_MIN_PTS = 60
+SLOT_ABOVE_MIN_PTS = 200
+SLOT_CAP_TOP_MIN_PTS = 20
 DT = 1.0 / 60.0
 DOWN = np.array([0., 0., -1.])
 SPREAD_Y = np.array([0., 1., 0.])
@@ -147,7 +159,7 @@ def fit_tray_center(observed, layout):
     """
     slots = np.array([v[:2] for v in layout['slots_m'].values()])
     pts = np.array([d['base_pos_m'][:2] for d in observed if d['class_name'] in ('good_cap', 'crooked_cap')])
-    if len(pts) < 10:
+    if len(pts) < FIT_MIN_CAPS:
         raise RuntimeError('too few cap detections to localise the tray')
 
     def score(c):
@@ -259,38 +271,88 @@ def refine_caps_with_depth(observed, depth, capture_report):
     return out
 
 
-def choose_targets(observed, layout, depth_refined=False):
-    """Spare cap, missing slot and crooked slot from the current TableCam detections.
+def classify_slots_from_depth(grid, depth, capture_report):
+    """Per-slot state from TableCam depth on the fitted grid (see SLOT_* above):
+    {slot: {'state': 'seated' | 'crooked' | 'missing' | 'empty', point counts}}."""
+    from src.remediation.geometry import SPEC, rim_base_z
+    pts, _ = tablecam_points(depth, capture_report)
+    pts = pts.reshape(-1, 3)
+    pts = pts[np.isfinite(pts).all(1)]
+    rim_z = rim_base_z()
+    out = {}
+    for slot, xy in grid.items():
+        r = np.linalg.norm(pts[:, :2] - xy, axis=1)
+        rim = int(((r > SPEC.vial_inner_radius - 0.0005) & (r < SPEC.vial_outer_radius + 0.0008)
+                   & (np.abs(pts[:, 2] - rim_z) < 0.0015)).sum())
+        top = int(((r < SPEC.flange_radius + 0.001) & (np.abs(pts[:, 2] - rim_z - SPEC.flange_thickness) < 0.0015)).sum())
+        above = int(((r < SPEC.vial_inner_radius) & (pts[:, 2] > rim_z + 0.003)).sum())
+        if rim >= SLOT_RIM_MIN_PTS:
+            state = 'crooked' if above >= SLOT_ABOVE_MIN_PTS else 'missing' if top < SLOT_CAP_TOP_MIN_PTS else 'crooked'
+        else:
+            state = 'seated' if top >= SLOT_CAP_TOP_MIN_PTS or above >= SLOT_ABOVE_MIN_PTS else 'empty'
+        out[slot] = {'state': state, 'rim_pts': rim, 'cap_top_pts': top, 'above_bore_pts': above}
+    return out
 
-    With `depth_refined` cap positions the fitted grid is used directly (within ~0.7 mm);
-    otherwise it is corrected with the empty-bore detection.  With no missing-cap
-    detection on the tray the missing entries (and the spare) are None.
+
+def choose_targets(observed, layout, depth_refined=False, depth=None, capture_report=None):
+    """Every missing and crooked slot, and a spare table cap per missing slot, from the
+    current TableCam detections.
+
+    Detections are assigned to their nearest slot; a slot with several missing/crooked
+    detections keeps the most confident one.  Each missing slot (in slot order) takes the
+    nearest unused table cap; missing slots beyond the available spares are listed in
+    `unfilled_missing_slots`.  With `depth_refined` cap positions the fitted grid is used
+    directly (within ~0.7 mm); otherwise it is corrected with the empty-bore detections.
     """
+    from src.remediation.geometry import rim_base_z
     center, fit_err = fit_tray_center(observed, layout)
     slots = lambda c: {s: c + np.array(v[:2]) for s, v in layout['slots_m'].items()}
-    missing_dets = on_tray(observed, 'missing_cap', center, layout)
-    missing = choose_candidate(missing_dets, 'missing_cap') if missing_dets else None
-    spare = choose_candidate(observed, 'table_cap') if missing else None
-    crooked = choose_candidate(on_tray(observed, 'crooked_cap', center, layout), 'crooked_cap')
     grid = slots(center)
     nearest = lambda xy: min(grid, key=lambda s: np.linalg.norm(grid[s] - xy))
-    missing_slot = nearest(np.asarray(missing['base_pos_m'][:2])) if missing else None
-    if missing and not depth_refined:
-        # Without depth the box-centre grid is biased; the empty-bore detection corrects
-        # it (to ~1 mm), and the crooked bore is then taken from the refined grid.
-        residual = np.asarray(missing['base_pos_m'][:2]) - grid[missing_slot]
-        if np.linalg.norm(residual) < 0.010:
-            center = center + residual
+    per_slot = {}
+    for d in on_tray(observed, 'missing_cap', center, layout) + on_tray(observed, 'crooked_cap', center, layout):
+        s = nearest(np.asarray(d['base_pos_m'][:2]))
+        if s not in per_slot or d['confidence'] > per_slot[s]['confidence']:
+            per_slot[s] = d
+    slot_depth = None
+    if depth is not None:
+        # Depth decides each slot's state: it finds the defects YOLO misses or calls good,
+        # and rejects missing-cap detections on apertures without a vial.
+        slot_depth = classify_slots_from_depth(grid, depth, capture_report)
+        for s, v in slot_depth.items():
+            cls = {'missing': 'missing_cap', 'crooked': 'crooked_cap'}.get(v['state'])
+            if cls is None:
+                per_slot.pop(s, None)
+            elif s not in per_slot:
+                per_slot[s] = {'class_name': cls, 'confidence': 0.0, 'base_pos_m': [*grid[s].tolist(), rim_base_z()],
+                               'source': 'tablecam_depth_slot_check'}
+            elif per_slot[s]['class_name'] != cls:
+                per_slot[s] = {**per_slot[s], 'class_name': cls, 'yolo_class_name': per_slot[s]['class_name'],
+                               'source': 'tablecam_depth_slot_check'}
+    missing_slots = sorted(s for s, d in per_slot.items() if d['class_name'] == 'missing_cap')
+    crooked_slots = sorted(s for s, d in per_slot.items() if d['class_name'] == 'crooked_cap')
+    if missing_slots and not depth_refined:
+        # Without depth the box-centre grid is biased; the empty-bore detections correct
+        # it (to ~1 mm), and the crooked bores are then taken from the refined grid.
+        res = [np.asarray(per_slot[s]['base_pos_m'][:2]) - grid[s] for s in missing_slots]
+        res = [r for r in res if np.linalg.norm(r) < 0.010]
+        if res:
+            center = center + np.mean(res, axis=0)
             grid = slots(center)
-    crooked_slot = nearest(np.asarray(crooked['base_pos_m'][:2]))
-    missing_xy = None
-    if missing:
-        missing_xy = grid[missing_slot] if depth_refined else np.asarray(missing['base_pos_m'][:2])
+    spares = sorted((d for d in observed if d.get('class_name') == 'table_cap'), key=lambda d: -d['confidence'])
+    missing = []
+    for s in missing_slots:
+        if not spares:
+            break
+        xy = grid[s] if depth_refined else np.asarray(per_slot[s]['base_pos_m'][:2])
+        spare = min(spares, key=lambda d: np.linalg.norm(np.asarray(d['base_pos_m'][:2]) - xy))
+        spares.remove(spare)
+        missing.append({'slot': s, 'xy': xy, 'detection': per_slot[s],
+                        'spare': spare, 'spare_xy': np.asarray(spare['base_pos_m'][:2])})
+    crooked = [{'slot': s, 'xy': grid[s], 'detection': per_slot[s]} for s in crooked_slots]
     return {'tray_center_base_m': center.tolist(), 'tray_fit_error_m': fit_err, 'depth_refined': depth_refined,
-            'spare': spare, 'missing': missing, 'crooked': crooked,
-            'spare_xy': np.asarray(spare['base_pos_m'][:2]) if spare else None,
-            'missing_slot': missing_slot, 'missing_xy': missing_xy,
-            'crooked_slot': crooked_slot, 'crooked_xy': grid[crooked_slot]}
+            'missing': missing, 'crooked': crooked, 'slot_depth_check': slot_depth,
+            'unfilled_missing_slots': [s for s in missing_slots if s not in {m['slot'] for m in missing}]}
 
 
 class Planner:
@@ -443,6 +505,81 @@ def place_and_press(ex, plan, slot, jaw_grip, jaw_hold):
     return press
 
 
+def plan_crooked_press(P, q_up, crooked_xy, strategy, crooked_tilt, tip, press_face):
+    """Older crooked-cap press strategies (`vertical` / `tilted`) for one cap.
+
+    Returns (plan, tool axis, spread axis, tool point, edge aligned with the measured tilt).
+    """
+    from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
+    rim_z, transit_z = rim_base_z(), transit_base_z()
+    seated_top_z = rim_z + SPEC.flange_thickness
+    plan = {}
+    if strategy == 'vertical':
+        # Closed fingertips straight down, centred on the vial.  The closed pair is
+        # wider than the cap's 21 mm opening in both directions, so it cannot thread
+        # into it; the pocket lip (r 13.6 mm) clears the glass, and the raised side of
+        # the flange is pushed down until the cap pivots level.  Needs no tilt estimate.
+        # At the tip the pocket mouth (r 13.6 mm) is wider than the finger (11.1 mm
+        # half-width), so the closed tip face is two solid crescents along the
+        # spread axis, 13.6-17.6 mm from the centre.  Align the spread axis with the
+        # cap's high side and offset the tool so the raised flange edge sits under
+        # the middle of one crescent; centred, the cap slides up into the pocket.
+        spread, centre = SPREAD_Y, crooked_xy
+        if crooked_tilt:
+            az = np.radians(crooked_tilt['high_side_azimuth_deg'])
+            a2 = np.array([np.cos(az), np.sin(az)])
+            reach, _ = high_flange_edge(crooked_xy, rim_z, az, crooked_tilt['tilt_deg'])
+            spread = np.r_[a2, 0.]
+            centre = crooked_xy + (reach - TIP_CRESCENT_MID_M) * a2
+        high_cr = np.r_[centre, transit_z]
+        start_cr = np.r_[centre, rim_z + 0.040]
+        end_cr = np.r_[centre, seated_top_z - 0.0005]
+        for sgn in (1., -1.):   # either finger can be the pressing crescent
+            try:
+                q_high_cr = P.solve(q_up, high_cr, DOWN, sgn * spread, tip)
+                P.solve(q_high_cr, end_cr, DOWN, sgn * spread, tip)
+                spread = sgn * spread
+                break
+            except RuntimeError:
+                if sgn < 0:
+                    raise
+        plan['transit_to_crooked'] = s_curve_joints(q_up, q_high_cr, 40)
+        plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, DOWN, spread, tip, 40)
+        plan['press_crooked'] = P.steady(plan['descend_crooked'][-1], start_cr, end_cr, DOWN, spread, tip, 0.00025)
+        plan['retreat_crooked'] = P.line(plan['press_crooked'][-1], end_cr, high_cr, DOWN, spread, tip, 40)
+        return plan, DOWN, spread, tip, crooked_tilt is not None
+    d_t, s_t, edge, aligned = tilted_press_pose(P, q_up, crooked_xy, transit_z, seated_top_z, press_face,
+                                                np.radians(crooked_tilt['high_side_azimuth_deg']) if crooked_tilt else None)
+    if crooked_tilt:
+        az = np.radians(crooked_tilt['high_side_azimuth_deg'])
+        a2 = np.array([np.cos(az), np.sin(az)])
+        reach, top = high_flange_edge(crooked_xy, rim_z, az, crooked_tilt['tilt_deg'])
+    else:
+        a2, reach, top = np.zeros(2), 0.0, 0.020
+    # The pressing face slopes down toward the high side.  Start with the face
+    # point just beyond the raised flange edge (the face meets the edge higher
+    # up the face, well away from the fingertip pocket) and finish with it at
+    # the seated flange's outer edge, 0.5 mm below its seated top: a level
+    # flange is first touched there, and the fingertip ends outside the glass.
+    land_xy = crooked_xy + (reach + 0.002) * a2
+    end_xy = crooked_xy + SPEC.flange_radius * a2
+    high_cr = np.r_[land_xy, transit_z]
+    start_cr = np.r_[land_xy, rim_z + top + 0.008]
+    touch_cr = np.r_[land_xy, rim_z + top + 0.001]
+    end_cr = np.r_[end_xy, seated_top_z - 0.0005]
+    q_high_cr = P.solve(q_up, high_cr, d_t, s_t, edge)
+    plan['tilt_to_crooked'] = s_curve_joints(q_up, q_high_cr, 50)
+    plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, d_t, s_t, edge, 40)
+    plan['press_crooked'] = P.steady(plan['descend_crooked'][-1], start_cr, touch_cr, d_t, s_t, edge, 0.00025)
+    plan['press_crooked'] += P.steady(plan['press_crooked'][-1], touch_cr, end_cr, d_t, s_t, edge, 0.00025)
+    # Back away along +Y (the back face normal points down-back) before lifting.
+    away_cr = end_cr + 0.010 * s_t
+    plan['retreat_crooked'] = P.line(plan['press_crooked'][-1], end_cr, away_cr, d_t, s_t, edge, 25)
+    plan['retreat_crooked'] += P.line(plan['retreat_crooked'][-1], away_cr, np.r_[away_cr[:2], transit_z],
+                                      d_t, s_t, edge, 40)
+    return plan, d_t, s_t, edge, aligned
+
+
 def plan_table_pick(P, q, xy, spread, ledge):
     """Pick an upright cap standing on the table at `xy` by its flange (tool vertical).
 
@@ -455,6 +592,7 @@ def plan_table_pick(P, q, xy, spread, ledge):
     plan['descend'] = P.line(plan['approach'][-1], high, low, DOWN, spread, ledge, 60)
     plan['lift'] = P.line(plan['descend'][-1], low, high, DOWN, spread, ledge, 50)
     return plan
+
 
 
 def plan_table_putdown(P, q, xy, spread, ledge):
@@ -758,33 +896,40 @@ def main():
     from src.remediation.geometry import load_layout
     have_depth = bool(args.depth and args.capture_report)
     if have_depth:
-        observed = refine_caps_with_depth(observed, np.load(args.depth), json.loads(args.capture_report.read_text()))
-    targets = choose_targets(observed, load_layout(), depth_refined=have_depth)
-    missing_slot, crooked_slot = targets['missing_slot'], targets['crooked_slot']
-    crooked_tilt = None
-    # The regrip measures the cap axis with the wrist camera; the TableCam lean is only
+        depth_img, capture = np.load(args.depth), json.loads(args.capture_report.read_text())
+        observed = refine_caps_with_depth(observed, depth_img, capture)
+    targets = choose_targets(observed, load_layout(), depth_refined=have_depth,
+                             depth=depth_img if have_depth else None, capture_report=capture if have_depth else None)
+    missing, crooked = targets['missing'], targets['crooked']
+    if not missing and not crooked:
+        raise RuntimeError('no missing or crooked cap detected on the tray')
+    # The regrip measures each cap axis with the wrist camera; the TableCam lean is only
     # used by the older press strategies.
-    if have_depth and args.crooked_press != 'regrip':
-        from src.remediation.geometry import rim_base_z
-        az, tilt, n = cap_tilt_from_depth(np.load(args.depth), json.loads(args.capture_report.read_text()),
-                                          targets['crooked']['bbox_xyxy'], targets['crooked_xy'], rim_base_z())
-        crooked_tilt = {'high_side_azimuth_deg': float(np.degrees(az)), 'tilt_deg': tilt, 'depth_points': n}
-        print(f'[remediation] crooked cap from depth: high side {np.degrees(az):.1f} deg, tilt {tilt:.1f} deg ({n} points)', flush=True)
+    for c in crooked:
+        c['tilt'] = None
+        if have_depth and args.crooked_press != 'regrip' and 'bbox_xyxy' in c['detection']:
+            from src.remediation.geometry import rim_base_z
+            az, tilt, n = cap_tilt_from_depth(depth_img, capture, c['detection']['bbox_xyxy'], c['xy'], rim_base_z())
+            c['tilt'] = {'high_side_azimuth_deg': float(np.degrees(az)), 'tilt_deg': tilt, 'depth_points': n}
+            print(f"[remediation] crooked cap {c['slot']} from depth: high side {np.degrees(az):.1f} deg, "
+                  f"tilt {tilt:.1f} deg ({n} points)", flush=True)
     putdown_xy = None
-    if args.crooked_press == 'regrip':
-        # Regrasp spot: the spare's spot once it has been picked, else bare table beside it.
-        if missing_slot is not None:
-            putdown_xy = targets['spare_xy']
+    if args.crooked_press == 'regrip' and crooked:
+        # Regrasp spot (reused for every crooked cap, which is picked back up from it):
+        # the first spare's spot once the spares have been placed, else bare table beside it.
+        if missing:
+            putdown_xy = missing[0]['spare_xy']
         elif have_depth:
             near = np.asarray(choose_candidate(observed, 'table_cap')['base_pos_m'][:2])
-            putdown_xy = free_table_spot(np.load(args.depth), json.loads(args.capture_report.read_text()), near,
-                                         np.asarray(targets['tray_center_base_m']))
+            putdown_xy = free_table_spot(depth_img, capture, near, np.asarray(targets['tray_center_base_m']))
         else:
             raise RuntimeError('regrip needs a free table spot: no missing cap and no TableCam depth')
         targets['regrasp_table_xy'] = putdown_xy
         print(f'[remediation] regrasp table spot {np.round(putdown_xy, 4)}', flush=True)
+    missing_slots, crooked_slots = [m['slot'] for m in missing], [c['slot'] for c in crooked]
     print(f"[remediation] tray centre {np.round(targets['tray_center_base_m'], 4)} "
-          f"(fit error {targets['tray_fit_error_m']*1000:.1f} mm); missing={missing_slot}, crooked={crooked_slot}", flush=True)
+          f"(fit error {targets['tray_fit_error_m']*1000:.1f} mm); missing={missing_slots}, crooked={crooked_slots}, "
+          f"unfilled (no spare)={targets['unfilled_missing_slots']}", flush=True)
 
     # Prevent argparse flags being passed to Kit
     sys.argv = [sys.argv[0]]
@@ -797,6 +942,7 @@ def main():
         from isaacsim.core.prims import SingleArticulation
         from isaacsim.sensors.camera import Camera
         import cell
+        import fk
         import scene_config as C
         from src.remediation.custom_gripper import (attach_collision_proxies, attach_visual_pair,
                                                     finger_back_face_tcp, finger_tip_tcp)
@@ -811,15 +957,17 @@ def main():
         attach_collision_proxies(stage)
         col_report = configure_stage_collisions(stage)
 
-        has_missing = missing_slot is not None
-        spare_prim = find_closest_cap_prim(stage, np.r_[targets['spare_xy'], 0.]) if has_missing else None
-        crooked_prim = find_closest_cap_prim(stage, np.r_[targets['crooked_xy'], 0.])
-        caps = [c for c in (spare_prim, crooked_prim) if c is not None]
+        for m in missing:
+            m['prim'] = find_closest_cap_prim(stage, np.r_[m['spare_xy'], 0.])
+        for c in crooked:
+            c['prim'] = find_closest_cap_prim(stage, np.r_[c['xy'], 0.])
+        caps = [x['prim'] for x in missing + crooked if x['prim'] is not None]
         meter = ContactMeter(stage, [str(c.GetPath()) for c in caps] +
                              [cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE])
         world.reset()
-        print(f'[remediation] gripper mounted; collisions {col_report}; spare {spare_prim.GetPath() if spare_prim else None}, '
-              f'crooked {crooked_prim.GetPath()}', flush=True)
+        print(f"[remediation] gripper mounted; collisions {col_report}; "
+              f"spares {[str(m['prim'].GetPath()) for m in missing]}, crooked {[str(c['prim'].GetPath()) for c in crooked]}",
+              flush=True)
 
         arm = SingleArticulation(C.ROBOT_PRIM)
         arm.initialize()
@@ -831,108 +979,48 @@ def main():
         jaw_grip = mount['cap_grip_jaw_m']
         jaw_hold = jaw_grip - JAW_CLAMP_M
         press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
-        rim_z = rim_base_z()
-        seated_top_z = rim_z + SPEC.flange_thickness
         transit_z = transit_base_z()
-        spare_xy, missing_xy, crooked_xy = targets['spare_xy'], targets['missing_xy'], targets['crooked_xy']
         spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom
 
         # ---- plan (raises before any motion if a waypoint is unreachable) ----
+        # The crooked-cap regrips are planned after each wrist servo, since they depend
+        # on its result; only the view above each vial is checked here.
         P = Planner()
         try:
             q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
                          np.array([.24, .25, transit_z]), DOWN, SPREAD_Y, ledge)
-            plan = {}
-            q = q_up = q0
-            if has_missing:
+            q_up = q0
+            for m in missing:
+                spare_xy, missing_xy = m['spare_xy'], m['xy']
                 high_sp, low_sp = np.r_[spare_xy, transit_z], np.r_[spare_xy, spare_flange_z - 0.001]
-                q_high_sp = P.solve(q, high_sp, DOWN, SPREAD_Y, ledge)
-                plan['approach_spare'] = s_curve_joints(q, q_high_sp, 40)
+                q_high_sp = P.solve(q_up, high_sp, DOWN, SPREAD_Y, ledge)
+                plan = {'approach_spare': s_curve_joints(q_up, q_high_sp, 40)}
                 plan['descend_spare'] = P.line(q_high_sp, high_sp, low_sp, DOWN, SPREAD_Y, ledge, 60)
                 plan['lift_spare'] = P.line(plan['descend_spare'][-1], low_sp, high_sp, DOWN, SPREAD_Y, ledge, 50)
                 q_high_mi = P.solve(plan['lift_spare'][-1], np.r_[missing_xy, transit_z], DOWN, SPREAD_Y, ledge)
                 plan['carry_spare'] = s_curve_joints(plan['lift_spare'][-1], q_high_mi, 50)
                 plan['place_missing'] = plan_place_and_press(P, q_high_mi, missing_xy, SPREAD_Y, ledge, tip)
                 q_up = plan['place_missing']['retreat'][-1]
-            if args.crooked_press == 'regrip':
-                # Planned after the wrist servo; only the view above the vial is checked here.
-                P.solve(q_up, np.r_[crooked_xy, transit_z], DOWN, SPREAD_Y, ledge)
-                d_t, s_t, edge, aligned = DOWN, SPREAD_Y, ledge, False
-            elif args.crooked_press == 'vertical':
-                # Closed fingertips straight down, centred on the vial.  The closed pair is
-                # wider than the cap's 21 mm opening in both directions, so it cannot thread
-                # into it; the pocket lip (r 13.6 mm) clears the glass, and the raised side of
-                # the flange is pushed down until the cap pivots level.  Needs no tilt estimate.
-                # At the tip the pocket mouth (r 13.6 mm) is wider than the finger (11.1 mm
-                # half-width), so the closed tip face is two solid crescents along the
-                # spread axis, 13.6-17.6 mm from the centre.  Align the spread axis with the
-                # cap's high side and offset the tool so the raised flange edge sits under
-                # the middle of one crescent; centred, the cap slides up into the pocket.
-                spread, centre = SPREAD_Y, crooked_xy
-                if crooked_tilt:
-                    az = np.radians(crooked_tilt['high_side_azimuth_deg'])
-                    a2 = np.array([np.cos(az), np.sin(az)])
-                    reach, _ = high_flange_edge(crooked_xy, rim_z, az, crooked_tilt['tilt_deg'])
-                    spread = np.r_[a2, 0.]
-                    centre = crooked_xy + (reach - TIP_CRESCENT_MID_M) * a2
-                d_t, s_t, edge, aligned = DOWN, spread, tip, crooked_tilt is not None
-                high_cr = np.r_[centre, transit_z]
-                start_cr = np.r_[centre, rim_z + 0.040]
-                end_cr = np.r_[centre, seated_top_z - 0.0005]
-                for sgn in (1., -1.):   # either finger can be the pressing crescent
-                    try:
-                        q_high_cr = P.solve(q_up, high_cr, DOWN, sgn * spread, tip)
-                        P.solve(q_high_cr, end_cr, DOWN, sgn * spread, tip)
-                        spread = sgn * spread
-                        break
-                    except RuntimeError:
-                        if sgn < 0:
-                            raise
-                s_t = spread
-                plan['transit_to_crooked'] = s_curve_joints(q_up, q_high_cr, 40)
-                plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, DOWN, spread, tip, 40)
-                plan['press_crooked'] = P.steady(plan['descend_crooked'][-1], start_cr, end_cr, DOWN, spread, tip, 0.00025)
-                plan['retreat_crooked'] = P.line(plan['press_crooked'][-1], end_cr, high_cr, DOWN, spread, tip, 40)
-            else:
-                d_t, s_t, edge, aligned = tilted_press_pose(P, q_up, crooked_xy, transit_z, seated_top_z, press_face,
-                                                            np.radians(crooked_tilt['high_side_azimuth_deg']) if crooked_tilt else None)
-                if crooked_tilt:
-                    az = np.radians(crooked_tilt['high_side_azimuth_deg'])
-                    a2 = np.array([np.cos(az), np.sin(az)])
-                    reach, top = high_flange_edge(crooked_xy, rim_z, az, crooked_tilt['tilt_deg'])
+                m['plan'] = plan
+            for c in crooked:
+                if args.crooked_press == 'regrip':
+                    P.solve(q_up, np.r_[c['xy'], transit_z], DOWN, SPREAD_Y, ledge)
+                    c['press_pose'] = (DOWN, SPREAD_Y, ledge, False)
                 else:
-                    a2, reach, top = np.zeros(2), 0.0, 0.020
-                # The pressing face slopes down toward the high side.  Start with the face
-                # point just beyond the raised flange edge (the face meets the edge higher
-                # up the face, well away from the fingertip pocket) and finish with it at
-                # the seated flange's outer edge, 0.5 mm below its seated top: a level
-                # flange is first touched there, and the fingertip ends outside the glass.
-                land_xy = crooked_xy + (reach + 0.002) * a2
-                end_xy = crooked_xy + SPEC.flange_radius * a2
-                high_cr = np.r_[land_xy, transit_z]
-                start_cr = np.r_[land_xy, rim_z + top + 0.008]
-                touch_cr = np.r_[land_xy, rim_z + top + 0.001]
-                end_cr = np.r_[end_xy, seated_top_z - 0.0005]
-                q_high_cr = P.solve(q_up, high_cr, d_t, s_t, edge)
-                plan['tilt_to_crooked'] = s_curve_joints(q_up, q_high_cr, 50)
-                plan['descend_crooked'] = P.line(q_high_cr, high_cr, start_cr, d_t, s_t, edge, 40)
-                plan['press_crooked'] = P.steady(plan['descend_crooked'][-1], start_cr, touch_cr, d_t, s_t, edge, 0.00025)
-                plan['press_crooked'] += P.steady(plan['press_crooked'][-1], touch_cr, end_cr, d_t, s_t, edge, 0.00025)
-                # Back away along +Y (the back face normal points down-back) before lifting.
-                away_cr = end_cr + 0.010 * s_t
-                plan['retreat_crooked'] = P.line(plan['press_crooked'][-1], end_cr, away_cr, d_t, s_t, edge, 25)
-                plan['retreat_crooked'] += P.line(plan['retreat_crooked'][-1], away_cr, np.r_[away_cr[:2], transit_z],
-                                                  d_t, s_t, edge, 40)
+                    plan, *pose = plan_crooked_press(P, q_up, c['xy'], args.crooked_press, c['tilt'], tip, press_face)
+                    c['plan'], c['press_pose'] = plan, tuple(pose)
+                    q_up = plan['retreat_crooked'][-1]
         except BaseException as exc:
             failure = {'stage': 'trajectory_planning', 'scene': str(args.scene), 'error_type': type(exc).__name__,
-                       'error': str(exc), 'targets': {k: v for k, v in targets.items() if k in ('spare', 'missing', 'crooked')}}
+                       'error': str(exc), 'targets': {'missing': [{k: m[k] for k in ('slot', 'detection', 'spare')} for m in missing],
+                                                      'crooked': [{k: c[k] for k in ('slot', 'detection')} for c in crooked]}}
             (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2, default=str) + '\n')
             raise
-        print(f'[remediation] all motions planned; crooked press heading {np.round(d_t, 3)}', flush=True)
+        print(f'[remediation] all motions planned', flush=True)
 
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
         camera.initialize()
-        wrist = wrist_camera(stage) if args.crooked_press == 'regrip' else None
+        wrist = wrist_camera(stage) if args.crooked_press == 'regrip' and crooked else None
         positions = set_jaw_separation(arm, names, C.JAW_OPEN)
         positions[arm_idx] = q0
         arm.set_joint_positions(positions)
@@ -944,24 +1032,62 @@ def main():
         frame_dir.mkdir(exist_ok=True)
         monitor = VialBreakabilityMonitor(stage)
         ex = Executor(world, arm, names, arm_idx, camera, frame_dir, meter, monitor,
-                      tuple(s for s in (missing_slot, crooked_slot) if s), tracked=caps)
+                      tuple(missing_slots + crooked_slots), tracked=caps)
         presses = {}
 
-        if has_missing:
-            ex.run('approach_spare', plan['approach_spare'], C.JAW_OPEN)
+        jaw = C.JAW_OPEN
+        for m in missing:
+            slot, plan = m['slot'], m['plan']
+            ex.jaws(f'open_for_spare_{slot}', jaw, C.JAW_OPEN)
+            ex.run(f'approach_spare_{slot}', plan['approach_spare'], C.JAW_OPEN)
             ex.run('descend_around_spare', plan['descend_spare'], C.JAW_OPEN)
             ex.jaws('capture_spare_flange', C.JAW_OPEN, jaw_hold)
             ex.hold('capture_spare_flange', jaw_hold, 15)
             ex.run('lift_spare', plan['lift_spare'], jaw_hold)
-            ex.run(f'carry_spare_to_{missing_slot}', plan['carry_spare'], jaw_hold)
-            presses['missing'] = place_and_press(ex, plan['place_missing'], missing_slot, jaw_grip, jaw_hold)
-        else:
+            ex.run(f'carry_spare_to_{slot}', plan['carry_spare'], jaw_hold)
+            presses[f'missing_{slot}'] = place_and_press(ex, plan['place_missing'], slot, jaw_grip, jaw_hold)
+            jaw = jaw_grip
+        if not missing:
             print('[remediation] no missing-cap detection on the tray; skipping the spare-cap placement', flush=True)
-            ex.jaws('close_fingers', C.JAW_OPEN, jaw_grip)
-        regrip = None
-        if args.crooked_press == 'regrip':
-            servo_dir = args.out / 'wrist_servo'
-            servo_dir.mkdir(exist_ok=True)
+        ex.jaws('close_fingers', jaw, jaw_grip)
+
+        def lift_clear(tool):
+            """Straight up to transit height, keeping the current tool orientation (after a failed attempt)."""
+            Rj, pj = fk.fk(ex.q)
+            d, s = Rj @ np.asarray(C.TOOL_AXIS, float), Rj @ np.asarray(C.FINGER_SPREAD_AXIS, float)
+            p = pj + Rj @ np.asarray(tool)
+            ex.run('lift_clear', P.line(ex.q, p, np.r_[p[:2], max(p[2], transit_z)], d, s, tool, 60), C.JAW_OPEN)
+
+        regrips = {}
+        for c in crooked:
+            crooked_slot, crooked_xy, crooked_prim = c['slot'], c['xy'], c['prim']
+            if args.crooked_press == 'vertical':
+                plan = c['plan']
+                ex.run(f'transit_to_{crooked_slot}', plan['transit_to_crooked'], jaw_grip)
+                ex.run(f'descend_to_{crooked_slot}', plan['descend_crooked'], jaw_grip)
+                presses[f'crooked_{crooked_slot}'] = ex.press(f'vertical_press_{crooked_slot}', plan['press_crooked'],
+                                                              jaw_grip, crooked_slot)
+                ex.hold(f'vertical_press_{crooked_slot}', jaw_grip, 15)
+                # Open the jaws so the pocket lets go of the seated flange, then lift.
+                ex.jaws(f'release_{crooked_slot}', jaw_grip, C.JAW_OPEN)
+                ex.run('retreat', plan['retreat_crooked'], C.JAW_OPEN)
+                ex.jaws('close_fingers', C.JAW_OPEN, jaw_grip)
+                continue
+            if args.crooked_press == 'tilted':
+                plan = c['plan']
+                ex.jaws('close_for_edge_press', jaw_grip, C.JAW_CLOSED)
+                ex.run(f'tilt_{PRESS_TILT_DEG:.0f}deg_over_{crooked_slot}', plan['tilt_to_crooked'], C.JAW_CLOSED)
+                ex.run(f'descend_to_{crooked_slot}', plan['descend_crooked'], C.JAW_CLOSED)
+                presses[f'crooked_{crooked_slot}'] = ex.press(f'edge_press_{crooked_slot}', plan['press_crooked'],
+                                                              C.JAW_CLOSED, crooked_slot)
+                ex.hold(f'edge_press_{crooked_slot}', C.JAW_CLOSED, 15)
+                # Jaws stay closed: opening would drive the pressing back face further into the cap.
+                ex.run('retreat', plan['retreat_crooked'], C.JAW_CLOSED)
+                ex.jaws('reopen_to_grip', C.JAW_CLOSED, jaw_grip)
+                continue
+
+            servo_dir = args.out / 'wrist_servo' / crooked_slot
+            servo_dir.mkdir(parents=True, exist_ok=True)
             ex.jaws('close_for_wrist_view', jaw_grip, C.JAW_CLOSED)
 
             def move(q_to):
@@ -974,7 +1100,6 @@ def main():
 
             def held_cap_offset():
                 """Measured cap pose against the ledge tool point (diagnostic only)."""
-                import fk
                 Rj, pj = fk.fk(arm.get_joint_positions()[arm_idx])
                 pos, (w, x, y, z) = get_cap_pose(crooked_prim)
                 held = np.asarray(pos) - np.array([0., 0., SPEC.world_base_z]) - (pj + Rj @ np.asarray(ledge))
@@ -985,13 +1110,16 @@ def main():
                 _, (w, x, y, z) = get_cap_pose(crooked_prim)
                 return ScipyRot.from_quat([x, y, z, w]).as_matrix()[:, 2]
 
-            regrip = {}
+            regrip = regrips[crooked_slot] = {}
+            moved = False
             try:
                 axis, q_view, servo_report = servo_cap_axis(P, ex.q, crooked_xy, wrist, move, capture, servo_dir,
                                                             truth=true_axis)
                 plan_r, info = plan_regrip(P, q_view, crooked_xy, axis, ledge, tip, putdown_xy)
                 regrip.update(info, servo=servo_report)
-                d_t, s_t = np.asarray(regrip['tool_axis']), np.asarray(regrip['spread_axis'])
+                c['press_pose'] = (np.asarray(info['tool_axis']), np.asarray(info['spread_axis']), ledge, False)
+                s_t = np.asarray(info['spread_axis'])
+                moved = True
                 ex.run(f'approach_along_cap_axis_{crooked_slot}', plan_r['approach'], C.JAW_CLOSED)
                 ex.jaws(f'open_for_regrip_{crooked_slot}', C.JAW_CLOSED, C.JAW_OPEN)
                 ex.run(f'descend_along_cap_axis_{crooked_slot}', plan_r['descend'], C.JAW_OPEN)
@@ -1001,7 +1129,7 @@ def main():
                 ex.run(f'turn_cap_upright_{crooked_slot}', plan_r['upright'], jaw_grip)
                 ex.hold(f'turn_cap_upright_{crooked_slot}', jaw_grip, 15)
                 regrip['held_after_side_grip'] = held_cap_offset()
-                print(f"[remediation] side-grip held cap: {regrip['held_after_side_grip']}", flush=True)
+                print(f"[remediation] {crooked_slot} side-grip held cap: {regrip['held_after_side_grip']}", flush=True)
                 # Regrasp on the table so the cap sits square in the pocket for placement.
                 ex.run('carry_to_regrasp_spot', plan_r['carry_to_table'], jaw_grip)
                 ex.run('stand_cap_on_table', plan_r['lower_to_table'], jaw_grip)
@@ -1012,7 +1140,8 @@ def main():
                 cap_xy, q_look = locate_upright_cap(P, ex.q, putdown_xy, SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness,
                                                     wrist, move, capture, servo_dir / 'regrasp_view.png')
                 regrip['regrasp_cap_xy_wrist_base_m'] = cap_xy.tolist()
-                print(f'[remediation] cap on table located at {np.round(cap_xy, 4)} (released at {np.round(putdown_xy, 4)})', flush=True)
+                print(f'[remediation] {crooked_slot} cap on table located at {np.round(cap_xy, 4)} '
+                      f'(released at {np.round(putdown_xy, 4)})', flush=True)
                 plan_p = plan_regrasp_and_place(P, q_look, cap_xy, crooked_xy, s_t, ledge, tip)
                 ex.run('regrasp_approach', plan_p['approach'], C.JAW_CLOSED)
                 ex.jaws('open_for_regrasp', C.JAW_CLOSED, C.JAW_OPEN)
@@ -1023,31 +1152,22 @@ def main():
                 ex.run(f'carry_to_{crooked_slot}', plan_p['carry_to_vial'], jaw_hold)
                 ex.hold(f'carry_to_{crooked_slot}', jaw_hold, 10)
                 regrip['held_after_regrasp'] = held_cap_offset()
-                print(f"[remediation] regrasped held cap: {regrip['held_after_regrasp']}", flush=True)
-                presses['crooked'] = place_and_press(ex, plan_p, crooked_slot, jaw_grip, jaw_hold)
+                print(f"[remediation] {crooked_slot} regrasped held cap: {regrip['held_after_regrasp']}", flush=True)
+                presses[f'crooked_{crooked_slot}'] = place_and_press(ex, plan_p, crooked_slot, jaw_grip, jaw_hold)
             except RuntimeError as exc:
-                # Report the failed regrip and still run the seating check.
+                # Report the failed regrip, clear the tray and go on to the next cap.
                 regrip['error'] = str(exc)
-                print(f'[remediation] regrip failed: {exc}', flush=True)
-            ex.hold('settle', jaw_grip, 30)
-        elif args.crooked_press == 'vertical':
-            ex.run(f'transit_to_{crooked_slot}', plan['transit_to_crooked'], jaw_grip)
-            ex.run(f'descend_to_{crooked_slot}', plan['descend_crooked'], jaw_grip)
-            presses['crooked'] = ex.press(f'vertical_press_{crooked_slot}', plan['press_crooked'], jaw_grip, crooked_slot)
-            ex.hold(f'vertical_press_{crooked_slot}', jaw_grip, 15)
-            # Open the jaws so the pocket lets go of the seated flange, then lift.
-            ex.jaws(f'release_{crooked_slot}', jaw_grip, C.JAW_OPEN)
-            ex.run('retreat', plan['retreat_crooked'], C.JAW_OPEN)
-            ex.hold('settle', C.JAW_OPEN, 30)
-        else:
-            ex.jaws('close_for_edge_press', jaw_grip, C.JAW_CLOSED)
-            ex.run(f'tilt_{PRESS_TILT_DEG:.0f}deg_over_{crooked_slot}', plan['tilt_to_crooked'], C.JAW_CLOSED)
-            ex.run(f'descend_to_{crooked_slot}', plan['descend_crooked'], C.JAW_CLOSED)
-            presses['crooked'] = ex.press(f'edge_press_{crooked_slot}', plan['press_crooked'], C.JAW_CLOSED, crooked_slot)
-            ex.hold(f'edge_press_{crooked_slot}', C.JAW_CLOSED, 15)
-            # Jaws stay closed: opening would drive the pressing back face further into the cap.
-            ex.run('retreat', plan['retreat_crooked'], C.JAW_CLOSED)
-            ex.hold('settle', C.JAW_CLOSED, 30)
+                print(f'[remediation] {crooked_slot} regrip failed: {exc}', flush=True)
+                if moved:
+                    ex.jaws('release_after_failure', jaw_grip, C.JAW_OPEN)
+                    try:
+                        lift_clear(ledge)
+                    except RuntimeError as lift_exc:
+                        regrip['recovery_error'] = str(lift_exc)
+                        print(f'[remediation] cannot lift clear ({lift_exc}); stopping the crooked caps', flush=True)
+                        break
+                ex.jaws('close_fingers', C.JAW_OPEN if moved else C.JAW_CLOSED, jaw_grip)
+        ex.hold('settle', jaw_grip, 30)
         print(f'[remediation] wrote {ex.frames} frames; presses {presses}', flush=True)
 
         for _ in range(120):
@@ -1058,26 +1178,37 @@ def main():
             m = np.asarray(UsdGeom.Xformable(stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube'))
                            .ComputeLocalToWorldTransform(0.))
             return m[3, :3] + np.array([0., 0., SPEC.vial_height])
-        seating = {'crooked_slot_cap': measure_cap(crooked_prim, tube_rim(crooked_slot), crooked_slot)}
-        if has_missing:
-            seating['missing_slot_cap'] = measure_cap(spare_prim, tube_rim(missing_slot), missing_slot)
+        seating = {}
+        for c in crooked:
+            seating[f"crooked_slot_cap_{c['slot']}"] = measure_cap(c['prim'], tube_rim(c['slot']), c['slot'])
+        for m in missing:
+            seating[f"missing_slot_cap_{m['slot']}"] = measure_cap(m['prim'], tube_rim(m['slot']), m['slot'])
         for k, v in seating.items():
             print(f'[remediation] {k}: {v}', flush=True)
+        seated = sum(v['seated'] for v in seating.values())
+        print(f'[remediation] seated {seated}/{len(seating)} remediated caps', flush=True)
 
+        clean = lambda x: {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in x.items()
+                           if k not in ('prim', 'plan', 'press_pose')}
         report = {
             'mode': 'physics_contact_remediation',
             'physical_robot_authorized': False,
             'scene': str(args.scene),
             'current_scene_detections': str(args.detections),
-            'targets': {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in targets.items()},
-            'missing_slot': missing_slot,
-            'crooked_slot': crooked_slot,
-            'tool_points_j6_m': {'pocket_ledge': list(ledge), 'fingertip_face': list(tip), 'crooked_press_point': list(edge)},
-            'crooked_regrip': regrip,
+            'targets': {**{k: v for k, v in targets.items() if k not in ('missing', 'crooked')},
+                        'missing': [clean(m) for m in missing], 'crooked': [clean(c) for c in crooked]},
+            'missing_slots': missing_slots,
+            'crooked_slots': crooked_slots,
+            'unfilled_missing_slots': targets['unfilled_missing_slots'],
+            'tool_points_j6_m': {'pocket_ledge': list(ledge), 'fingertip_face': list(tip)},
+            'crooked_regrip': regrips,
             'crooked_press': {'strategy': args.crooked_press,
                               'tilt_from_vertical_deg': PRESS_TILT_DEG if args.crooked_press == 'tilted' else 0.0,
-                              'tool_axis': np.asarray(d_t).tolist(), 'edge_direction': np.asarray(s_t).tolist(),
-                              'edge_aligned_with_cap_tilt': aligned, 'cap_tilt_from_depth': crooked_tilt,
+                              'per_cap': {c['slot']: {'tool_axis': np.asarray(c['press_pose'][0]).tolist(),
+                                                      'edge_direction': np.asarray(c['press_pose'][1]).tolist(),
+                                                      'press_point_j6_m': list(c['press_pose'][2]),
+                                                      'edge_aligned_with_cap_tilt': c['press_pose'][3],
+                                                      'cap_tilt_from_depth': c['tilt']} for c in crooked},
                               'contact': ('coaxial flange grip, upright re-place, fingertip press' if args.crooked_press == 'regrip' else
                                           'closed fingertip crescent over the raised flange edge' if args.crooked_press == 'vertical' else
                                           f'-Y finger outer back face, {PRESS_FACE_UP_M*1000:.0f} mm up from the tip')},
@@ -1090,6 +1221,8 @@ def main():
                                   'vials': monitor.vial_states,
                                   'all_vials_intact': not any(v['fractured'] for v in monitor.vial_states.values())},
             'seating_check_after_120_settle_steps': seating,
+            'seated_count': seated,
+            'remediated_count': len(seating),
             'frame_directory': str(frame_dir),
             'frames_written': ex.frames,
         }
