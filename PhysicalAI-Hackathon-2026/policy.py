@@ -6,7 +6,6 @@ gripper, touches a cap, presses a vial, or uses stored tray coordinates.
 """
 from __future__ import annotations
 
-import os
 import json
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +23,7 @@ from src.remediation.controller import ContactTool, RemediationController
 from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
-DEFAULT_CHECKPOINT = ROOT / "shared/inspection_models/remediation_yolo_best.pt"
+DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
 DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
@@ -32,11 +31,18 @@ HOVER_ABOVE_CAP_M = 0.075
 # Only used by the local mock, which has no initial TCP pose.
 MOCK_START_TCP = [400.0, 0.0, TRANSIT_UF0_Z_MM, *DOWN_WPR_DEG, GRIPPER_OPEN]
 
-# ``REMEDIATION_MODE=full`` enables the deliberate pick/place/press trial.
-# These zero offsets mean UTOOL1 is assumed to be the CAD cap-contact point.
-# They are a temporary test assumption, replaced by measured values once they
-# are available.  Hover mode (the default) never reaches this code path.
-UNMEASURED_CONTACT_TOOL = ContactTool(0.0, 0.0, 0.0, validated=True)
+def provisional_contact_tool(allowed, pick_offset_m, place_offset_m, press_offset_m):
+    """Build explicit provisional offsets; never silently bless the CAD assumption."""
+    if not allowed:
+        raise RuntimeError(
+            "Full contact mode uses an unmeasured TCP. Pass --allow-provisional-contact "
+            "only for an operator-supervised physical trial."
+        )
+    values = [pick_offset_m, place_offset_m, press_offset_m]
+    for name, value in zip(("pick", "place", "press"), values):
+        if not np.isfinite(value) or abs(value) > 0.025:
+            raise ValueError(f"--{name}-offset-m must be within +/-0.025 m")
+    return ContactTool(*values, validated=True)
 
 
 class Policy:
@@ -47,15 +53,33 @@ class Policy:
     ACTION = "tcp"
     PREFETCH = False
 
-    def __init__(self, checkpoint=None):
+    def __init__(self, checkpoint=None, *, mode="hover", confidence=0.70, imgsz=1280,
+                 device="0", allow_provisional_contact=False,
+                 pick_offset_m=0.0, place_offset_m=0.0, press_offset_m=0.0,
+                 trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
-        self.detector = RemediationVisionDetector(weights, confidence=0.80)
+        if str(device).lower() != "cpu":
+            import torch
+            if not torch.cuda.is_available():
+                raise RuntimeError(
+                    "GPU inference requested but CUDA is unavailable. Claim a GPU (for example, "
+                    "srun --gres=gpu:1 ...) or explicitly pass --device cpu."
+                )
+        self.detector = RemediationVisionDetector(
+            weights, confidence=confidence, imgsz=imgsz, device=device)
+        self.confidence = float(confidence)
         self.cameras = load_cameras()
-        self.full_remediation = os.environ.get("REMEDIATION_MODE", "hover").lower() == "full"
-        self.controller = RemediationController(UNMEASURED_CONTACT_TOOL) if self.full_remediation else None
+        mode = mode.lower()
+        if mode not in ("hover", "full"):
+            raise ValueError("mode must be 'hover' or 'full'")
+        self.full_remediation = mode == "full"
+        self.controller = (RemediationController(provisional_contact_tool(
+            allow_provisional_contact, pick_offset_m, place_offset_m, press_offset_m),
+            min_confidence=self.confidence)
+            if self.full_remediation else None)
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
         # Physical-policy traces are team artifacts, so share them by default.
-        self.trace_dir = Path(os.environ.get("REMEDIATION_TRACE_DIR", ROOT / "shared/runs" / label))
+        self.trace_dir = Path(trace_dir) if trace_dir else ROOT / "shared/runs" / label
         self.trace_dir.mkdir(parents=True, exist_ok=True)
         (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
@@ -99,7 +123,7 @@ class Policy:
     def _choose_table_cap(self, image, stamp):
         detections = self.detector.detect(image, timestamp=stamp)
         candidates = [d for d in detections
-                      if d["class_name"] == "table_cap" and d["confidence"] >= 0.80]
+                      if d["class_name"] == "table_cap" and d["confidence"] >= self.confidence]
         if not candidates:
             self.events.append({"event": "hold", "reason": "no_confident_table_cap"})
             return None

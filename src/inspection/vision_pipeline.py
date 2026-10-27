@@ -117,7 +117,7 @@ def camera_from_usd_capture(metadata):
 
 class RemediationVisionDetector:
     def __init__(self, checkpoint, calib_dir=CALIBRATION_DIR, *, camera=None, model=None,
-                 confidence=.6, device='cpu', rim_z=None):
+                 confidence=.6, device='cpu', rim_z=None, imgsz=1280):
         if model is None:
             if not checkpoint or not Path(checkpoint).is_file():
                 raise FileNotFoundError('A validated remediation detector checkpoint is required')
@@ -133,7 +133,11 @@ class RemediationVisionDetector:
         else:
             self.class_map = {int(k): v for k, v in (names.items() if isinstance(names, dict) else enumerate(names))}
         self.table_cam = camera if camera is not None else load_cameras(calib_dir)['table']
-        self.confidence, self.device = confidence, device
+        self.confidence, self.device, self.imgsz = float(confidence), device, int(imgsz)
+        if not 0.0 < self.confidence < 1.0:
+            raise ValueError('confidence must be between 0 and 1')
+        if self.imgsz <= 0:
+            raise ValueError('imgsz must be positive')
         self.rim_z = rim_base_z() if rim_z is None else float(rim_z)
 
     def detect(self, rgb, timestamp=None, depth_m=None):
@@ -145,7 +149,7 @@ class RemediationVisionDetector:
             if depth_m.shape[:2] != (h,w):
                 raise ValueError('Depth and RGB must share the calibrated native pixel grid')
         results = self.model.predict(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), conf=self.confidence,
-                                     imgsz=1280, device=self.device, verbose=False)
+                                     imgsz=self.imgsz, device=self.device, verbose=False)
         targets = []
         for result in results:
             for xyxy, confidence, cls_id in zip(result.boxes.xyxy.cpu().numpy(),

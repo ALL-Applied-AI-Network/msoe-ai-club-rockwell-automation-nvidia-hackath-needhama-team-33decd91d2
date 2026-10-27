@@ -211,7 +211,17 @@ def main() -> None:
     p.add_argument("--instruction", default="pick up the cube", help="--mock: the instruction for every trial")
     p.add_argument("--url", default="https://hackathon.sidclab.org")
     p.add_argument("--token", help="a run token, if we sent you one directly")
-    p.add_argument("--checkpoint")
+    p.add_argument("--checkpoint", help="default: shared/yolo26x/best.pt")
+    p.add_argument("--mode", choices=("hover", "full"), default="hover")
+    p.add_argument("--confidence", type=float, default=0.70)
+    p.add_argument("--imgsz", type=int, default=1280)
+    p.add_argument("--device", default="0", help="Ultralytics inference device; default 0 (first CUDA GPU)")
+    p.add_argument("--allow-provisional-contact", action="store_true",
+                   help="allow full mode with the currently unmeasured TCP (supervised trials only)")
+    p.add_argument("--pick-offset-m", type=float, default=0.0)
+    p.add_argument("--place-offset-m", type=float, default=0.0)
+    p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -230,7 +240,11 @@ def main() -> None:
         url, mock = start_mock(args.trials, args.trial_s, args.instruction)
         logging.getLogger().setLevel(logging.ERROR)  # the summary below says what matters
         print(f"Checking your policy on a local mock of the cell ({args.trials} rollouts, no robot) ...")
-        checked = Checked(Policy(args.checkpoint))
+        checked = Checked(Policy(args.checkpoint, mode=args.mode, confidence=args.confidence,
+                                 imgsz=args.imgsz, device=args.device,
+                                 allow_provisional_contact=args.allow_provisional_contact,
+                                 pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
+                                 press_offset_m=args.press_offset_m, trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
         except Exception:  # noqa: BLE001  (reported by verdict)
@@ -247,7 +261,12 @@ def main() -> None:
         logging.info("request %s approved: run %s", st["request_id"], st["run_id"])
         if st.get("view_key"):
             logging.info(results_link(st))
-    run_all(CellClient(url, token, args.ca), Policy(args.checkpoint))
+    run_all(CellClient(url, token, args.ca),
+            Policy(args.checkpoint, mode=args.mode, confidence=args.confidence,
+                   imgsz=args.imgsz, device=args.device,
+                   allow_provisional_contact=args.allow_provisional_contact,
+                   pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
+                   press_offset_m=args.press_offset_m, trace_dir=args.trace_dir))
 
 
 if __name__ == "__main__":

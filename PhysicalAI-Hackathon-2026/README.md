@@ -67,8 +67,28 @@ the arm does not stop between them. It helps when one call returns more than twi
 ## 3. Check formats and connection
 
 ```bash
-uv run run.py --mock
+uv run run.py --mock --device cpu
 ```
+
+The remediation policy defaults to `../shared/yolo26x/best.pt`, 1280-pixel
+inference, confidence 0.70, and CUDA device 0. Claim a GPU for a physical run:
+
+```bash
+srun --partition=teaching --gres=gpu:1 --cpus-per-task=4 --mem=16G \
+  --time=00:45:00 --pty bash
+uv run run.py --mode hover
+```
+
+For supervised provisional contact, use CLI options rather than environment variables:
+
+```bash
+uv run run.py --mode full --allow-provisional-contact \
+  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010
+```
+
+Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
+then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press
+offsets may create contact with glass.
 
 Runs your policy against a stand-in for the cell on your machine, with no robot. It ends with
 **✓ Ready for the real robot**, or **✗ Not ready** with what to fix (an action the robot would reject, or an error

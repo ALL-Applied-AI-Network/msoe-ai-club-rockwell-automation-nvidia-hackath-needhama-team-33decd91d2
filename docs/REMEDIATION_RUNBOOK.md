@@ -169,15 +169,17 @@ Validate the client contract locally before requesting a physical run:
 ```bash
 cd PhysicalAI-Hackathon-2026
 uv sync
-REMEDIATION_MODE=full uv run run.py --mock --trials 1 --trial-s 25
+uv run run.py --mock --device cpu --trials 1 --trial-s 25
 ```
 
-The current reviewed checkpoint is
-`shared/inspection_models/remediation_yolo_best.pt`. The physical policy uses
-it by default. To override it for an experiment, pass an explicit checkpoint:
+The physical policy defaults to `shared/yolo26x/best.pt`, confidence `0.70`,
+inference size `1280`, and CUDA device `0`. The checkpoint's four classes are
+`good_cap`, `crooked_cap`, `missing_cap`, and `table_cap`. To override any inference
+setting for an experiment:
 
 ```bash
-uv run run.py --checkpoint /absolute/path/to/other.pt
+uv run run.py --checkpoint /absolute/path/to/other.pt \
+  --imgsz 1280 --confidence 0.70 --device 0
 ```
 
 The mock validates client/API action formatting and limits. It does not validate
@@ -213,35 +215,62 @@ Do not keep the live client on a management node. Before the scheduled slot,
 open an interactive compute-node shell that lasts longer than the reservation:
 
 ```bash
-srun --partition=teaching --cpus-per-task=4 --mem=8G --time=00:45:00 --pty bash
+srun --partition=teaching --gres=gpu:1 --cpus-per-task=4 --mem=16G --time=00:45:00 --pty bash
 cd ~/Documents/GitHub/innovation-lab-fall-2026/PhysicalAI-Hackathon-2026
+nvidia-smi
 ```
 
-Run the approved supervised remediation policy and leave that terminal open for
-the full slot:
+The policy refuses to initialize with the default `--device 0` unless CUDA is
+available, preventing an accidentally CPU-bound YOLO26x run.
+
+### Recommended first physical runs
+
+Start with the contact-free hover policy. It keeps the gripper open and stops
+75 mm above the highest-confidence detected table cap:
 
 ```bash
-REMEDIATION_MODE=full uv run run.py
+uv run run.py --mode hover
 ```
 
-The policy takes a fresh TableCam snapshot, chooses predicted defects, raises
-to the transit height, moves horizontally, picks a loose cap, places it on a
-missing vial, then presses a crooked cap. It re-observes after pickup and after
-each repair. It keeps the fingers straight down. It currently assumes the
-custom-tool TCP is aligned to the CAD contact point, so the pickup, placement,
-and press offsets are provisional zero offsets. Keep the operator ready to
-stop the arm during the first descent.
+Confirm several hover targets across the table before trying full mode. If detections
+are sparse, test `--confidence 0.60`; if false positives appear, test `0.80`. Keep
+`--imgsz 1280` for the YOLO26x model unless an explicit speed/accuracy comparison
+shows that a smaller aperture is acceptable.
+
+Full mode uses unmeasured TCP offsets and therefore requires an explicit acknowledgement.
+For the first non-contact route check, use +10 mm offsets; positive offsets move the
+TCP upward relative to the RGB-D point:
+
+```bash
+uv run run.py --mode full --allow-provisional-contact \
+  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010
+```
+
+Test one operation at a time over a clear work area. Suggested progression is
+`0.010`, `0.005`, `0.002`, then `0.001` m. Do not move directly from +10 mm to zero
+over glass. The three controls have distinct effects:
+
+- `--pick-offset-m`: loose-cap gripper closing height.
+- `--place-offset-m`: release height above a missing-cap target.
+- `--press-offset-m`: lowest crooked-cap press height.
+
+Use a positive press offset for alignment-only trials. A zero or negative press offset
+can create contact and must be tried only at low speed with the operator ready to stop
+the arm. The controller rejects offsets outside +/-25 mm, targets without projected
+RGB-D points, detections below the confidence threshold, and targets outside the
+workspace. It permits one attempt per target and visually checks pickup and repair.
 
 ### Review local decision evidence
 
 Every physical-policy process prints a local trace directory when it starts.
 By default it is a new directory under `shared/runs/` named
 `YYYY-MM-DD_HH-MM-SS_physical_policy`. To choose an explicit directory for a
-scheduled run, set `REMEDIATION_TRACE_DIR` before starting the client:
+scheduled run, pass it on the command line:
 
 ```bash
-export REMEDIATION_TRACE_DIR="$PWD/../shared/runs/$(date +%F)_physical_remediation"
-REMEDIATION_MODE=full uv run run.py
+uv run run.py --mode full --allow-provisional-contact \
+  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --trace-dir "../shared/runs/$(date +%F)_physical_remediation"
 ```
 
 The trace directory contains:
