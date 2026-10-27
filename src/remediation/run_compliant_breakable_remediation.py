@@ -29,8 +29,8 @@ plug bottom corner on the opposite rim), default `--crooked-press regrip`:
   3. The cap is lifted straight up clear of the rim and turned upright in free air
      about the grip point.
   4. It is regrasped on the table (the side grip leaves it rocked in the pocket):
-     stood on a free table spot, released, located with a straight-down wrist view,
-     and picked again like the spare cap.
+     stood on a free table spot, released so it settles flat, and gripped again in
+     place by the still-surrounding fingers (no camera view).
   5. It is placed and pressed exactly like the missing cap.
   The crooked-cap motions are planned after the servo, since they depend on its result.
 
@@ -602,29 +602,13 @@ def plan_crooked_press(P, q_up, crooked_xy, strategy, crooked_tilt, tip, press_f
     return plan, d_t, s_t, edge, aligned
 
 
-def plan_table_pick(P, q, xy, spread, ledge):
-    """Pick an upright cap standing on the table at `xy` by its flange (tool vertical).
-
-    Open fingers descend around it until the pocket ledge is 1 mm under the flange;
-    closing the jaws traps the flange between the pocket ledge and shoulder.
-    """
-    from src.remediation.geometry import SPEC, transit_base_z
-    high, low = np.r_[xy, transit_base_z()], np.r_[xy, SPEC.surface_base_z + SPEC.plug_depth - 0.001]
-    plan = {'approach': s_curve_joints(q, P.solve(q, high, DOWN, spread, ledge), 40)}
-    plan['descend'] = P.line(plan['approach'][-1], high, low, DOWN, spread, ledge, 60)
-    plan['lift'] = P.line(plan['descend'][-1], low, high, DOWN, spread, ledge, 50)
-    return plan
-
-
-
 def plan_table_putdown(P, q, xy, spread, ledge):
-    """Stand a held cap upright on the table at `xy`, then raise the open fingers."""
+    """Carry a held cap over the table at `xy` and stand it upright there."""
     from src.remediation.geometry import SPEC, transit_base_z
     high = np.r_[xy, transit_base_z()]
     low = np.r_[xy, SPEC.surface_base_z + SPEC.plug_depth + PUTDOWN_DROP_M]
     plan = {'carry': s_curve_joints(q, P.solve(q, high, DOWN, spread, ledge), 50)}
     plan['lower'] = P.line(plan['carry'][-1], high, low, DOWN, spread, ledge, 60)
-    plan['raise'] = P.line(plan['lower'][-1], low, high, DOWN, spread, ledge, 40)
     return plan
 
 
@@ -649,10 +633,18 @@ def free_table_spot(depth, capture_report, near_xy, away_xy):
 
 
 def plan_regrasp_and_place(P, q, cap_xy, bore_xy, spread, ledge, tip):
-    """Re-pick the cap standing on the table at `cap_xy`, carry it over the vial at
-    `bore_xy`, place it and press it (plan_table_pick + plan_place_and_press)."""
-    from src.remediation.geometry import transit_base_z
-    plan = plan_table_pick(P, q, cap_xy, spread, ledge)
+    """Re-close on the cap just released on the table at `cap_xy`, carry it over the
+    vial at `bore_xy`, place it and press it (plan_place_and_press).
+
+    The open fingers are still around the released cap (put-down height), so they only
+    rise until the pocket ledge is 1 mm under its flange, as in the spare-cap pick; the
+    closing jaws centre the cap.  No camera view is needed.
+    """
+    from src.remediation.geometry import SPEC, transit_base_z
+    put = np.r_[cap_xy, SPEC.surface_base_z + SPEC.plug_depth + PUTDOWN_DROP_M]
+    low, high = np.r_[cap_xy, SPEC.surface_base_z + SPEC.plug_depth - 0.001], np.r_[cap_xy, transit_base_z()]
+    plan = {'rise_to_flange': P.line(q, put, low, DOWN, spread, ledge, 10)}
+    plan['lift'] = P.line(plan['rise_to_flange'][-1], low, high, DOWN, spread, ledge, 50)
     q_high = P.solve(plan['lift'][-1], np.r_[bore_xy, transit_base_z()], DOWN, spread, ledge)
     plan['carry_to_vial'] = s_curve_joints(plan['lift'][-1], q_high, 50)
     plan.update(plan_place_and_press(P, q_high, bore_xy, spread, ledge, tip))
@@ -672,8 +664,8 @@ def plan_regrip(P, q, bore_xy, axis, ledge, tip, putdown_xy):
     This side grip can hold the cap up to ~2.5 mm off the pocket axis and ~15 deg
     rocked in the 4.76 mm flange slot, which catches the plug on the rim (0.13 mm
     radial clearance at the plug top).  So the cap is regrasped on the table: stood
-    upright at `putdown_xy` and released; the caller then locates it with the wrist
-    camera and picks it again exactly like the spare cap (plan_regrasp_and_place).
+    upright at `putdown_xy`, released so it settles flat, and gripped again in place
+    by the same fingers (plan_regrasp_and_place).
     """
     from src.remediation.geometry import transit_base_z
     from src.remediation.servo_crooked_cap import leaning_cap_from_axis
@@ -709,10 +701,10 @@ def plan_regrip(P, q, bore_xy, axis, ledge, tip, putdown_xy):
                 qq = P.solve(qq, high, r.apply(d), s, ledge)
                 plan['upright'].append(qq.copy())
             down = plan_table_putdown(P, plan['upright'][-1], putdown_xy, s, ledge)
-            plan.update({'carry_to_table': down['carry'], 'lower_to_table': down['lower'], 'raise_open': down['raise']})
+            plan.update({'carry_to_table': down['carry'], 'lower_to_table': down['lower']})
             # Checked here so an unreachable regrasp fails before any motion; the
-            # re-pick itself is replanned once the wrist camera has located the cap.
-            plan_regrasp_and_place(P, down['raise'][-1], putdown_xy, bore_xy, s, ledge, tip)
+            # re-pick itself is replanned from the measured release point.
+            plan_regrasp_and_place(P, down['lower'][-1], putdown_xy, bore_xy, s, ledge, tip)
             return plan, {'cap_origin_model_base_m': p_cap.tolist(), 'cap_axis': cap_a.tolist(),
                           'tool_misalignment_deg': float(misalign), 'standoff_m': float(standoff),
                           'tool_axis': d.tolist(), 'spread_axis': s.tolist(), 'grasp_tool_point_base_m': grasp.tolist(),
@@ -969,7 +961,7 @@ def main():
         from src.remediation.custom_gripper import (attach_collision_proxies, attach_visual_pair,
                                                     finger_back_face_tcp, finger_tip_tcp)
         from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
-        from src.remediation.servo_crooked_cap import locate_upright_cap, read_wrist, servo_cap_axis, wrist_camera
+        from src.remediation.servo_crooked_cap import read_wrist, servo_cap_axis, wrist_camera
 
         omni.usd.get_context().open_stage(str(args.scene))
         app.update()
@@ -1157,17 +1149,12 @@ def main():
                 ex.run('stand_cap_on_table', plan_r['lower_to_table'], jaw_grip)
                 ex.jaws('release_on_table', jaw_grip, C.JAW_OPEN)
                 ex.hold('release_on_table', C.JAW_OPEN, 30)
-                ex.run('raise_open', plan_r['raise_open'], C.JAW_OPEN)
-                ex.jaws('close_for_wrist_view', C.JAW_OPEN, C.JAW_CLOSED)
-                cap_xy, q_look = locate_upright_cap(P, ex.q, putdown_xy, SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness,
-                                                    wrist, move, capture, servo_dir / 'regrasp_view.png')
-                regrip['regrasp_cap_xy_wrist_base_m'] = cap_xy.tolist()
-                print(f'[remediation] {crooked_slot} cap on table located at {np.round(cap_xy, 4)} '
-                      f'(released at {np.round(putdown_xy, 4)})', flush=True)
-                plan_p = plan_regrasp_and_place(P, q_look, cap_xy, crooked_xy, s_t, ledge, tip)
-                ex.run('regrasp_approach', plan_p['approach'], C.JAW_CLOSED)
-                ex.jaws('open_for_regrasp', C.JAW_CLOSED, C.JAW_OPEN)
-                ex.run('regrasp_descend', plan_p['descend'], C.JAW_OPEN)
+                # Re-close in place on the measured (FK) release point; no camera view.
+                Rj, pj = fk.fk(arm.get_joint_positions()[arm_idx])
+                release_xy = (pj + Rj @ np.asarray(ledge))[:2]
+                regrip['regrasp_release_xy_fk_base_m'] = release_xy.tolist()
+                plan_p = plan_regrasp_and_place(P, ex.q, release_xy, crooked_xy, s_t, ledge, tip)
+                ex.run('regrasp_rise_to_flange', plan_p['rise_to_flange'], C.JAW_OPEN)
                 ex.jaws('regrasp_flange', C.JAW_OPEN, jaw_hold)
                 ex.hold('regrasp_flange', jaw_hold, 15)
                 ex.run('regrasp_lift', plan_p['lift'], jaw_hold)
