@@ -76,16 +76,18 @@ def finger_tip_tcp(cap_seat_tcp_j6):
     return (x, 0.0, 0.0)
 
 
-def finger_back_edge_tcp(cap_seat_tcp_j6, jaw, jaw_grip, along=0.0):
-    """J6-frame point on the fingertip edge of the -Y finger's outer back face.
+def finger_back_face_tcp(cap_seat_tcp_j6, jaw, jaw_grip, along=0.0, up=0.0):
+    """J6-frame point on the outer back face of the -Y finger.
 
-    The back face is solid (the cap pockets, r <= 15.875 mm, stop short of it), so
-    unlike the side faces its fingertip edge has no notch.  At the coaxial grip pose
-    the back sits FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y from the centreline and
-    moves with the jaw.  `along` offsets the point along J6 Z, the edge direction.
+    The back face is solid over the finger's full length (the cap pockets,
+    r <= 15.875 mm about an axis 1.75 mm inside the grip side, stop short of it).
+    At the coaxial grip pose it sits FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y from
+    the centreline and moves with the jaw.  `up` is the distance back from the
+    fingertip along the tool axis (0 = the tip edge, next to the pocket mouth) and
+    `along` an offset along J6 Z across the face.
     """
     back = (FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y) + (jaw - jaw_grip)
-    return (finger_tip_tcp(cap_seat_tcp_j6)[0], -back, float(along))
+    return (finger_tip_tcp(cap_seat_tcp_j6)[0] - float(up), -back, float(along))
 
 
 def _jaw_mount(stage, jaw_root):

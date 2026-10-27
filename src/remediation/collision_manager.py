@@ -56,6 +56,14 @@ class CollisionConfig:
     cap_dynamic_friction: float = 1.0
     cap_restitution: float = 0.0
 
+    # Vial "give": glass held in the tray is not perfectly rigid at the rim.  PhysX
+    # compliant contact on the tube colliders acts as a stiff spring, ~0.5 mm of
+    # deflection at a 30 N press, instead of a hard non-penetration constraint.
+    vial_compliant_stiffness_N_per_m: float = 6.0e4
+    vial_compliant_damping_Ns_per_m: float = 100.0
+    vial_static_friction: float = 1.2
+    vial_dynamic_friction: float = 1.0
+
 
 CONFIG = CollisionConfig()
 
@@ -111,6 +119,9 @@ class CollisionSubAgent:
         # 5. Configure Static Tray & Vial Colliders
         static_prims = self.configure_static_tray_and_vials(stage)
         report["configured_vials_and_tray"] = len(static_prims)
+
+        # 6. Compliant ("give") contact on the vial tubes
+        report["compliant_vial_colliders"] = len(self.configure_vial_give(stage))
 
         if verbose:
             print(f"[CollisionSubAgent] Stage configured successfully:")
@@ -289,6 +300,28 @@ class CollisionSubAgent:
 
                     configured.append(str(prim.GetPath()))
 
+        return configured
+
+    def configure_vial_give(self, stage: Usd.Stage) -> List[str]:
+        """Bind a compliant-contact glass material to every vial tube collider."""
+        glass = self._get_or_create_physics_material(
+            stage, "/World/PhysicsMaterials/VialGlassCompliant",
+            static_friction=self.cfg.vial_static_friction,
+            dynamic_friction=self.cfg.vial_dynamic_friction,
+            restitution=0.0,
+        )
+        px = PhysxSchema.PhysxMaterialAPI(glass.GetPrim())
+        px.CreateCompliantContactStiffnessAttr().Set(self.cfg.vial_compliant_stiffness_N_per_m)
+        px.CreateCompliantContactDampingAttr().Set(self.cfg.vial_compliant_damping_Ns_per_m)
+        configured = []
+        tray = stage.GetPrimAtPath("/World/RemediationTray")
+        if not tray.IsValid():
+            return configured
+        for prim in Usd.PrimRange(tray):
+            if "_tube" in str(prim.GetPath()) and prim.HasAPI(UsdPhysics.CollisionAPI):
+                UsdShade.MaterialBindingAPI.Apply(prim).Bind(
+                    glass, bindingStrength=UsdShade.Tokens.strongerThanDescendants, materialPurpose="physics")
+                configured.append(str(prim.GetPath()))
         return configured
 
     def audit_stage_collisions(self, stage: Usd.Stage) -> Dict[str, any]:

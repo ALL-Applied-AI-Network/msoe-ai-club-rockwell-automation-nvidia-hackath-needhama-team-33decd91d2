@@ -42,7 +42,7 @@ Outputs in `<out_dir>`:
 - `action/attempt_report.json` and `action/frames/` - simulation result and frames
 - `action/yolo_frames/` and `tablecam_yolo_compliant_remediation.mp4` - annotated review video
 
-Latest physics-based run: [docs/media/physics_remediation_leaning_press.mp4](docs/media/physics_remediation_leaning_press.mp4) (click it on GitHub to play). The missing cap is picked, placed and seated through contact; the leaning crooked cap is pressed level by the tilted fingertips but is then carried off on retreat, so that step is not yet working (see `docs/PHYSICAL_SPECIFICATIONS.md` sec. 7).
+Latest physics-based run: [docs/media/physics_remediation_regrip.mp4](docs/media/physics_remediation_regrip.mp4) (click it on GitHub to play; full pipeline, scene `shared/runs/2026-10-26_docspec_blacksilver_leaning/`). The missing cap in G15 is picked, placed and seated through contact. The crooked cap in G09 is measured with the wrist camera, gripped along its axis, turned upright, regrasped on the table, and placed and pressed flush (see `docs/PHYSICAL_SPECIFICATIONS.md` sec. 7 for repeat results, including the 71 deg cap that still fails 2/3).
 
 Any other Isaac script: `./run.sh <script.py> [args]` (submits via Slurm on the login node). See `AGENTS.md` for architecture and rules, and `docs/REMEDIATION_RUNBOOK.md` for scene qualification and dataset/training steps.
 

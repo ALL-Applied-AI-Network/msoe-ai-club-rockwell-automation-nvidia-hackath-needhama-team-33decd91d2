@@ -60,7 +60,7 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --capture-report "$perception/capture_report.json" \
     --out "$perception/current_scene_detections.json" --device 0
 
-echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement and tilted press)..."
+echo "[pipeline] 3/4: Running physics-based remediation (contact-driven placement, wrist-servoed crooked-cap regrip)..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json"

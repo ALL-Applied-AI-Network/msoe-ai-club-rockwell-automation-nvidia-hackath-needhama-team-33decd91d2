@@ -200,4 +200,38 @@ Physics friction is unchanged (section 5: mu_s 1.2, mu_k 1.0, restitution 0). Vi
 - **Crooked cap, superseded balanced-pose scene (45 deg tilted press, back-face fingertip edge):** seated in 1/3 repeats. A balanced cap rests on its high-side plug edge with the whole flange inboard of that rim support (flange edge 10.9 mm vs rim 12.7 mm from the axis), so a downward push tips it further; the rigid sim has no cap compliance to help it slide in. Side-face (notched) and back-face-along-tilt variants were also tried; the cap pocket mouth at the fingertip captured the cap. Runs: `shared/runs/2026-10-26_physics_remediation_*`.
 - 90 deg (flat face horizontal) is not usable inside the tray: the SMC body hangs 18-24 mm below the finger faces and hits neighbouring vials.
 - **Crooked cap, leaning pose (scene `shared/runs/2026-10-26_docspec_blacksilver_leaning/`, G09 at 47.8 deg):** 0/3 seated with a straight-down press beside the raised flange edge. One run pushed the cap into the vial (68 N measured, vial fractured), one levelled it to ~10 deg but the cap was carried off on retreat, one was carried off before levelling. The TableCam depth plane fit misread the lean (21 deg tilt / 53 deg heading vs true 47.8 deg / 42.5 deg) because it assumes a flat cap top. Runs: `shared/runs/2026-10-26_physics_remediation_leaning_repeat*`.
+- **Same, with vial give** (compliant glass contact, 6e4 N/m / 100 N s/m, ~0.5 mm at 30 N; `collision_manager.configure_vial_give`): no fractures (peak 14-36 N vs 68 N rigid), but 0/3 seated. In every repeat the cap is carried out on retreat (see the back-face result below for the cause). Runs: `shared/runs/2026-10-26_physics_remediation_vialgive_repeat*`.
+- **Same, pressing with the solid outer back face 10 mm up from the tip** (`PRESS_FACE_UP_M`, path checked offline to stay clear of all glass): 0/3 seated, no fractures (13-28 N). The cap's open top (21.15 mm through the flange) faces up toward the tool in this lean; the finger slides into it and the cap rides out on the finger like a thimble. This is also what happened in the earlier fingertip presses (an earlier note attributing it to the finger pocket was wrong). Runs: `shared/runs/2026-10-26_physics_remediation_backface_repeat*`.
+- **Straight-down press with the closed fingertips** (`--crooked-press vertical`, now the default): 0/3 seated centred on the vial (the leaning cap slides up into the fingertip pocket; at the tip the pocket mouth, r 13.6 mm, is wider than the finger's 11.1 mm half-width, leaving only two solid crescents) and 0/3 with a crescent offset over the raised flange edge (tilt fell from ~45 to ~38-40 deg, then stalled). The cap stays in its vial; peak loads 12-18 N. Runs: `shared/runs/2026-10-26_physics_remediation_{vertical,crescent}_repeat*`.
 
+### Wrist-camera servoing onto the crooked cap axis (October 26, 2026)
+`src/remediation/servo_crooked_cap.py` (maths in `wrist_servo.py`). TableCam supplies only the vial position: its depth-based lean estimate was unreliable (heading wrong by 142 deg on one cap, tilt 21-33 deg against 48-71 deg true). The wrist camera first looks straight down over the vial, fits an ellipse to the inner edge of the cap's lit flange ring (the 21.15 mm opening), computes the two possible circle-plane normals in closed form, and picks one using the wrist depth gradient across the ring. It then points the camera down that axis and stops at the first view where the opening is round (minor/major >= 0.995), reporting that camera axis.
+
+| Cap | True tilt | Views | Final axis error |
+|---|---|---|---|
+| G09 | 47.7 deg | 2 | 2.2 deg |
+| G05 | 57.9 deg | 2 | 0.3 deg |
+| G30 | 67.3 deg | 2 | 0.4 deg |
+| G04 | 70.7 deg | 5 | 0.5 deg |
+
+The closed-form estimate is accurate from an oblique view (0.3-2.2 deg from the first, straight-down image) but noisy once the opening is nearly round (up to ~14 deg), so the round view's camera axis is used rather than its image estimate. Sim images are noise-free; real wrist RGB-D has not been tested. Runs: `shared/runs/2026-10-26_wrist_servo_v4_G09`, `shared/runs/2026-10-26_servo_test_seed*/servo_v4`.
+
+
+### Crooked cap: wrist-servoed grip, table regrasp and re-place (October 27, 2026)
+Default runner strategy (`--crooked-press regrip`). Sequence:
+1. Wrist-camera servo onto the cap axis (above).
+2. Open fingers approach down that axis, spread axis horizontal, and close on the flange. Near the robot base a cap leaning toward the robot needs J3 past its -69 deg limit for a coaxial grip (G09: -72.7 deg), so the tool may lean up to 10 deg less than the cap.
+3. The cap is lifted straight up and turned upright in free air.
+4. **Regrasp on the table.** The side grip leaves the cap up to 2.5 mm off the pocket axis and 15 deg rocked: the flange slot in the finger pocket is 4.76 mm tall against the 2.03 mm flange, and the plug top has only 0.13 mm radial clearance in the mouth, so placing it directly caught on the rim. The cap is pressed 1.5 mm into the table (squaring it in the slot), released on the vacated spare-cap spot (or a bare spot found in TableCam depth), located with a straight-down wrist view (opening centre back-projected onto the flange-top plane; roundness < 0.95 = fallen over, reported as a failure), and picked again like the spare.
+5. Placed and pressed like the missing cap.
+
+Supporting changes: the tray-grid fit rejects outliers (a false crooked detection 150 mm off the tray had shifted the grid ~5 mm) and uses TableCam-depth flange-top centroids instead of box centres (box centres are biased ~1.4 mm; the empty-bore correction added a +1.3 mm y bias), putting targets within 0.7 mm. Held caps are clamped 0.4 mm past the coaxial jaw value (~11 N per jaw) so they cannot rock onto one lip. The plug enters the mouth at 0.2 mm/step. With no missing-cap detection only the crooked cap is handled.
+
+| Slot (tilt) | Crooked cap seated | Missing cap seated |
+|---|---|---|
+| G05 (57.9 deg) | 2/2 | 2/2 |
+| G09 (47.7 deg) | 2/2 | 2/2 |
+| G30 (67.3 deg) | 2/2 | 2/2 |
+| G04 (70.7 deg) | 1/3 (2 fell over on the table during the regrasp) | no missing-cap detection |
+
+Seated caps finish at <0.002 deg tilt and <0.13 mm off the rim; peak measured vial loads 4-7 N. Final runs: `shared/runs/2026-10-27_regrip_*_v9*`; development history `_v1`-`_v8`.
