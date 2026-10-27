@@ -101,6 +101,8 @@ TABLE_FREE_RADIUS_M = 0.030
 TABLE_FREE_HEIGHT_M = 0.003
 # Tray-grid fit: detections farther than this from their nearest slot are outliers.
 FIT_INLIER_M = 0.015
+# Grid search half-width about the depth-measured plate centre (under half a slot pitch).
+PLATE_SEARCH_M = 0.020
 # Fewest good/crooked cap detections the tray-grid fit accepts (partly loaded trays).
 FIT_MIN_CAPS = 6
 # Per-slot TableCam depth check (point counts at the 1920 x 1080 depth resolution).  A
@@ -148,14 +150,29 @@ def s_curve_joints(q0, q1, steps):
     return pts
 
 
-def fit_tray_center(observed, layout):
+def plate_center_from_depth(depth, capture_report):
+    """Fixture XY from TableCam depth: midpoint of the 1st-99th percentile extent of the
+    points at the silver plate's top height (within ~3 mm in the qualified scenes)."""
+    from src.remediation.geometry import SPEC
+    z = SPEC.surface_base_z + SPEC.tray_base_thickness + SPEC.tray_top_clearance + SPEC.tray_top_thickness
+    pts, _ = tablecam_points(depth, capture_report)
+    pts = pts.reshape(-1, 3)
+    pts = pts[np.isfinite(pts).all(1) & (np.abs(pts[:, 2] - z) < 0.0015)]
+    if len(pts) < 1000:
+        raise RuntimeError('tray plate not found in TableCam depth')
+    return (np.percentile(pts[:, :2], 1, axis=0) + np.percentile(pts[:, :2], 99, axis=0)) / 2
+
+
+def fit_tray_center(observed, layout, plate_xy=None):
     """Estimate the fixture XY in the robot base frame from TableCam cap detections.
 
     Slides the documented 6 x 5 slot pattern over the detected caps (good and crooked)
     and keeps the translation with the smallest mean nearest-slot distance, then
     refines it with the matched residuals. Distances are capped at FIT_INLIER_M and only
     inliers refine the fit, so a false detection off the tray cannot drag the grid.
-    No tray coordinates are hardcoded.
+    No tray coordinates are hardcoded.  With few caps (a partly loaded tray) a grid
+    shifted by one slot pitch can fit as well, so with `plate_xy` (plate_center_from_depth)
+    the search is limited to within PLATE_SEARCH_M of the measured plate centre.
     """
     slots = np.array([v[:2] for v in layout['slots_m'].values()])
     pts = np.array([d['base_pos_m'][:2] for d in observed if d['class_name'] in ('good_cap', 'crooked_cap')])
@@ -166,8 +183,11 @@ def fit_tray_center(observed, layout):
         d = np.linalg.norm(pts[:, None, :] - (slots + c)[None, :, :], axis=2)
         return np.minimum(d.min(axis=1), FIT_INLIER_M).mean()
 
-    xs = np.arange(0.05, 0.60, 0.002)
-    ys = np.arange(-0.25, 0.30, 0.002)
+    if plate_xy is None:
+        xs, ys = np.arange(0.05, 0.60, 0.002), np.arange(-0.25, 0.30, 0.002)
+    else:
+        xs = np.arange(plate_xy[0] - PLATE_SEARCH_M, plate_xy[0] + PLATE_SEARCH_M, 0.002)
+        ys = np.arange(plate_xy[1] - PLATE_SEARCH_M, plate_xy[1] + PLATE_SEARCH_M, 0.002)
     best = min(((score(np.array([x, y])), x, y) for x in xs for y in ys))
     c = np.array([best[1], best[2]])
     for _ in range(5):
@@ -305,7 +325,8 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
     directly (within ~0.7 mm); otherwise it is corrected with the empty-bore detections.
     """
     from src.remediation.geometry import rim_base_z
-    center, fit_err = fit_tray_center(observed, layout)
+    plate_xy = plate_center_from_depth(depth, capture_report) if depth is not None else None
+    center, fit_err = fit_tray_center(observed, layout, plate_xy)
     slots = lambda c: {s: c + np.array(v[:2]) for s, v in layout['slots_m'].items()}
     grid = slots(center)
     nearest = lambda xy: min(grid, key=lambda s: np.linalg.norm(grid[s] - xy))
@@ -351,6 +372,7 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
                         'spare': spare, 'spare_xy': np.asarray(spare['base_pos_m'][:2])})
     crooked = [{'slot': s, 'xy': grid[s], 'detection': per_slot[s]} for s in crooked_slots]
     return {'tray_center_base_m': center.tolist(), 'tray_fit_error_m': fit_err, 'depth_refined': depth_refined,
+            'plate_center_depth_base_m': None if plate_xy is None else plate_xy.tolist(),
             'missing': missing, 'crooked': crooked, 'slot_depth_check': slot_depth,
             'unfilled_missing_slots': [s for s in missing_slots if s not in {m['slot'] for m in missing}]}
 
