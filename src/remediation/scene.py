@@ -267,7 +267,8 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap',
                                   **({'spawn_tilt_deg':tilt} if tilted else {})})
     for i in range(table_caps):
-        row,col=divmod(i,5)
+        # Three per row: a fourth column (x 0.415 m and beyond) is at the edge of the arm's reach.
+        row,col=divmod(i,3)
         pos=np.array([.28+col*.045,-.255+row*.043,0.])
         if randomize: pos[:2]+=rng.uniform(-.001,.001,2)
         cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(SPEC.surface_world_z,cap_R)

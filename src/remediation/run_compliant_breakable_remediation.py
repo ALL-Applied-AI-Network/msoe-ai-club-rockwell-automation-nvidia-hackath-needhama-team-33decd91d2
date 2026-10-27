@@ -360,7 +360,8 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
         if res:
             center = center + np.mean(res, axis=0)
             grid = slots(center)
-    spares = sorted((d for d in observed if d.get('class_name') == 'table_cap'), key=lambda d: -d['confidence'])
+    spares_all = sorted((d for d in observed if d.get('class_name') == 'table_cap'), key=lambda d: -d['confidence'])
+    spares = list(spares_all)
     missing = []
     for s in missing_slots:
         if not spares:
@@ -373,7 +374,7 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
     crooked = [{'slot': s, 'xy': grid[s], 'detection': per_slot[s]} for s in crooked_slots]
     return {'tray_center_base_m': center.tolist(), 'tray_fit_error_m': fit_err, 'depth_refined': depth_refined,
             'plate_center_depth_base_m': None if plate_xy is None else plate_xy.tolist(),
-            'missing': missing, 'crooked': crooked, 'slot_depth_check': slot_depth,
+            'missing': missing, 'crooked': crooked, 'spares': spares_all, 'slot_depth_check': slot_depth,
             'unfilled_missing_slots': [s for s in missing_slots if s not in {m['slot'] for m in missing}]}
 
 
@@ -927,24 +928,6 @@ def main():
             c['tilt'] = {'high_side_azimuth_deg': float(np.degrees(az)), 'tilt_deg': tilt, 'depth_points': n}
             print(f"[remediation] crooked cap {c['slot']} from depth: high side {np.degrees(az):.1f} deg, "
                   f"tilt {tilt:.1f} deg ({n} points)", flush=True)
-    putdown_xy = None
-    if args.crooked_press == 'regrip' and crooked:
-        # Regrasp spot (reused for every crooked cap, which is picked back up from it):
-        # the first spare's spot once the spares have been placed, else bare table beside it.
-        if missing:
-            putdown_xy = missing[0]['spare_xy']
-        elif have_depth:
-            near = np.asarray(choose_candidate(observed, 'table_cap')['base_pos_m'][:2])
-            putdown_xy = free_table_spot(depth_img, capture, near, np.asarray(targets['tray_center_base_m']))
-        else:
-            raise RuntimeError('regrip needs a free table spot: no missing cap and no TableCam depth')
-        targets['regrasp_table_xy'] = putdown_xy
-        print(f'[remediation] regrasp table spot {np.round(putdown_xy, 4)}', flush=True)
-    missing_slots, crooked_slots = [m['slot'] for m in missing], [c['slot'] for c in crooked]
-    print(f"[remediation] tray centre {np.round(targets['tray_center_base_m'], 4)} "
-          f"(fit error {targets['tray_fit_error_m']*1000:.1f} mm); missing={missing_slots}, crooked={crooked_slots}, "
-          f"unfilled (no spare)={targets['unfilled_missing_slots']}", flush=True)
-
     # Prevent argparse flags being passed to Kit
     sys.argv = [sys.argv[0]]
     from isaacsim import SimulationApp
@@ -971,6 +954,87 @@ def main():
         attach_collision_proxies(stage)
         col_report = configure_stage_collisions(stage)
 
+        ledge = tuple(mount['cap_seat_tcp_j6_m'])      # held cap origin (flange underside)
+        tip = finger_tip_tcp(ledge)                    # closed fingertip face centre
+        jaw_grip = mount['cap_grip_jaw_m']
+        jaw_hold = jaw_grip - JAW_CLAMP_M
+        press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
+        transit_z = transit_base_z()
+        spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom
+
+        # ---- plan (raises before any motion if a waypoint is unreachable) ----
+        # The crooked-cap regrips are planned after each wrist servo, since they depend
+        # on its result; only the view above each vial is checked here.
+        P = Planner()
+        try:
+            q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
+                         np.array([.24, .25, transit_z]), DOWN, SPREAD_Y, ledge)
+            q_up = q0
+            def plan_spare(q, spare_xy, missing_xy):
+                high_sp, low_sp = np.r_[spare_xy, transit_z], np.r_[spare_xy, spare_flange_z - 0.001]
+                q_high_sp = P.solve(q, high_sp, DOWN, SPREAD_Y, ledge)
+                plan = {'approach_spare': s_curve_joints(q, q_high_sp, 40)}
+                plan['descend_spare'] = P.line(q_high_sp, high_sp, low_sp, DOWN, SPREAD_Y, ledge, 60)
+                plan['lift_spare'] = P.line(plan['descend_spare'][-1], low_sp, high_sp, DOWN, SPREAD_Y, ledge, 50)
+                q_high_mi = P.solve(plan['lift_spare'][-1], np.r_[missing_xy, transit_z], DOWN, SPREAD_Y, ledge)
+                plan['carry_spare'] = s_curve_joints(plan['lift_spare'][-1], q_high_mi, 50)
+                plan['place_missing'] = plan_place_and_press(P, q_high_mi, missing_xy, SPREAD_Y, ledge, tip)
+                return plan
+
+            # Each missing slot takes its assigned spare, else the nearest unused spare the
+            # arm can reach; slots left without a reachable spare are reported unfilled.
+            unused = [d for d in targets['spares'] if not any(d is m['spare'] for m in missing)]
+            filled, unfilled = [], list(targets['unfilled_missing_slots'])
+            for m in missing:
+                options = [m['spare']] + sorted(unused, key=lambda d: np.linalg.norm(np.asarray(d['base_pos_m'][:2]) - m['xy']))
+                for spare in options:
+                    try:
+                        plan = plan_spare(q_up, np.asarray(spare['base_pos_m'][:2]), m['xy'])
+                    except RuntimeError as exc:
+                        print(f"[remediation] spare at {np.round(spare['base_pos_m'][:2], 4)} for {m['slot']}: {exc}", flush=True)
+                        continue
+                    if spare is not m['spare']:
+                        unused.remove(spare)
+                        unused.append(m['spare'])
+                    m.update(spare=spare, spare_xy=np.asarray(spare['base_pos_m'][:2]), plan=plan)
+                    q_up = plan['place_missing']['retreat'][-1]
+                    filled.append(m)
+                    break
+                else:
+                    unfilled.append(m['slot'])
+            missing = filled
+            for c in crooked:
+                if args.crooked_press == 'regrip':
+                    P.solve(q_up, np.r_[c['xy'], transit_z], DOWN, SPREAD_Y, ledge)
+                    c['press_pose'] = (DOWN, SPREAD_Y, ledge, False)
+                else:
+                    plan, *pose = plan_crooked_press(P, q_up, c['xy'], args.crooked_press, c['tilt'], tip, press_face)
+                    c['plan'], c['press_pose'] = plan, tuple(pose)
+                    q_up = plan['retreat_crooked'][-1]
+        except BaseException as exc:
+            failure = {'stage': 'trajectory_planning', 'scene': str(args.scene), 'error_type': type(exc).__name__,
+                       'error': str(exc), 'targets': {'missing': [{k: m[k] for k in ('slot', 'detection', 'spare')} for m in missing],
+                                                      'crooked': [{k: c[k] for k in ('slot', 'detection')} for c in crooked]}}
+            (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2, default=str) + '\n')
+            raise
+        putdown_xy = None
+        if args.crooked_press == 'regrip' and crooked:
+            # Regrasp spot (reused for every crooked cap, which is picked back up from it):
+            # the first spare's spot once the spares have been placed, else bare table beside it.
+            if missing:
+                putdown_xy = missing[0]['spare_xy']
+            elif have_depth:
+                near = np.asarray(choose_candidate(observed, 'table_cap')['base_pos_m'][:2])
+                putdown_xy = free_table_spot(depth_img, capture, near, np.asarray(targets['tray_center_base_m']))
+            else:
+                raise RuntimeError('regrip needs a free table spot: no missing cap and no TableCam depth')
+            targets['regrasp_table_xy'] = putdown_xy
+            print(f'[remediation] regrasp table spot {np.round(putdown_xy, 4)}', flush=True)
+        missing_slots, crooked_slots = [m['slot'] for m in missing], [c['slot'] for c in crooked]
+        print(f"[remediation] tray centre {np.round(targets['tray_center_base_m'], 4)} "
+              f"(fit error {targets['tray_fit_error_m']*1000:.1f} mm); missing={missing_slots}, crooked={crooked_slots}, "
+              f"unfilled (no spare)={unfilled}", flush=True)
+
         for m in missing:
             m['prim'] = find_closest_cap_prim(stage, np.r_[m['spare_xy'], 0.])
         for c in crooked:
@@ -988,48 +1052,6 @@ def main():
         names = list(arm.dof_names)
         arm_idx = [names.index(f'J{i}') for i in range(1, 7)]
 
-        ledge = tuple(mount['cap_seat_tcp_j6_m'])      # held cap origin (flange underside)
-        tip = finger_tip_tcp(ledge)                    # closed fingertip face centre
-        jaw_grip = mount['cap_grip_jaw_m']
-        jaw_hold = jaw_grip - JAW_CLAMP_M
-        press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
-        transit_z = transit_base_z()
-        spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom
-
-        # ---- plan (raises before any motion if a waypoint is unreachable) ----
-        # The crooked-cap regrips are planned after each wrist servo, since they depend
-        # on its result; only the view above each vial is checked here.
-        P = Planner()
-        try:
-            q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
-                         np.array([.24, .25, transit_z]), DOWN, SPREAD_Y, ledge)
-            q_up = q0
-            for m in missing:
-                spare_xy, missing_xy = m['spare_xy'], m['xy']
-                high_sp, low_sp = np.r_[spare_xy, transit_z], np.r_[spare_xy, spare_flange_z - 0.001]
-                q_high_sp = P.solve(q_up, high_sp, DOWN, SPREAD_Y, ledge)
-                plan = {'approach_spare': s_curve_joints(q_up, q_high_sp, 40)}
-                plan['descend_spare'] = P.line(q_high_sp, high_sp, low_sp, DOWN, SPREAD_Y, ledge, 60)
-                plan['lift_spare'] = P.line(plan['descend_spare'][-1], low_sp, high_sp, DOWN, SPREAD_Y, ledge, 50)
-                q_high_mi = P.solve(plan['lift_spare'][-1], np.r_[missing_xy, transit_z], DOWN, SPREAD_Y, ledge)
-                plan['carry_spare'] = s_curve_joints(plan['lift_spare'][-1], q_high_mi, 50)
-                plan['place_missing'] = plan_place_and_press(P, q_high_mi, missing_xy, SPREAD_Y, ledge, tip)
-                q_up = plan['place_missing']['retreat'][-1]
-                m['plan'] = plan
-            for c in crooked:
-                if args.crooked_press == 'regrip':
-                    P.solve(q_up, np.r_[c['xy'], transit_z], DOWN, SPREAD_Y, ledge)
-                    c['press_pose'] = (DOWN, SPREAD_Y, ledge, False)
-                else:
-                    plan, *pose = plan_crooked_press(P, q_up, c['xy'], args.crooked_press, c['tilt'], tip, press_face)
-                    c['plan'], c['press_pose'] = plan, tuple(pose)
-                    q_up = plan['retreat_crooked'][-1]
-        except BaseException as exc:
-            failure = {'stage': 'trajectory_planning', 'scene': str(args.scene), 'error_type': type(exc).__name__,
-                       'error': str(exc), 'targets': {'missing': [{k: m[k] for k in ('slot', 'detection', 'spare')} for m in missing],
-                                                      'crooked': [{k: c[k] for k in ('slot', 'detection')} for c in crooked]}}
-            (args.out / 'failure_report.json').write_text(json.dumps(failure, indent=2, default=str) + '\n')
-            raise
         print(f'[remediation] all motions planned', flush=True)
 
         camera = Camera(cell.TABLE_CAM_PATH, resolution=(1280, 720))
@@ -1204,11 +1226,11 @@ def main():
             'physical_robot_authorized': False,
             'scene': str(args.scene),
             'current_scene_detections': str(args.detections),
-            'targets': {**{k: v for k, v in targets.items() if k not in ('missing', 'crooked')},
+            'targets': {**{k: v for k, v in targets.items() if k not in ('missing', 'crooked', 'unfilled_missing_slots')},
                         'missing': [clean(m) for m in missing], 'crooked': [clean(c) for c in crooked]},
             'missing_slots': missing_slots,
             'crooked_slots': crooked_slots,
-            'unfilled_missing_slots': targets['unfilled_missing_slots'],
+            'unfilled_missing_slots': unfilled,
             'tool_points_j6_m': {'pocket_ledge': list(ledge), 'fingertip_face': list(tip)},
             'crooked_regrip': regrips,
             'crooked_press': {'strategy': args.crooked_press,
