@@ -101,6 +101,17 @@ POLICY_MAX_JOINT_STEP_DEG = 0.5
 # resumes/finally settles below 0.5 degree.
 POLICY_MAX_FOLLOWING_ERROR_DEG = 2.0
 POLICY_RESUME_ERROR_DEG = 0.5
+# A position-limited contact endpoint can retain a small elastic drive error
+# even after settling (the TPU tool/contact stack is deliberately compliant).
+# Keep it below the normal bounded-following limit without requiring the
+# evaluator's contact force in the controller decision.
+POLICY_ENDPOINT_ERROR_DEG = 1.0
+# Table-cap detections backproject to the 15.492 mm cap top.  The STEP finger
+# pocket ledge is 2.7454 mm behind the fingertip TCP and must pass the 2.032 mm
+# flange thickness, requiring 4.7774 mm downward travel.  Bias another 1.22 mm
+# low inside the pocket's 4.7625 mm flange band; the TPU fingers tolerate the
+# low miss and this remains exclusive to the opt-in cone workflow.
+CONE_TABLE_CAP_PICK_OFFSET_M = -0.006
 # Near the base a cap leaning toward the robot needs J3 past its limit for a coaxial
 # grip, and at the far tray edge a cap leaning away needs the wrist beyond reach; the
 # tool is then tilted toward vertical (about the spread axis) in 2 deg steps up to this
@@ -198,6 +209,61 @@ def speed_limited_joints(q0, q1, min_steps=60):
     steps = max(int(min_steps), int(np.ceil((np.pi / 2.0) * peak_delta_deg /
                                             POLICY_MAX_JOINT_STEP_DEG)))
     return s_curve_joints(q0, q1, steps)
+
+
+def nearest_periodic_joints(q, reference, limits):
+    """Choose the nearest equivalent command for full-turn robot joints.
+
+    The ER-4iA J6 limits admit periodic representations of the same physical
+    pose (for example 0 and 360 degrees).  Numerical IK can converge onto a
+    limit representation even when the adjacent equivalent is a short move.
+    Normalize only joints whose configured range spans a full revolution;
+    non-periodic arm joints retain the IK result exactly.
+    """
+    q = np.asarray(q, float).copy()
+    reference = np.asarray(reference, float)
+    limits = np.asarray(limits, float)
+    full_turn = 2.0 * np.pi
+    for index, (low, high) in enumerate(limits):
+        if high - low < full_turn - 1e-9:
+            continue
+        first = int(np.ceil((low - q[index]) / full_turn - 1e-12))
+        last = int(np.floor((high - q[index]) / full_turn + 1e-12))
+        candidates = q[index] + full_turn * np.arange(first, last + 1)
+        if len(candidates):
+            q[index] = candidates[np.argmin(np.abs(candidates - reference[index]))]
+    return q
+
+
+def single_joint_offset(q, joint_index, delta_rad, limits):
+    """Return an exact one-joint move, rejecting rather than wrapping limits."""
+    q = np.asarray(q, float)
+    limits = np.asarray(limits, float)
+    target = q.copy()
+    target[joint_index] += float(delta_rad)
+    low, high = limits[joint_index]
+    if target[joint_index] < low - 1e-9 or target[joint_index] > high + 1e-9:
+        raise RuntimeError(
+            f'joint {joint_index + 1} offset would exceed limits: '
+            f'{np.degrees(target[joint_index]):.1f} deg not in '
+            f'[{np.degrees(low):.1f}, {np.degrees(high):.1f}]')
+    return target
+
+
+def is_default_vertical_wpr(wpr):
+    return bool(np.allclose(wpr, (-180.0, 0.0, 0.0), atol=1e-8))
+
+
+def should_preserve_missing_wrist(pending_class, wpr):
+    """Round missing-cap actions retain current yaw instead of swapping jaws."""
+    return pending_class == 'missing_cap' and is_default_vertical_wpr(wpr)
+
+
+def is_cone_prepare_action(pending_class, cone_wrist_staged,
+                           current_jaw, target_jaw, wpr):
+    """Identify only the jaw-close immediately before the crooked-cap handoff."""
+    return (pending_class == 'crooked_cap' and not cone_wrist_staged and
+            target_jaw != current_jaw and is_default_vertical_wpr(wpr))
 
 
 def joint_step_deg(q0, q1):
@@ -340,13 +406,27 @@ def refine_caps_with_depth(observed, depth, capture_report):
     out = []
     for d in observed:
         d = dict(d)
-        top = tops.get(d.get('class_name'))
-        if top is not None and 'bbox_xyxy' in d:
+        class_name = d.get('class_name')
+        target_z = tops.get(class_name)
+        if target_z is not None and 'bbox_xyxy' in d:
+            # A loose cap settles on the paper with small physics/contact
+            # offsets, so its actual flange top can be about 1 mm above the
+            # nominal construction plane.  Sampling at the nominal height then
+            # selects only a partial side ring and biases XY several mm.  Use
+            # the camera-observed top to choose depth points, but retain the
+            # nominal target Z so the proven pickup TCP height is unchanged.
+            sample_z = target_z
+            tolerance = 0.0008
+            observed_top = float(d.get('surface_top_base_z_m', np.nan))
+            if (class_name == 'table_cap' and np.isfinite(observed_top) and
+                    abs(observed_top - target_z) < 0.004):
+                sample_z = observed_top
+                tolerance = 0.0005
             x0, y0, x1, y1 = [int(round(v / scale)) for v in d['bbox_xyxy']]
             q = pts[max(0, y0):y1, max(0, x0):x1].reshape(-1, 3)
-            q = q[np.isfinite(q).all(1) & (np.abs(q[:, 2] - top) < 0.0008)]
+            q = q[np.isfinite(q).all(1) & (np.abs(q[:, 2] - sample_z) < tolerance)]
             if len(q) > 30:
-                d['base_pos_m'] = [*q[:, :2].mean(0).tolist(), top]
+                d['base_pos_m'] = [*q[:, :2].mean(0).tolist(), target_z]
                 d['localization'] = 'tablecam_depth_flange_top_centroid'
         out.append(d)
     return out
@@ -442,6 +522,35 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
             'unfilled_missing_slots': [s for s in missing_slots if s not in {m['slot'] for m in missing}]}
 
 
+def align_policy_defects_to_grid(observed, target_summary):
+    """Return one camera defect per fitted aperture, centred on that aperture.
+
+    RGB boxes propose missing/crooked candidates and aligned depth decides the
+    slot state in :func:`choose_targets`.  The runner must then command the
+    perception-fitted grid centre, not the oblique RGB box centre: the latter is
+    biased toward a visible vial-mouth edge by several millimetres.  Preserve
+    the observed cap feature/high point for cone contact while replacing only
+    the vial-aperture XY used for association and placement.
+    """
+    detections = [dict(item) for item in observed
+                  if item.get('class_name') not in ('missing_cap', 'crooked_cap')]
+    for class_name, key in (('missing_cap', 'missing'), ('crooked_cap', 'crooked')):
+        for target in target_summary[key]:
+            detection = dict(target['detection'])
+            observed_pos = np.asarray(detection['base_pos_m'], float)
+            grid_xy = np.asarray(target['xy'], float)
+            detection.update(
+                class_name=class_name,
+                base_pos_m=[*grid_xy.tolist(), float(observed_pos[2])],
+                tray_slot=target['slot'],
+                localization_note=(
+                    'Contact XY assigned to the perception-derived tray-grid fit; '
+                    'cap surface and feature geometry remain aligned RGB-D observations'),
+                source='live_tablecam_depth_tray_grid')
+            detections.append(detection)
+    return detections
+
+
 class Planner:
     """IK waypoint generation for one tool point and tool orientation at a time."""
 
@@ -457,7 +566,7 @@ class Planner:
         q_new, ok = self.ik.solve(q, p, d, self.limits, tool_offset=tuple(tool), spread_dir=s)
         if not ok:
             raise RuntimeError(f'unreachable waypoint at {np.round(p, 4)}, dir={np.round(d, 3)}')
-        return q_new
+        return nearest_periodic_joints(q_new, q, self.limits)
 
     def line(self, q, p0, p1, d, s, tool, steps):
         path = []
@@ -468,15 +577,29 @@ class Planner:
 
     def pose_line(self, q, p0, R0, p1, R1, tool, min_steps=60):
         """Cartesian path with simultaneous speed-limited orientation change."""
-        path = []
-        for p, R in pose_interpolation(p0, R0, p1, R1, min_steps):
-            q_next = self.solve(q, p, R[:, 2], R[:, 1], tool)
-            step_deg = joint_step_deg(q, q_next)
-            if step_deg > POLICY_MAX_JOINT_STEP_DEG + 1e-6:
-                raise RuntimeError(f'Cartesian IK changed joint branch ({step_deg:.1f} deg step)')
-            q = q_next
-            path.append(q.copy())
-        return path
+        q_start = np.asarray(q, float).copy()
+        requested_steps = int(min_steps)
+        last_step_deg = float('inf')
+        for _ in range(4):
+            q = q_start.copy()
+            path = []
+            samples = pose_interpolation(p0, R0, p1, R1, requested_steps)
+            for p, R in samples:
+                q_next = self.solve(q, p, R[:, 2], R[:, 1], tool)
+                last_step_deg = joint_step_deg(q, q_next)
+                if last_step_deg > POLICY_MAX_JOINT_STEP_DEG + 1e-6:
+                    break
+                q = q_next
+                path.append(q.copy())
+            else:
+                return path
+            # A genuine alternate IK branch remains a large jump regardless of
+            # sampling density.  Small excesses are ordinary nonlinear joint
+            # amplification, so refine the still-unexecuted Cartesian path.
+            if last_step_deg > 5.0:
+                break
+            requested_steps = max(requested_steps * 2, len(samples) * 2)
+        raise RuntimeError(f'Cartesian IK changed joint branch ({last_step_deg:.1f} deg step)')
 
     def steady(self, q, p0, p1, d, s, tool, step_m):
         """Constant-speed straight line, `step_m` per physics step (used for pressing)."""
@@ -976,7 +1099,7 @@ class Executor:
             # was bounded. Hold the final command until the physical drive bias
             # is reached or fail rather than claiming the TCP destination.
             for _ in range(60):
-                if self._tracking_error_deg() <= POLICY_RESUME_ERROR_DEG:
+                if self._tracking_error_deg() <= POLICY_ENDPOINT_ERROR_DEG:
                     break
                 self.step(phase + '_endpoint_settle', self.q, jaw)
             else:
@@ -1047,8 +1170,10 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     from isaacsim.core.prims import SingleArticulation
     from isaacsim.sensors.camera import Camera
     from src.remediation.controller import (ContactTool, RemediationController,
-                                            wpr_to_rotation)
+                                            command_rotation_to_j6,
+                                            j6_rotation_to_command, wpr_to_rotation)
     from src.remediation.geometry import SPEC, base_to_uf0, transit_base_z, uf0_to_base
+    from src.remediation.geometry import load_layout
     from src.remediation.policy_driver import PolicyDriver
 
     P = Planner()
@@ -1095,20 +1220,41 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                   tracked=tracked, press_control='position-limited',
                   eoat_paths=(cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE),
                   closed_loop_tracking=True)
+    effective_pick_offset = (args.cone_table_pick_offset_m
+                             if args.crooked_action == 'cone-press'
+                             else args.pick_offset_m)
     controller = RemediationController(
-        ContactTool(args.pick_offset_m, args.place_offset_m, args.press_offset_m, validated=True),
-        max_attempts=1, min_confidence=args.confidence,
+        ContactTool(effective_pick_offset, args.place_offset_m,
+                    args.press_offset_m, validated=True),
+        # The STEP-measured broad TPU cone performs one centred seating press;
+        # do not repeat the wrist rotation after contact.
+        max_attempts=1,
+        min_confidence=args.confidence,
         crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
         crooked_tap_depth_m=args.crooked_tap_depth_m,
-        crooked_action=args.crooked_action)
+        crooked_action=args.crooked_action,
+        cone_tip_from_tcp_m=mount.get('cone_tip_from_tcp_m',
+                                      (0.0, -0.0369851212, -0.0098332793)),
+        cone_wrist_wpr_deg=mount.get('cone_wrist_wpr_deg',
+                                     (-180.0, 0.0, -90.0)),
+        cone_press_wpr_deg=mount.get('cone_press_wpr_deg',
+                                     (-180.0, 45.0, -90.0)),
+        cone_press_below_rim_m=args.cone_press_below_rim_m)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
     checkpoint = Path(args.checkpoint).resolve()
-    conda_python = ROOT / '.conda_env/bin/python'
+    conda_python = Path(os.environ.get(
+        'REMEDIATION_PYTHON', str(ROOT / '.conda_env/bin/python')))
+    if not conda_python.is_absolute():
+        conda_python = ROOT / conda_python
+    if not conda_python.is_file():
+        raise FileNotFoundError(
+            f'YOLO Python not found at {conda_python}; set REMEDIATION_PYTHON')
     inspect_script = ROOT / 'src/inspection/inspect_remediation_capture.py'
     capture_report = Path(args.capture_report).resolve()
     last_action = [*base_to_uf0((np.array([.24, .25, transit_base_z()]))), -180., 0., 0.]
     current_jaw = C.JAW_OPEN
+    cone_wrist_staged = False
     inference_index = 0
     cached = {'detections': None, 'depth': None}
 
@@ -1138,8 +1284,11 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         inference_env.pop('PYTHONPATH', None)
         subprocess.run(command, cwd=ROOT, check=True, env=inference_env)
         raw = json.loads(result_path.read_text())['targets']
+        refined = refine_caps_with_depth(raw, depth, capture)
+        fitted = choose_targets(refined, load_layout(), depth_refined=True,
+                                depth=depth, capture_report=capture)
         detections = []
-        for item in refine_caps_with_depth(raw, depth, capture):
+        for item in align_policy_defects_to_grid(refined, fitted):
             clean = dict(item)
             clean['contact_qualified'] = True
             clean['depth_available'] = bool(item.get('depth_available', True))
@@ -1171,22 +1320,65 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         return obs, detections
 
     def execute(action, state):
-        nonlocal last_action, current_jaw
+        nonlocal last_action, current_jaw, cone_wrist_staged
         action = np.asarray(action, dtype=float)
         target = uf0_to_base(action[:3])
-        rotation = wpr_to_rotation(action[3:6])
         Rj, pj = fk.fk(ex.q)
+        pending_class = (controller.pending or {}).get('target', {}).get('class_name')
+        preserve_missing_wrist = should_preserve_missing_wrist(
+            pending_class, action[3:6])
+        # Round-cap pick/place has no meaningful yaw.  Preserve the measured
+        # straight wrist orientation instead of asking IK for its 180-degree
+        # jaw-swapped equivalent; this removes the otherwise unnecessary turn
+        # before the table-cap pickup without changing any TCP position.
+        rotation = (j6_rotation_to_command(Rj) if preserve_missing_wrist
+                    else wpr_to_rotation(action[3:6]))
+        target_j6_rotation = command_rotation_to_j6(rotation)
         start = pj + Rj @ np.asarray(tip)
         target_jaw = mount['cap_grip_jaw_m'] - JAW_CLAMP_M if action[6] >= .5 else C.JAW_OPEN
         same_position = np.linalg.norm(target - start) < 1e-5
         same_orientation = (ScipyRot.from_matrix(Rj).inv() *
-                            ScipyRot.from_matrix(rotation)).magnitude() < 1e-5
-        if same_position and same_orientation and target_jaw != current_jaw:
+                            ScipyRot.from_matrix(target_j6_rotation)).magnitude() < 1e-5
+        cone_wrist_stage = (
+            args.controller_policy == 'shared' and
+            args.crooked_action == 'cone-press' and
+            not cone_wrist_staged and
+            np.allclose(action[3:6], mount.get('cone_wrist_wpr_deg',
+                                               (-180.0, 0.0, -90.0)), atol=1e-8))
+        cone_prepare_stage = (
+            args.controller_policy == 'shared' and
+            args.crooked_action == 'cone-press' and
+            is_cone_prepare_action(pending_class, cone_wrist_staged,
+                                   current_jaw, target_jaw, action[3:6]))
+        if cone_prepare_stage:
+            # The arm is already at the straight clearance pose left by the
+            # missing-cap workflow.  Re-solving this nominal TCP orientation
+            # admits an equivalent 180-degree J6 representation before the
+            # requested quarter-turn.  This action is intentionally jaw-only.
+            ex.jaws(f'policy_{state}_cone_prepare', current_jaw, target_jaw, n=20)
+        elif cone_wrist_stage:
+            # A Cartesian IK solve can represent this pure wrist roll by the
+            # periodic +270-degree J6 solution and redistribute it through the
+            # arm.  The real motion is exactly one clockwise quarter-turn at
+            # clearance: hold J1--J5, move only J6 by -90 degrees, and retain
+            # normal collision/tracking checks while executing the path.
+            q_target = single_joint_offset(
+                ex.q, 5, np.radians(-90.0), P.limits)
+            path = speed_limited_joints(ex.q, q_target, min_steps=60)
+            ex.run(f'policy_{state}_cone_wrist_90', path, target_jaw)
+            cone_wrist_staged = True
+        elif same_position and same_orientation and target_jaw != current_jaw:
             ex.jaws(f'policy_{state}_gripper', current_jaw, target_jaw, n=20)
         else:
             phase = f'policy_{state}'
             try:
-                path = P.pose_line(ex.q, start, Rj, target, rotation, tip, min_steps=60)
+                # pose_line consumes controller-frame rotations because its IK
+                # extracts command +Z as the physical J6 +X tool axis.  Convert
+                # the measured flange orientation back into that frame before
+                # interpolating; mixing the two frames causes artificial 100+
+                # degree wrist branch jumps even on a no-op waypoint.
+                path = P.pose_line(ex.q, start, j6_rotation_to_command(Rj),
+                                   target, rotation, tip, min_steps=60)
             except RuntimeError as cartesian_error:
                 # Some reachable endpoint pairs straddle an ER-4iA wrist IK
                 # singularity.  Do not snap orientation or fail on an artificial
@@ -1267,13 +1459,23 @@ def main():
     parser.add_argument('--confidence', type=float, default=.70)
     parser.add_argument('--inference-device', default='0')
     parser.add_argument('--pick-offset-m', type=float, default=0.0)
+    parser.add_argument('--cone-table-pick-offset-m', type=float,
+                        default=CONE_TABLE_CAP_PICK_OFFSET_M,
+                        help='cone-press-only table-cap pickup TCP offset; default is 6 mm low '
+                             'to put the STEP finger pocket around the cap flange')
     parser.add_argument('--place-offset-m', type=float, default=0.0)
     parser.add_argument('--press-offset-m', type=float, default=0.0)
+    parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
+                        help='cone nose endpoint below the calibrated vial rim; positive is lower '
+                             '(default: 0.003 m; use a negative value for a clearance-only trial)')
     parser.add_argument('--crooked-shoulder-depth-m', type=float, default=0.0326838)
     parser.add_argument('--crooked-tap-depth-m', type=float, default=0.005,
                         help='descent beyond RGB-D-measured shoulder contact (default: 0.005 m)')
-    parser.add_argument('--crooked-action', choices=('shoulder', 'closed-tip', 'regrip'), default='shoulder',
-                        help='shared-controller crooked-cap action (default: shoulder)')
+    parser.add_argument('--crooked-action',
+                        choices=('shoulder', 'closed-tip', 'regrip', 'cone-press'),
+                        default='shoulder',
+                        help='shared-controller crooked-cap action; cone-press selects the separate '
+                             'side-cone CAD tool (default remains shoulder)')
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
                         help='regrip: wrist-camera servo onto the cap axis, coaxial grip, lift, turn upright and '
                              're-place; vertical: closed fingertips pressed straight down; tilted: PRESS_TILT_DEG '
@@ -1324,7 +1526,8 @@ def main():
         import cell
         import fk
         import scene_config as C
-        from src.remediation.custom_gripper import (attach_collision_proxies, attach_visual_pair,
+        from src.remediation.custom_gripper import (CONE_ASSET, attach_collision_proxies,
+                                                    attach_visual_pair, cone_tip_from_fingertip_tcp,
                                                     finger_back_face_tcp, finger_tip_tcp)
         from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
         from src.remediation.servo_crooked_cap import read_wrist, servo_cap_axis, wrist_camera
@@ -1333,14 +1536,21 @@ def main():
         app.update()
         stage = omni.usd.get_context().get_stage()
         world = World(stage_units_in_meters=1.0, physics_dt=DT, rendering_dt=DT)
-        mount = attach_visual_pair(stage)
-        attach_collision_proxies(stage)
+        cone_press = args.controller_policy == 'shared' and args.crooked_action == 'cone-press'
+        mount = (attach_visual_pair(stage, asset=CONE_ASSET) if cone_press
+                 else attach_visual_pair(stage))
+        attach_collision_proxies(stage, cone_press=cone_press)
         col_report = configure_stage_collisions(stage)
 
         ledge = tuple(mount['cap_seat_tcp_j6_m'])      # held cap origin (flange underside)
         tip = finger_tip_tcp(ledge)                    # closed fingertip face centre
         jaw_grip = mount['cap_grip_jaw_m']
         jaw_hold = jaw_grip - JAW_CLAMP_M
+        if cone_press:
+            mount['cone_tip_from_tcp_m'] = list(
+                cone_tip_from_fingertip_tcp(jaw_hold, jaw_grip, side=-1))
+            mount['cone_wrist_wpr_deg'] = [-180.0, 0.0, -90.0]
+            mount['cone_press_wpr_deg'] = [-180.0, 45.0, -90.0]
         press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
         transit_z = transit_base_z()
         spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom

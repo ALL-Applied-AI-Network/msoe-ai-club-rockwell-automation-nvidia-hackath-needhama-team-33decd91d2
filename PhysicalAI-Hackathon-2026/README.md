@@ -80,9 +80,10 @@ uv run run.py --mode hover
 ```
 
 Full mode uses the same simulator-independent controller as the supported Isaac
-pipeline. It requests TableCam RGB/depth, handles missing caps before crooked caps,
-and keeps the claw open while descending around the capped vial until the CAD-measured
-internal shoulder reaches the crooked cap, then retreats vertically.
+pipeline. It requests native 1920x1080 TableCam RGB plus calibrated depth, handles
+missing caps before crooked caps, and supports the side-cone workflow validated in
+simulation. The cone wrist handoff occurs once after missing-cap work; every crooked
+cap then uses the same 45-degree, clockwise-rolled posture.
 The controller rejects simulator-only fields; Isaac truth and contact
 loads exist only in separate evaluation output. Because the real cell provides no
 force measurement, shared-policy pressing is position-limited in both environments.
@@ -92,18 +93,33 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
-  --crooked-action shoulder \
-  --crooked-shoulder-depth-m 0.0326838 --crooked-tap-depth-m 0.005
+  --crooked-action cone-press --cone-press-below-rim-m -0.005
 ```
 
-`--crooked-action` selects `shoulder` (open-claw internal-shoulder tap),
+`--crooked-action` selects `cone-press` (the side-mounted TPU cone),
+`shoulder` (open-claw internal-shoulder tap),
 `closed-tip` (closed fingertip-face tap), or `regrip` (camera-positioned pickup,
-lift, same-vial replacement, release, and closed-tip tap). All three use the
+lift, same-vial replacement, release, and closed-tip tap). All four use the
 same shared controller in simulation and physical execution.
 
-Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
-then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press
-offsets may create contact with glass.
+Positive pick/place/press offsets move the TCP upward. For the cone endpoint,
+positive `--cone-press-below-rim-m` moves down; negative values stop above the rim.
+Start with `--press-offset-m 0.010 --cone-press-below-rim-m -0.005` for a visual
+clearance trial, then reduce the upward press offset before increasing depth. The
+CAD cone offset can be replaced after measurement with
+`--cone-tip-from-tcp-m X Y Z` (metres).
+
+On this cluster, both mock and real-cell runs can use the T4-pinned launcher:
+
+```bash
+sbatch scripts/run_physical_policy.slurm --mock --trials 1 --trial-s 8 \
+  --mode full --allow-provisional-contact --crooked-action cone-press
+```
+
+If the operator provides a direct cell token, export it as
+`PHYSICAL_CELL_TOKEN` before submitting the job rather than putting the secret
+in the command line. Without a direct token, `run.py` uses the private
+`.request.json` created by the normal submission/approval workflow.
 
 Runs your policy against a stand-in for the cell on your machine, with no robot. It ends with
 **✓ Ready for the real robot**, or **✗ Not ready** with what to fix (an action the robot would reject, or an error

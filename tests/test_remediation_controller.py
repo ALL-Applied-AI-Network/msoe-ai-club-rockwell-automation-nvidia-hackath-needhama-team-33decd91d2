@@ -2,9 +2,14 @@ import unittest
 
 import numpy as np
 
-from src.remediation.controller import (ContactTool, RemediationController, axis_to_wpr,
-                                        policy_observation, wpr_to_rotation)
-from src.remediation.geometry import base_to_uf0
+from src.remediation.controller import (DEFAULT_CONE_PRESS_WPR_DEG,
+                                        DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
+                                        DEFAULT_CONE_WRIST_WPR_DEG,
+                                        RemediationController, axis_to_wpr,
+                                        command_rotation_to_j6,
+                                        j6_rotation_to_command, policy_observation,
+                                        wpr_to_rotation)
+from src.remediation.geometry import base_to_uf0, rim_base_z, uf0_to_base
 
 
 class RemediationControllerTests(unittest.TestCase):
@@ -18,7 +23,8 @@ class RemediationControllerTests(unittest.TestCase):
         return {"class_name": class_name, "base_pos_m": list(xyz),
                 "surface_top_base_z_m": float(xyz[2]),
                 "confidence": confidence, "contact_qualified": qualified,
-                "depth_available": depth}
+                "depth_available": depth,
+                "localization_note": "Contact XY refined by affine tray-grid fit"}
 
     def test_unqualified_detection_holds(self):
         action = self.controller.act(
@@ -52,6 +58,12 @@ class RemediationControllerTests(unittest.TestCase):
         axis = np.array([0.4, -0.2, 0.89442719])
         axis /= np.linalg.norm(axis)
         np.testing.assert_allclose(wpr_to_rotation(axis_to_wpr(axis))[:, 2], -axis, atol=1e-8)
+
+    def test_command_and_j6_rotation_mapping_round_trip(self):
+        command = wpr_to_rotation((-147.0, 31.0, -83.0))
+        j6 = command_rotation_to_j6(command)
+        np.testing.assert_allclose(j6_rotation_to_command(j6), command, atol=1e-12)
+        np.testing.assert_allclose(j6.T @ j6, np.eye(3), atol=1e-12)
 
     def test_crooked_open_claw_descends_to_internal_shoulder_and_retreats(self):
         detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
@@ -125,6 +137,147 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertTrue(any("RGB-D cap axis" in event.get("reason", "")
                             for event in controller.events))
 
+    def test_cone_press_uses_cad_nose_at_45_degree_tilt_and_90_degree_roll(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
+        detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+
+        tilted = [action for action in actions
+                  if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)]
+        self.assertGreaterEqual(len(tilted), 7)
+        self.assertTrue(all(action[6] == 1.0 for action in tilted))
+
+        # The selected outside cone is 45 degrees from J6 +X.  Under the
+        # adapter's command-TCP/J6 mapping it must point upward into the tool,
+        # leaving the cone nose and negative-Y (TableCam-left) jaw low during
+        # a press.
+        command_rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        j6_rotation = command_rotation_to_j6(command_rotation)
+        cone_axis_j6 = np.array([-np.sqrt(0.5), np.sqrt(0.5), 0.0])
+        np.testing.assert_allclose(j6_rotation @ cone_axis_j6, [0, 0, 1], atol=1e-8)
+        self.assertGreater(j6_rotation[2, 1], 0.0)
+
+        nose_positions = []
+        for action in tilted:
+            tcp_base = uf0_to_base(action[:3])
+            nose_positions.append(tcp_base + command_rotation @
+                                  np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M))
+        nose_positions = np.asarray(nose_positions)
+        expected_xy = np.asarray(detection["base_pos_m"][:2])
+        np.testing.assert_allclose(nose_positions[np.argmin(nose_positions[:, 2]), :2],
+                                   expected_xy, atol=1e-10)
+        expected_contact_z = rim_base_z() - 0.003 + 0.0005
+        self.assertAlmostEqual(nose_positions[:, 2].min(), expected_contact_z,
+                               places=10)
+        self.assertEqual(actions[-1][6], 1.0)
+        np.testing.assert_allclose(actions[-1][3:6], DEFAULT_CONE_PRESS_WPR_DEG,
+                                   atol=1e-10)
+
+    def test_cone_press_centres_broad_cone_on_observed_cap(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        detection["feature_base_pos_m"] = [0.317, 0.017, 0.23]
+        detection["cap_axis_base"] = [-np.sin(np.radians(35.0)), 0.0,
+                                      np.cos(np.radians(35.0))]
+        detection["cap_high_point_base_m"] = [0.318, 0.024, 0.235]
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        noses = np.asarray([
+            uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
+            for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+        ])
+        expected_xy = np.asarray(detection["feature_base_pos_m"][:2])
+        self.assertTrue(any(np.allclose(nose[:2], expected_xy)
+                            and abs(nose[2] - 0.236) < 1e-9 for nose in noses))
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
+        self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)
+
+    def test_cone_press_depth_is_tunable_above_or_below_rim(self):
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        for depth in (-0.005, 0.006):
+            controller = RemediationController(
+                ContactTool(0.0, 0.0, 0.0, validated=True),
+                crooked_action="cone-press", cone_press_below_rim_m=depth)
+            actions = [controller.act(self.obs, [detection])]
+            while controller.queue:
+                actions.append(controller.act(self.obs, [detection]))
+            rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+            noses = np.asarray([
+                uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
+                for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+            ])
+            self.assertAlmostEqual(noses[:, 2].min(), rim_base_z() - depth, places=10)
+
+    def test_cone_press_hands_off_to_cap_center_below_32_degrees(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        detection["feature_base_pos_m"] = [0.317, 0.017, 0.23]
+        detection["cap_axis_base"] = [np.sin(np.radians(20.0)), 0.0,
+                                      np.cos(np.radians(20.0))]
+        detection["cap_high_point_base_m"] = [0.318, 0.024, 0.235]
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        noses = np.asarray([
+            uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
+            for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+        ])
+        expected_xy = np.asarray(detection["feature_base_pos_m"][:2])
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
+        self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)
+
+    def test_cone_batch_orients_once_and_keeps_posture_between_targets(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        first = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        first["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        controller._route(self.obs, first)
+        first_route = list(controller.queue)
+        controller.queue.clear()
+
+        second = self.detection("crooked_cap", [0.35, 0.02, 0.23])
+        second["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        controller._route(self.obs, second)
+        second_route = list(controller.queue)
+
+        self.assertTrue(controller.cone_oriented)
+        self.assertEqual(sum(np.allclose(action[3:6], [-180.0, 0.0, 0.0])
+                             for action in first_route), 1)
+        self.assertEqual(sum(np.allclose(action[3:6], DEFAULT_CONE_WRIST_WPR_DEG)
+                             for action in first_route), 1)
+        np.testing.assert_allclose(first_route[0][3:6], [-180.0, 0.0, 0.0])
+        np.testing.assert_allclose(first_route[1][3:6], DEFAULT_CONE_WRIST_WPR_DEG)
+        self.assertTrue(all(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+                            for action in first_route[2:]))
+        self.assertTrue(all(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+                            for action in second_route))
+
+    def test_cone_press_rejects_missing_depth_axis(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        action = controller.act(
+            self.obs, [self.detection("crooked_cap", [0.31, 0.02, 0.21])])
+        np.testing.assert_allclose(action[:6], self.tcp)
+        self.assertTrue(any("aligned-depth cap axis" in event.get("reason", "")
+                            for event in controller.events))
+
     def test_impossible_crooked_surface_height_is_rejected(self):
         detection = self.detection("crooked_cap", [0.31, 0.02, 0.35])
         action = self.controller.act(self.obs, [detection])
@@ -158,6 +311,44 @@ class RemediationControllerTests(unittest.TestCase):
         action = self.controller.act(self.obs, detections)
         self.assertEqual(self.controller.state, "pickup")
         self.assertEqual(len(action), 7)
+
+    def test_missing_is_first_and_replacement_induced_crooked_is_added(self):
+        missing = self.detection("missing_cap", [0.31, 0.02, 0.21])
+        crooked_elsewhere = self.detection("crooked_cap", [0.37, 0.08, 0.21])
+        spare = self.detection("table_cap", [0.34, -0.20, 0.02])
+        # Deliberately present crooked first; the controller must still choose
+        # the missing vial before any crooked-cap repair.
+        self.controller.act(self.obs, [crooked_elsewhere, missing, spare])
+        self.assertEqual(self.controller.pending["target"]["class_name"], "missing_cap")
+        while self.controller.queue:
+            self.controller.act(self.obs, [crooked_elsewhere, missing, spare])
+        self.controller.act({**self.obs, "grasp_verified": True},
+                            [crooked_elsewhere, missing])
+        while self.controller.queue:
+            self.controller.act(self.obs, [crooked_elsewhere, missing])
+
+        # Simulate the installed cap now appearing crooked at the aperture.
+        replacement_crooked = self.detection("crooked_cap", [0.31, 0.02, 0.21])
+        for _ in range(5):
+            self.controller.act(self.obs, [crooked_elsewhere, replacement_crooked])
+        self.assertEqual(self.controller.state, "inspect")
+        self.controller.act(self.obs, [crooked_elsewhere, replacement_crooked])
+        # The originally observed crooked cap remains ahead of the newly
+        # created task, but both have now been tracked.
+        np.testing.assert_allclose(self.controller.pending["target"]["base_pos_m"],
+                                   crooked_elsewhere["base_pos_m"])
+        while self.controller.queue:
+            self.controller.act(self.obs, [crooked_elsewhere, replacement_crooked])
+        for _ in range(5):
+            self.controller.act(self.obs, [crooked_elsewhere, replacement_crooked])
+        self.assertEqual(self.controller.state, "inspect")
+        self.controller.act(self.obs, [crooked_elsewhere, replacement_crooked])
+        self.assertEqual(self.controller.pending["target"]["class_name"], "crooked_cap")
+        np.testing.assert_allclose(self.controller.pending["target"]["base_pos_m"],
+                                   replacement_crooked["base_pos_m"])
+        self.assertTrue(any(track["class_name"] == "crooked_cap" and
+                            np.linalg.norm(track["anchor_xy"] - [0.31, 0.02]) < 1e-12
+                            for track in self.controller.defect_tracks))
 
     def test_verified_pickup_starts_place_and_press_route(self):
         missing = self.detection("missing_cap", [0.31, 0.02, 0.01])

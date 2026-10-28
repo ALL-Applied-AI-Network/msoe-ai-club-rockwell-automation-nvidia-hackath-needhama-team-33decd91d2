@@ -22,7 +22,11 @@ class PolicyDriver:
             state_before = self.controller.state
             action = self.controller.act(obs, detections)
             tcp = np.asarray(obs.get("tcp_pose"), dtype=float)
-            is_hold = tcp.shape == (6,) and np.allclose(action[:6], tcp, atol=1e-8)
+            joints = np.asarray(obs.get("joints", ()), dtype=float)
+            jaw_closed = bool(joints.size > 6 and np.isfinite(joints[6]) and joints[6] >= 0.5)
+            requested_closed = bool(float(action[6]) >= 0.5)
+            is_hold = (tcp.shape == (6,) and np.allclose(action[:6], tcp, atol=1e-8)
+                       and requested_closed == jaw_closed)
             record = {"decision": index, "state_before": state_before,
                       "state": self.controller.state,
                       "action_tcp": list(map(float, action)), "hold": bool(is_hold)}

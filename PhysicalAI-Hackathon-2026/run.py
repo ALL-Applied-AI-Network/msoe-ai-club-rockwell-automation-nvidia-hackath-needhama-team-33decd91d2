@@ -22,7 +22,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from cell_client import CellClient, run_all
-from policy import Policy
+from policy import DEFAULT_CONE_TIP_FROM_TCP_M, Policy
 
 HERE = Path(__file__).resolve().parent
 SUBMISSION = HERE / "submission" / "submission.yaml"
@@ -210,7 +210,7 @@ def main() -> None:
     p.add_argument("--trial-s", type=float, default=20.0, help="--mock: seconds per trial")
     p.add_argument("--instruction", default="pick up the cube", help="--mock: the instruction for every trial")
     p.add_argument("--url", default="https://hackathon.sidclab.org")
-    p.add_argument("--token", help="a run token, if we sent you one directly")
+    p.add_argument("--token", help="a run token, if issued directly; prefer PHYSICAL_CELL_TOKEN to avoid shell history")
     p.add_argument("--checkpoint", help="default: shared/yolo26x/best.pt")
     p.add_argument("--mode", choices=("hover", "full"), default="hover")
     p.add_argument("--confidence", type=float, default=0.70)
@@ -224,8 +224,13 @@ def main() -> None:
     p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
                    help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
-    p.add_argument("--crooked-action", choices=("shoulder", "closed-tip", "regrip"),
+    p.add_argument("--crooked-action", choices=("shoulder", "closed-tip", "regrip", "cone-press"),
                    default="shoulder")
+    p.add_argument("--cone-tip-from-tcp-m", type=float, nargs=3,
+                   metavar=("X", "Y", "Z"), default=None,
+                   help="measured cone-nose offset from UTOOL1 in metres (default: CAD value)")
+    p.add_argument("--cone-press-below-rim-m", type=float, default=0.003,
+                   help="cone endpoint below the calibrated rim; positive is lower, negative is clearance")
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -253,6 +258,10 @@ def main() -> None:
                                  crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                                  crooked_tap_depth_m=args.crooked_tap_depth_m,
                                  crooked_action=args.crooked_action,
+                                 cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
+                                                     if args.cone_tip_from_tcp_m is not None
+                                                     else DEFAULT_CONE_TIP_FROM_TCP_M),
+                                 cone_press_below_rim_m=args.cone_press_below_rim_m,
                                  trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
@@ -260,8 +269,9 @@ def main() -> None:
             if checked.error is None:
                 raise
         sys.exit(verdict(mock, checked))
-    if args.token:
-        url, token = args.url, args.token
+    direct_token = args.token or os.environ.get("PHYSICAL_CELL_TOKEN")
+    if direct_token:
+        url, token = args.url, direct_token
     else:
         st = status(args.url, args.ca, wait=True)
         if st["status"] != "approved":
@@ -279,6 +289,10 @@ def main() -> None:
                    crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                    crooked_tap_depth_m=args.crooked_tap_depth_m,
                    crooked_action=args.crooked_action,
+                   cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
+                                        if args.cone_tip_from_tcp_m is not None
+                                        else DEFAULT_CONE_TIP_FROM_TCP_M),
+                   cone_press_below_rim_m=args.cone_press_below_rim_m,
                    trace_dir=args.trace_dir))
 
 

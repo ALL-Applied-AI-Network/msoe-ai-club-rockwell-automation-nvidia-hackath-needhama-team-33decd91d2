@@ -52,6 +52,13 @@ class CollisionConfig:
     pad_dynamic_friction: float = 1.3
     pad_restitution: float = 0.0  # Completely inelastic (damps bounce)
 
+    # The optional side cone is printed in TPU.  Give only that opt-in proxy a
+    # compliant material; the standard finger proxies and default shoulder
+    # workflow retain their qualified material unchanged.  At 30 N this is
+    # approximately 0.3 mm of elastic contact travel.
+    cone_compliant_stiffness_N_per_m: float = 1.0e5
+    cone_compliant_damping_Ns_per_m: float = 120.0
+
     cap_static_friction: float = 1.2
     cap_dynamic_friction: float = 1.0
     cap_restitution: float = 0.0
@@ -91,6 +98,18 @@ class CollisionSubAgent:
             dynamic_friction=self.cfg.pad_dynamic_friction,
             restitution=self.cfg.pad_restitution,
         )
+        cone_material = self._get_or_create_physics_material(
+            stage,
+            "/World/PhysicsMaterials/ConeTpuCompliant",
+            static_friction=self.cfg.pad_static_friction,
+            dynamic_friction=self.cfg.pad_dynamic_friction,
+            restitution=self.cfg.pad_restitution,
+        )
+        cone_px = PhysxSchema.PhysxMaterialAPI(cone_material.GetPrim())
+        cone_px.CreateCompliantContactStiffnessAttr().Set(
+            self.cfg.cone_compliant_stiffness_N_per_m)
+        cone_px.CreateCompliantContactDampingAttr().Set(
+            self.cfg.cone_compliant_damping_Ns_per_m)
         cap_material = self._get_or_create_physics_material(
             stage,
             "/World/PhysicsMaterials/RubberCapMaterial",
@@ -109,7 +128,8 @@ class CollisionSubAgent:
         report["disabled_stock_eoat"] = len(disabled)
 
         # 3. Configure Active Custom Finger Proxies
-        finger_proxies = self.configure_custom_finger_colliders(stage, pad_material)
+        finger_proxies = self.configure_custom_finger_colliders(
+            stage, pad_material, cone_material)
         report["configured_custom_fingers"] = len(finger_proxies)
 
         # 4. Configure Caps (CCD + sub-mm offset + material)
@@ -186,7 +206,8 @@ class CollisionSubAgent:
         return disabled
 
     def configure_custom_finger_colliders(
-        self, stage: Usd.Stage, pad_material: UsdShade.Material
+        self, stage: Usd.Stage, pad_material: UsdShade.Material,
+        cone_material: UsdShade.Material,
     ) -> List[str]:
         """Configure active collision proxies on JawL and JawR with CCD and sub-mm offsets."""
         configured = []
@@ -214,9 +235,10 @@ class CollisionSubAgent:
                 physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
 
                 # Bind viscoelastic high-friction pad material with physics purpose
+                material = (cone_material if prim.GetName() == "ConePressTip"
+                            else pad_material)
                 UsdShade.MaterialBindingAPI.Apply(prim).Bind(
-                    pad_material, materialPurpose="physics"
-                )
+                    material, materialPurpose="physics")
             configured.append(proxy_path)
 
         return configured

@@ -23,6 +23,7 @@ from pxr import Gf, UsdGeom, UsdPhysics
 
 ROOT = Path(__file__).resolve().parents[2]
 ASSET = ROOT / 'data/gripper.usd'
+CONE_ASSET = ROOT / 'data/cone_gripper.usd'
 
 # data/gripper.step, finger frame, metres.
 FINGER_X_RANGE = (0.0134043, 0.0356293)
@@ -54,6 +55,18 @@ POCKET_FROM_INSET_FACE = FINGER_POCKET_AXIS_XY[1] - FINGER_INSET_FACE_Y
 # jaws shut.  0.2 mm (print tolerance scale) seats contact-free.  Visual geometry
 # and the TCP stay exactly at CAD.
 FINGER_POCKET_SIM_CLEARANCE = 0.0002
+
+# data/cone_gripper.step, finger frame, metres.  STEP face #1286 is bounded by
+# its small circle (#121, centre #2199) and the four 12.7 mm-radius arcs at the
+# broad end (#101/#102/#103/#119).  Its axis points from the small contact end
+# back into the TPU finger body.
+CONE_TIP_FINGER_M = np.array((0.024516842, -0.0347125091901217,
+                              0.00370293361826785))
+CONE_AXIS_FINGER = np.array((0.0, np.sqrt(0.5), np.sqrt(0.5)))
+CONE_NOSE_LENGTH_M = 0.013940260977997894
+CONE_REFERENCE_RADIUS_M = 0.00293892417859514
+CONE_SEMIANGLE_DEG = 35.0
+CONE_BASE_RADIUS_M = 0.0127
 
 
 def cap_grip_jaw(jaw_open):
@@ -88,6 +101,23 @@ def finger_back_face_tcp(cap_seat_tcp_j6, jaw, jaw_grip, along=0.0, up=0.0):
     """
     back = (FINGER_POCKET_AXIS_XY[1] - FINGER_BACK_Y) + (jaw - jaw_grip)
     return (finger_tip_tcp(cap_seat_tcp_j6)[0] - float(up), -back, float(along))
+
+
+def cone_tip_from_fingertip_tcp(jaw, jaw_grip, side=-1):
+    """Cone-nose offset from the fingertip TCP, expressed in the command frame.
+
+    ``side=-1`` selects the negative-J6-Y finger and ``side=+1`` its mirrored
+    mate.  Closing each jaw moves the outside nose toward the centreline.  The
+    command frame used by the shared controller maps a J6 vector (x, y, z) to
+    (-z, y, x).
+    """
+    if side not in (-1, 1):
+        raise ValueError("cone side must be -1 or +1")
+    j6_x = -(CONE_TIP_FINGER_M[2] - FINGER_TIP_Z)
+    negative_y = ((CONE_TIP_FINGER_M[1] - FINGER_POCKET_AXIS_XY[1]) -
+                  (jaw - jaw_grip))
+    j6_y = negative_y if side == -1 else -negative_y
+    return (0.0, float(j6_y), float(j6_x))
 
 
 def _jaw_mount(stage, jaw_root):
@@ -174,7 +204,30 @@ def finger_collision_pieces(sectors=12):
     return pieces
 
 
-def attach_collision_proxies(stage):
+def _cone_proxy_mesh(segments=24):
+    """Convex STEP-measured truncated-cone proxy in the finger frame."""
+    axis = CONE_AXIS_FINGER / np.linalg.norm(CONE_AXIS_FINGER)
+    reference = np.array([1.0, 0.0, 0.0])
+    u = reference - axis * np.dot(reference, axis)
+    u /= np.linalg.norm(u)
+    v = np.cross(axis, u)
+    base_centre = CONE_TIP_FINGER_M + axis * CONE_NOSE_LENGTH_M
+    angles = np.linspace(0.0, 2.0 * np.pi, segments, endpoint=False)
+    small_ring = [CONE_TIP_FINGER_M + CONE_REFERENCE_RADIUS_M *
+                  (np.cos(t) * u + np.sin(t) * v) for t in angles]
+    base_ring = [base_centre + CONE_BASE_RADIUS_M *
+                 (np.cos(t) * u + np.sin(t) * v) for t in angles]
+    points = [*small_ring, *base_ring]
+    counts = [segments, segments] + [4] * segments
+    indices = list(range(segments - 1, -1, -1))
+    indices.extend(range(segments, 2 * segments))
+    for i in range(segments):
+        j = (i + 1) % segments
+        indices.extend((i, j, segments + j, segments + i))
+    return points, counts, indices
+
+
+def attach_collision_proxies(stage, cone_press=False):
     """Attach invisible convex collision pieces that follow the CAD finger, pockets open.
 
     These proxies follow the jaw rigid bodies but intentionally do not approve
@@ -203,13 +256,25 @@ def attach_collision_proxies(stage):
             physx_col = PhysxSchema.PhysxCollisionAPI.Apply(piece.GetPrim())
             physx_col.CreateContactOffsetAttr().Set(0.0005)
             physx_col.CreateRestOffsetAttr().Set(0.0)
+        if cone_press:
+            points, counts, indices = _cone_proxy_mesh()
+            cone = UsdGeom.Mesh.Define(stage, f'{path}/ConePressTip')
+            cone.CreatePointsAttr([Gf.Vec3f(*point) for point in points])
+            cone.CreateFaceVertexCountsAttr(counts)
+            cone.CreateFaceVertexIndicesAttr(indices)
+            UsdPhysics.CollisionAPI.Apply(cone.GetPrim())
+            UsdPhysics.MeshCollisionAPI.Apply(cone.GetPrim()).CreateApproximationAttr('convexHull')
+            physx_col = PhysxSchema.PhysxCollisionAPI.Apply(cone.GetPrim())
+            physx_col.CreateContactOffsetAttr().Set(0.0005)
+            physx_col.CreateRestOffsetAttr().Set(0.0)
         paths.append(path)
     return paths
 
 
-def attach_visual_pair(stage):
-    if not ASSET.is_file():
-        raise FileNotFoundError(f'Convert custom STEP before mounting: {ASSET}')
+def attach_visual_pair(stage, asset=ASSET):
+    asset = Path(asset).resolve()
+    if not asset.is_file():
+        raise FileNotFoundError(f'Convert custom STEP before mounting: {asset}')
     import cell
     import scene_config as C
     paths = []
@@ -220,7 +285,7 @@ def attach_visual_pair(stage):
         m, _, body_face_x = _jaw_mount(stage, jaw)
         path = jaw + '/CustomFingerCad'
         root = UsdGeom.Xform.Define(stage, path)
-        root.GetPrim().GetReferences().AddReference(str(ASSET))
+        root.GetPrim().GetReferences().AddReference(str(asset))
         UsdGeom.Xformable(root).AddTransformOp().Set(m)
         paths.append(path)
     # Hide only the stock long blade, soft tip, and detailed extender. Keep the
@@ -268,7 +333,7 @@ def attach_visual_pair(stage):
             if str(prim.GetPath()).startswith(detail_root + '/') and prim.IsA(UsdGeom.Gprim):
                 UsdGeom.Imageable(prim).CreateVisibilityAttr().Set('invisible')
     return {
-        'asset': str(ASSET.relative_to(ROOT)),
+        'asset': str(asset.relative_to(ROOT)) if asset.is_relative_to(ROOT) else str(asset),
         'paths': paths,
         'mount': 'SMC blade in finger notch: inset face on blade inner face, blade tip on notch floor',
         'cap_seat_tcp_j6_m': list(cap_seat_tcp(body_face_x)),
@@ -277,5 +342,5 @@ def attach_visual_pair(stage):
                                         'MountScrew*', 'ScrewSocket*', 'Tape', 'Collision'],
         'moving_jaw_visual_retained': 'SMCJaw carrier with mounting holes',
         'hidden_wrist_visuals': hidden_wrist_details,
-        'mode': 'cad_mounted',
+        'mode': 'cone_cad_mounted' if asset == CONE_ASSET.resolve() else 'cad_mounted',
     }
