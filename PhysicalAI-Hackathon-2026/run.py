@@ -22,7 +22,10 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from cell_client import CellClient, run_all
-from policy import DEFAULT_CONE_TIP_FROM_TCP_M, Policy
+from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
+                    DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                    DEFAULT_TABLE_CAP_XY_OFFSET_M, Policy)
 
 HERE = Path(__file__).resolve().parent
 SUBMISSION = HERE / "submission" / "submission.yaml"
@@ -219,8 +222,21 @@ def main() -> None:
     p.add_argument("--allow-provisional-contact", action="store_true",
                    help="allow full mode with the currently unmeasured TCP (supervised trials only)")
     p.add_argument("--pick-offset-m", type=float, default=0.0)
+    p.add_argument("--cone-table-pick-offset-m", type=float,
+                   default=None,
+                   help="optional cone-workflow table-cap pickup Z correction; "
+                        "default uses --pick-offset-m")
     p.add_argument("--place-offset-m", type=float, default=0.0)
     p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--table-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_TABLE_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for loose table-cap pickup")
+    p.add_argument("--missing-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for missing-vial place/press")
+    p.add_argument("--crooked-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for crooked-cap contact")
     p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
     p.add_argument("--vial-rim-z-m", type=float,
                    help="explicit vial-rim Z override; default derives from work surface and known dimensions")
@@ -263,6 +279,10 @@ def main() -> None:
                                  allow_provisional_contact=args.allow_provisional_contact,
                                  pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                                  press_offset_m=args.press_offset_m,
+                                 cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                                 table_cap_xy_offset_m=args.table_cap_xy_offset_m,
+                                 missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
+                                 crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
                                  crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                                  crooked_tap_depth_m=args.crooked_tap_depth_m,
                                  crooked_action=args.crooked_action,
@@ -300,6 +320,10 @@ def main() -> None:
                    allow_provisional_contact=args.allow_provisional_contact,
                    pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                    press_offset_m=args.press_offset_m,
+                   cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                   table_cap_xy_offset_m=args.table_cap_xy_offset_m,
+                   missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
+                   crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
                    crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                    crooked_tap_depth_m=args.crooked_tap_depth_m,
                    crooked_action=args.crooked_action,

@@ -32,6 +32,7 @@ DEFAULT_CONE_PRESS_WPR_DEG = (135.0, 0.0, -90.0)
 # the useful impact.  Continue the TPU cone nose through the documented rim
 # plane far enough that the real half-inch cap cannot stay hooked on the lip.
 DEFAULT_CONE_PRESS_BELOW_RIM_M = 0.003
+DEFAULT_CONE_TABLE_PICK_OFFSET_M = -0.006
 
 
 # The shared policy boundary.  Adapters may own richer observations, but only
@@ -175,7 +176,10 @@ class RemediationController:
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_wrist_wpr_deg=DEFAULT_CONE_WRIST_WPR_DEG,
                  cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
-                 cone_press_below_rim_m=DEFAULT_CONE_PRESS_BELOW_RIM_M):
+                 cone_press_below_rim_m=DEFAULT_CONE_PRESS_BELOW_RIM_M,
+                 table_cap_xy_offset_m=(0.0, 0.0),
+                 missing_cap_xy_offset_m=(0.0, 0.0),
+                 crooked_cap_xy_offset_m=(0.0, 0.0)):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -210,6 +214,12 @@ class RemediationController:
         self.cone_wrist_wpr_deg = tuple(np.asarray(cone_wrist_wpr_deg, dtype=float))
         self.cone_press_wpr_deg = tuple(np.asarray(cone_press_wpr_deg, dtype=float))
         self.cone_press_below_rim_m = float(cone_press_below_rim_m)
+        self.table_cap_xy_offset_m = self._checked_xy_offset(
+            table_cap_xy_offset_m, "table-cap")
+        self.missing_cap_xy_offset_m = self._checked_xy_offset(
+            missing_cap_xy_offset_m, "missing-cap")
+        self.crooked_cap_xy_offset_m = self._checked_xy_offset(
+            crooked_cap_xy_offset_m, "crooked-cap")
         if (self.cone_tip_from_tcp_m.shape != (3,) or
                 not np.isfinite(self.cone_tip_from_tcp_m).all()):
             raise ValueError("cone tip offset must contain three finite coordinates")
@@ -222,6 +232,14 @@ class RemediationController:
                 not -0.010 <= self.cone_press_below_rim_m <= 0.010):
             raise ValueError("cone press depth must be between -0.010 and 0.010 m")
         self.reset()
+
+    @staticmethod
+    def _checked_xy_offset(value, name):
+        offset = np.asarray(value, dtype=float)
+        if (offset.shape != (2,) or not np.isfinite(offset).all() or
+                np.any(np.abs(offset) > 0.025)):
+            raise ValueError(f"{name} XY offset must contain two finite values within +/-0.025 m")
+        return offset
 
     def _add_inspection(self, closed=False):
         self._add(inspection_base_position(), closed)
@@ -344,7 +362,10 @@ class RemediationController:
     def _route_checked(self, obs, target, spare=None):
         current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
         height = max(transit_base_z(), current[2])
-        target_pos = np.asarray(target["base_pos_m"], dtype=float)
+        raw_target_pos = np.asarray(target["base_pos_m"], dtype=float)
+        target_pos = raw_target_pos.copy()
+        if target.get("class_name") == "crooked_cap":
+            target_pos = target_pos + np.r_[self.crooked_cap_xy_offset_m, 0.0]
         cone_batch = spare is None and self.crooked_action == "cone-press"
         if not cone_batch:
             self._add([current[0], current[1], height], False)
@@ -405,16 +426,16 @@ class RemediationController:
                 # a leaning cap's observed centre can be several millimetres
                 # away.  Centre the STEP-measured 25.4 mm broad cone on that
                 # camera observation when it remains associated with the slot.
-                cap_center_xy = target_pos[:2]
+                cap_center_xy = raw_target_pos[:2]
                 observed_center = np.asarray(target.get("feature_base_pos_m", []), dtype=float)
                 if (observed_center.shape == (3,) and np.isfinite(observed_center).all() and
-                        np.linalg.norm(observed_center[:2] - target_pos[:2]) <= 0.016):
+                        np.linalg.norm(observed_center[:2] - raw_target_pos[:2]) <= 0.016):
                     cap_center_xy = observed_center[:2]
-                feature_xy = cap_center_xy
+                feature_xy = cap_center_xy + self.crooked_cap_xy_offset_m
                 high_point = np.asarray(target.get("cap_high_point_base_m", []), dtype=float)
                 if (high_point.shape == (3,) and np.isfinite(high_point).all() and
-                        np.linalg.norm(high_point[:2] - target_pos[:2]) >= 0.001 and
-                        np.linalg.norm(high_point[:2] - target_pos[:2]) <= 0.016 and
+                        np.linalg.norm(high_point[:2] - raw_target_pos[:2]) >= 0.001 and
+                        np.linalg.norm(high_point[:2] - raw_target_pos[:2]) <= 0.016 and
                         self.vial_rim_z_m - 0.020 <= high_point[2] <= self.vial_rim_z_m + 0.055):
                     contact_surface_top = float(high_point[2])
                 else:
@@ -492,7 +513,8 @@ class RemediationController:
                 self._add_inspection(False)
             self.state = "repair"
         else:
-            spare_pos = np.asarray(spare["base_pos_m"], dtype=float)
+            spare_pos = (np.asarray(spare["base_pos_m"], dtype=float) +
+                         np.r_[self.table_cap_xy_offset_m, 0.0])
             self._add([spare_pos[0], spare_pos[1], height], False)
             self._add(spare_pos + [0, 0, 0.025], False)
             pick = spare_pos + [0, 0, self.tool.pick_offset_m]
@@ -532,7 +554,8 @@ class RemediationController:
                 self.state = "failed"
                 self.events.append({"event": "pickup_unverified"})
                 return self.hold(obs)
-            p = np.asarray(self.pending["target"]["base_pos_m"], dtype=float)
+            p = (np.asarray(self.pending["target"]["base_pos_m"], dtype=float) +
+                 np.r_[self.missing_cap_xy_offset_m, 0.0])
             self._add([p[0], p[1], self.pending["height"]], True)
             self._add(p + [0, 0, 0.025], True)
             self._add(p + [0, 0, self.tool.place_offset_m], True)

@@ -307,7 +307,7 @@ TCP upward relative to the RGB-D point:
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
-  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --cone-table-pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m=-0.005
 ```
 
@@ -316,6 +316,23 @@ Test one operation at a time over a clear work area. Suggested progression is
 over the vial. The controls have distinct effects:
 
 - `--pick-offset-m`: loose-cap gripper closing height.
+- `--cone-table-pick-offset-m`: cone-workflow loose-cap pickup height. It overrides
+  `--pick-offset-m` only when `--crooked-action cone-press` is selected. If omitted,
+  the physical policy preserves the supplied `--pick-offset-m`; the Isaac adapter's
+  STEP-derived default remains `-0.006` m.
+- `--table-cap-xy-offset-m X Y`: robot-base XY correction added only to loose-cap
+  pickup targets. The physical policy defaults to `0.021002 -0.019611` m, the
+  calibrated base-frame equivalent of correcting a target that was 20 mm too
+  far away from the TableCam and 20 mm too far camera-right.
+- `--missing-cap-xy-offset-m X Y`: robot-base XY correction added only to missing-vial
+  placement and its following fingertip press. The physical default is
+  `-0.000503 0.009987` m, correcting a 10 mm camera-left miss.
+- `--crooked-cap-xy-offset-m X Y`: robot-base XY correction added only to crooked-cap
+  contact targets, including the compensated cone nose path. Its default remains
+  `0 0` until the side cone is physically checked.
+
+The Isaac runner exposes the same flags but defaults all three XY corrections to
+zero because these values compensate residual calibration in the physical TableCam.
 - `--work-surface-z-m`: work-surface Z in robot-base metres (default `-0.0051`).
   The default vial-rim plane is derived from this as work surface + 10 mm tray
   base + 203.2 mm vial height.
@@ -324,7 +341,7 @@ over the vial. The controls have distinct effects:
   planes are written to the run artifacts. This is independent of the pickup,
   placement, and press offsets.
 - `--place-offset-m`: release height above a missing-cap target.
-- `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
+- `--press-offset-m`: upward clearance applied to press endpoints, including the cone endpoint.
 - `--cone-press-below-rim-m`: side-cone endpoint relative to the calibrated rim; positive is lower and negative is clearance.
 - `--cone-tip-from-tcp-m X Y Z`: measured cone-nose offset from UTOOL1, replacing the CAD default.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.

@@ -27,6 +27,16 @@ from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
+# Empirical real-cell corrections expressed in robot-base XY.  TableCam image
+# right maps to base (-0.05027, +0.99874), and image down/toward the camera maps
+# to (+0.99983, +0.01820).  The observed loose-cap target was 20 mm too far
+# away from the TableCam and 20 mm too far right, while the missing-vial target
+# was 10 mm too far left.
+DEFAULT_TABLE_CAP_XY_OFFSET_M = (0.0210020904, -0.0196107815)
+DEFAULT_MISSING_CAP_XY_OFFSET_M = (-0.0005027009, 0.0099873566)
+# Do not inherit another target's correction: the side cone has its own measured
+# TCP displacement and needs a dedicated physical hover/contact check.
+DEFAULT_CROOKED_CAP_XY_OFFSET_M = (0.0, 0.0)
 DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
@@ -69,6 +79,10 @@ class Policy:
                  crooked_action="shoulder",
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_press_below_rim_m=0.003,
+                 cone_table_pick_offset_m=None,
+                 table_cap_xy_offset_m=DEFAULT_TABLE_CAP_XY_OFFSET_M,
+                 missing_cap_xy_offset_m=DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                 crooked_cap_xy_offset_m=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
                  crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1,
                  pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
@@ -93,14 +107,22 @@ class Policy:
         if mode not in ("hover", "full"):
             raise ValueError("mode must be 'hover' or 'full'")
         self.full_remediation = mode == "full"
+        effective_pick_offset_m = (cone_table_pick_offset_m
+                                   if (crooked_action == "cone-press" and
+                                       cone_table_pick_offset_m is not None)
+                                   else pick_offset_m)
         self.controller = (RemediationController(provisional_contact_tool(
-            allow_provisional_contact, pick_offset_m, place_offset_m, press_offset_m),
+            allow_provisional_contact, effective_pick_offset_m,
+            place_offset_m, press_offset_m),
             min_confidence=self.confidence,
             crooked_shoulder_depth_m=crooked_shoulder_depth_m,
             crooked_tap_depth_m=crooked_tap_depth_m,
             crooked_action=crooked_action,
             cone_tip_from_tcp_m=cone_tip_from_tcp_m,
             cone_press_below_rim_m=cone_press_below_rim_m,
+            table_cap_xy_offset_m=table_cap_xy_offset_m,
+            missing_cap_xy_offset_m=missing_cap_xy_offset_m,
+            crooked_cap_xy_offset_m=crooked_cap_xy_offset_m,
             crooked_wiggle_radius_m=crooked_wiggle_radius_m,
             crooked_wiggle_cycles=crooked_wiggle_cycles,
             pickup_wiggle_radius_m=pickup_wiggle_radius_m,
@@ -129,8 +151,14 @@ class Policy:
             "device": str(device),
             "allow_provisional_contact": bool(allow_provisional_contact),
             "pick_offset_m": float(pick_offset_m),
+            "effective_pick_offset_m": float(effective_pick_offset_m),
+            "cone_table_pick_offset_m": (None if cone_table_pick_offset_m is None
+                                         else float(cone_table_pick_offset_m)),
             "place_offset_m": float(place_offset_m),
             "press_offset_m": float(press_offset_m),
+            "table_cap_xy_offset_m": np.asarray(table_cap_xy_offset_m, dtype=float).tolist(),
+            "missing_cap_xy_offset_m": np.asarray(missing_cap_xy_offset_m, dtype=float).tolist(),
+            "crooked_cap_xy_offset_m": np.asarray(crooked_cap_xy_offset_m, dtype=float).tolist(),
             "crooked_action": crooked_action,
             "crooked_shoulder_depth_m": float(crooked_shoulder_depth_m),
             "crooked_tap_depth_m": float(crooked_tap_depth_m),

@@ -104,6 +104,12 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, pickup_wiggle_radius_m=0.0051)
         with self.assertRaises(ValueError):
             RemediationController(tool, pickup_wiggle_cycles=3)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, table_cap_xy_offset_m=(0.026, 0.0))
+        with self.assertRaises(ValueError):
+            RemediationController(tool, missing_cap_xy_offset_m=(0.0,))
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_cap_xy_offset_m=(0.0, np.nan))
 
     def test_closed_tip_action_closes_only_above_cap_and_reopens_above_cap(self):
         controller = RemediationController(
@@ -237,6 +243,47 @@ class RemediationControllerTests(unittest.TestCase):
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
         self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)
+
+    def test_cone_press_applies_base_frame_xy_calibration(self):
+        offset = np.array([0.004, -0.003])
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", crooked_cap_xy_offset_m=offset)
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        detection["feature_base_pos_m"] = [0.317, 0.017, 0.23]
+        detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        noses = np.asarray([
+            uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
+            for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+        ])
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(
+            lowest[:2], np.asarray(detection["feature_base_pos_m"][:2]) + offset,
+            atol=1e-10)
+
+    def test_cone_press_xy_calibration_is_not_doubled_without_feature_center(self):
+        offset = np.array([0.004, -0.003])
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", crooked_cap_xy_offset_m=offset)
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        noses = np.asarray([
+            uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
+            for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+        ])
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(
+            lowest[:2], np.asarray(detection["base_pos_m"][:2]) + offset,
+            atol=1e-10)
 
     def test_cone_press_depth_is_tunable_above_or_below_rim(self):
         detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
@@ -411,6 +458,31 @@ class RemediationControllerTests(unittest.TestCase):
             actions.append(self.controller.act(self.obs, []))
         np.testing.assert_allclose(actions[-1][:3], base_to_uf0(inspection_base_position()))
         self.assertEqual(actions[-1][6], 1.0)
+
+    def test_table_pick_and_missing_place_apply_independent_xy_calibration(self):
+        table_offset = np.array([0.004, -0.003])
+        missing_offset = np.array([-0.002, 0.005])
+        controller = RemediationController(
+            ContactTool(-0.006, 0.0, 0.0, validated=True),
+            table_cap_xy_offset_m=table_offset,
+            missing_cap_xy_offset_m=missing_offset)
+        missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
+        spare = self.detection("table_cap", [0.34, -0.20, 0.02])
+        pickup_actions = [controller.act(self.obs, [missing, spare])]
+        while controller.queue:
+            pickup_actions.append(controller.act(self.obs, []))
+        pickup_base = np.asarray([uf0_to_base(action[:3]) for action in pickup_actions])
+        expected_pick_xy = np.asarray(spare["base_pos_m"][:2]) + table_offset
+        self.assertTrue(any(np.allclose(point[:2], expected_pick_xy)
+                            for point in pickup_base))
+
+        place_actions = [controller.act({**self.obs, "grasp_verified": True}, [missing])]
+        while controller.queue:
+            place_actions.append(controller.act(self.obs, []))
+        place_base = np.asarray([uf0_to_base(action[:3]) for action in place_actions])
+        expected_place_xy = np.asarray(missing["base_pos_m"][:2]) + missing_offset
+        self.assertTrue(any(np.allclose(point[:2], expected_place_xy)
+                            for point in place_base))
 
     def test_pickup_wiggles_open_then_centers_before_closing(self):
         controller = RemediationController(

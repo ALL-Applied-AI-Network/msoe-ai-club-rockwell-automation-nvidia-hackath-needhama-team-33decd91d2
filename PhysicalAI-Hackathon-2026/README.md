@@ -93,7 +93,7 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --work-surface-z-m -0.0051 \
-  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --cone-table-pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m -0.005
 ```
 
@@ -110,6 +110,19 @@ Start with `--press-offset-m 0.010 --cone-press-below-rim-m -0.005` for a visual
 clearance trial, then reduce the upward press offset before increasing depth. The
 CAD cone offset can be replaced after measurement with
 `--cone-tip-from-tcp-m X Y Z` (metres).
+
+The three base-frame XY calibration controls are independent:
+`--table-cap-xy-offset-m X Y` corrects loose-cap pickup,
+`--missing-cap-xy-offset-m X Y` corrects missing-vial placement/press, and
+`--crooked-cap-xy-offset-m X Y` corrects the cone or other crooked-cap contact.
+The physical defaults are respectively `(0.021002, -0.019611)` m,
+`(-0.000503, 0.009987)` m, and `(0, 0)` m. The first two are the TableCam-calibrated
+base-frame translations of the table-cap target being 20 mm too far away from the
+camera and 20 mm too far right, plus the 10 mm left missing-vial miss. Crooked-cap
+XY deliberately stays zero until the cone is tested.
+The optional `--cone-table-pick-offset-m` overrides `--pick-offset-m` only for the
+cone workflow; when omitted, the physical policy keeps the existing pick Z tuning.
+Each XYZ correction is recorded in `policy_config.json` for the run.
 
 On this cluster, both mock and real-cell runs can use the T4-pinned launcher:
 

@@ -1293,13 +1293,18 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
         crooked_tap_depth_m=args.crooked_tap_depth_m,
         crooked_action=args.crooked_action,
-        cone_tip_from_tcp_m=mount.get('cone_tip_from_tcp_m',
-                                      (0.0, -0.0369851212, -0.0098332793)),
+        cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
+                             if args.cone_tip_from_tcp_m is not None
+                             else mount.get('cone_tip_from_tcp_m',
+                                            (0.0, -0.0369851212, -0.0098332793))),
         cone_wrist_wpr_deg=mount.get('cone_wrist_wpr_deg',
                                      (-180.0, 0.0, -90.0)),
         cone_press_wpr_deg=mount.get('cone_press_wpr_deg',
                                      (135.0, 0.0, -90.0)),
         cone_press_below_rim_m=args.cone_press_below_rim_m,
+        table_cap_xy_offset_m=args.table_cap_xy_offset_m,
+        missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
+        crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
         crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
         crooked_wiggle_cycles=args.crooked_wiggle_cycles,
         pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
@@ -1510,6 +1515,16 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             'derived_vial_rim_z': derived_vial_rim_z,
             'vial_rim_overridden': args.vial_rim_z_m is not None,
         },
+        'calibration_offsets_base_m': {
+            'table_cap_xy': list(args.table_cap_xy_offset_m),
+            'missing_cap_xy': list(args.missing_cap_xy_offset_m),
+            'crooked_cap_xy': list(args.crooked_cap_xy_offset_m),
+            'pick_z': effective_pick_offset,
+            'place_z': args.place_offset_m,
+            'press_z': args.press_offset_m,
+            'cone_press_below_rim': args.cone_press_below_rim_m,
+            'cone_tip_from_tcp': list(controller.cone_tip_from_tcp_m),
+        },
         'collision_configuration': collision_report,
         'command_count': len(controller.decision_records),
         'vial_breakability_evaluator': {'vials': monitor.vial_states,
@@ -1554,6 +1569,19 @@ def main():
     parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
                         help='cone nose endpoint below the calibrated vial rim; positive is lower '
                              '(default: 0.003 m; use a negative value for a clearance-only trial)')
+    parser.add_argument('--cone-tip-from-tcp-m', type=float, nargs=3,
+                        metavar=('X', 'Y', 'Z'), default=None,
+                        help='measured cone-nose offset from the fingertip TCP in metres; '
+                             'default uses the mounted STEP measurement')
+    parser.add_argument('--table-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='base-frame XY correction added only to loose table-cap pickup targets')
+    parser.add_argument('--missing-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='base-frame XY correction added only to missing-vial place/press targets')
+    parser.add_argument('--crooked-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='base-frame XY correction added only to crooked-cap contact targets')
     parser.add_argument('--work-surface-z-m', type=float, default=-0.0051,
                         help='work-surface plane Z in robot-base metres (default: -0.0051)')
     parser.add_argument('--vial-rim-z-m', type=float,
