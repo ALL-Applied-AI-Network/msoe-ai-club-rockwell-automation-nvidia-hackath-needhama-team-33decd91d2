@@ -279,7 +279,7 @@ Do not keep the live client on a management node. Before the scheduled slot,
 open an interactive compute-node shell that lasts longer than the reservation:
 
 ```bash
-srun --partition=teaching --gres=gpu:1 --cpus-per-task=4 --mem=16G --time=00:45:00 --pty bash
+srun --partition=teaching --gres=gpu:t4:1 --cpus-per-task=4 --mem=16G --time=00:45:00 --pty bash
 cd ~/Documents/GitHub/innovation-lab-fall-2026/PhysicalAI-Hackathon-2026
 nvidia-smi
 ```
@@ -307,7 +307,8 @@ TCP upward relative to the RGB-D point:
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
-  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010
+  --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --crooked-action cone-press --cone-press-below-rim-m=-0.005
 ```
 
 Test one operation at a time over a clear work area. Suggested progression is
@@ -324,13 +325,15 @@ over the vial. The controls have distinct effects:
   placement, and press offsets.
 - `--place-offset-m`: release height above a missing-cap target.
 - `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
+- `--cone-press-below-rim-m`: side-cone endpoint relative to the calibrated rim; positive is lower and negative is clearance.
+- `--cone-tip-from-tcp-m X Y Z`: measured cone-nose offset from UTOOL1, replacing the CAD default.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
 - `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
 - `--crooked-wiggle-radius-m`: open-shoulder XY orbit radius at each of three incremental press depths; default is `0.00075` m.
 - `--crooked-wiggle-cycles`: square orbits per press depth; default is `1`, and `0` disables the wiggle.
 - `--pickup-wiggle-radius-m`: optional open-claw square centering orbit at the loose-cap pickup height; default `0` disables it. Start experiments at `0.0005` m.
 - `--pickup-wiggle-cycles`: pickup centering orbits before closing; default `0`, with `1` recommended for the first comparison.
-- `--crooked-action shoulder|shoulder-close|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
+- `--crooked-action shoulder|shoulder-close|closed-tip|regrip|cone-press`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. Deployment of the side-mounted TPU cone must explicitly select `cone-press`.
 
 Before physical execution, jog the robot to the approved vertical home with the
 wrist camera in its verified physical-cell starting roll. The cable-safe shared-policy pose is

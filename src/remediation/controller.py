@@ -12,11 +12,22 @@ from src.remediation.geometry import (SPEC, base_to_uf0, inspection_base_positio
                                       rim_base_z, transit_base_z, uf0_to_base)
 
 
-# Camera-derived cap surfaces outside this generous band cannot belong to a
-# vial cap.  The band is relative to the calibrated vial rim, not an XY slot.
-CROOKED_SURFACE_MIN_M = rim_base_z() - 0.020
-CROOKED_SURFACE_MAX_M = rim_base_z() + 0.055
 DEFECT_TRACK_GATE_M = 0.100
+
+# The cone is on the outside of the negative-Y finger.  These values are from
+# data/cone_gripper.step with the jaws at the cap-hold position used for a
+# press.  The offset is expressed in the controller TCP frame, from the closed
+# fingertip TCP to the cone nose.  At clearance the controller first rolls the
+# straight vertical wrist clockwise, then applies the 45-degree wrist tilt.
+# This keeps the arm in its conventional plane while placing the negative-Y
+# (TableCam-left) jaw below the positive-Y jaw with its cone axis vertical.
+DEFAULT_CONE_TIP_FROM_TCP_M = (0.0, -0.0360660669237695, -0.0107523335762304)
+DEFAULT_CONE_WRIST_WPR_DEG = (-180.0, 0.0, -90.0)
+DEFAULT_CONE_PRESS_WPR_DEG = (-180.0, 45.0, -90.0)
+# The rigid-cap PhysX proxy can remain balanced on the clear vial rim even after
+# the useful impact.  Continue the TPU cone nose through the documented rim
+# plane far enough that the real half-inch cap cannot stay hooked on the lip.
+DEFAULT_CONE_PRESS_BELOW_RIM_M = 0.003
 
 
 # The shared policy boundary.  Adapters may own richer observations, but only
@@ -29,7 +40,7 @@ ALLOWED_OBSERVATION_FIELDS = frozenset({
 ALLOWED_DETECTION_FIELDS = frozenset({
     "class_name", "confidence", "base_pos_m", "bbox_xyxy", "pixel",
     "depth_available", "surface_top_base_z_m", "cap_axis_base", "contact_qualified",
-    "localization_note", "timestamp",
+    "feature_base_pos_m", "cap_high_point_base_m", "localization_note", "timestamp",
 })
 FORBIDDEN_ORACLE_FIELDS = frozenset({
     "prim", "prim_path", "world_pose", "true_pose", "true_axis",
@@ -128,12 +139,36 @@ def wpr_to_rotation(wpr_deg):
     return Rx @ Ry @ Rz
 
 
+def command_rotation_to_j6(rotation):
+    """Map controller TCP-frame orientation to the ER-4iA J6 frame.
+
+    The controller's local +Z is the approach axis, while this robot model's
+    physical tool axis is J6 +X; both use local +Y for finger spread.
+    """
+    rotation = np.asarray(rotation, dtype=float)
+    if rotation.shape != (3, 3):
+        raise ValueError("rotation must be 3x3")
+    return np.column_stack((rotation[:, 2], rotation[:, 1], -rotation[:, 0]))
+
+
+def j6_rotation_to_command(rotation):
+    """Inverse of command_rotation_to_j6 for Cartesian interpolation."""
+    rotation = np.asarray(rotation, dtype=float)
+    if rotation.shape != (3, 3):
+        raise ValueError("rotation must be 3x3")
+    return np.column_stack((-rotation[:, 2], rotation[:, 1], rotation[:, 0]))
+
+
 class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
                  crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
                  crooked_action="shoulder", crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1, pickup_wiggle_radius_m=0.0,
-                 pickup_wiggle_cycles=0, vial_rim_z_m=None):
+                 pickup_wiggle_cycles=0, vial_rim_z_m=None,
+                 cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
+                 cone_wrist_wpr_deg=DEFAULT_CONE_WRIST_WPR_DEG,
+                 cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
+                 cone_press_below_rim_m=DEFAULT_CONE_PRESS_BELOW_RIM_M):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -148,8 +183,9 @@ class RemediationController:
         self.crooked_tap_depth_m = float(crooked_tap_depth_m)
         if not 0.0 < self.crooked_tap_depth_m <= 0.010:
             raise ValueError("crooked tap depth must be greater than 0 and at most 0.010 m")
-        if crooked_action not in ("shoulder", "shoulder-close", "closed-tip", "regrip"):
-            raise ValueError("crooked_action must be shoulder, shoulder-close, closed-tip, or regrip")
+        if crooked_action not in ("shoulder", "shoulder-close", "closed-tip", "regrip", "cone-press"):
+            raise ValueError(
+                "crooked_action must be shoulder, shoulder-close, closed-tip, regrip, or cone-press")
         self.crooked_action = crooked_action
         self.crooked_wiggle_radius_m = float(crooked_wiggle_radius_m)
         self.crooked_wiggle_cycles = int(crooked_wiggle_cycles)
@@ -163,6 +199,21 @@ class RemediationController:
             raise ValueError("pickup wiggle radius must be between 0 and 0.005 m")
         if not 0 <= self.pickup_wiggle_cycles <= 2:
             raise ValueError("pickup wiggle cycles must be between 0 and 2")
+        self.cone_tip_from_tcp_m = np.asarray(cone_tip_from_tcp_m, dtype=float)
+        self.cone_wrist_wpr_deg = tuple(np.asarray(cone_wrist_wpr_deg, dtype=float))
+        self.cone_press_wpr_deg = tuple(np.asarray(cone_press_wpr_deg, dtype=float))
+        self.cone_press_below_rim_m = float(cone_press_below_rim_m)
+        if (self.cone_tip_from_tcp_m.shape != (3,) or
+                not np.isfinite(self.cone_tip_from_tcp_m).all()):
+            raise ValueError("cone tip offset must contain three finite coordinates")
+        if (len(self.cone_wrist_wpr_deg) != 3 or
+                not np.isfinite(self.cone_wrist_wpr_deg).all() or
+                len(self.cone_press_wpr_deg) != 3 or
+                not np.isfinite(self.cone_press_wpr_deg).all()):
+            raise ValueError("cone orientations must contain three finite W/P/R angles")
+        if (not np.isfinite(self.cone_press_below_rim_m) or
+                not -0.010 <= self.cone_press_below_rim_m <= 0.010):
+            raise ValueError("cone press depth must be between -0.010 and 0.010 m")
         self.reset()
 
     def _add_inspection(self, closed=False):
@@ -178,13 +229,19 @@ class RemediationController:
         self.state = "inspect"
         self.confirmations = 0
         self.verify_frames = 0
+        self.cone_oriented = False
 
     def _valid_defect(self, detection):
         """Reject contact targets whose camera geometry is physically impossible."""
+        localization_note = detection.get("localization_note", "")
+        if localization_note and "tray-grid fit" not in localization_note:
+            self.events.append({"event": "target_rejected",
+                                "reason": "defect is not assigned to the perception-fitted tray grid"})
+            return False
         if detection.get("class_name") != "crooked_cap":
             return True
         top = float(detection.get("surface_top_base_z_m", np.nan))
-        if not CROOKED_SURFACE_MIN_M <= top <= CROOKED_SURFACE_MAX_M:
+        if not self.vial_rim_z_m - 0.020 <= top <= self.vial_rim_z_m + 0.055:
             self.events.append({"event": "target_rejected",
                                 "reason": "crooked RGB-D surface height outside physical range",
                                 "surface_top_base_z_m": top})
@@ -192,11 +249,14 @@ class RemediationController:
         return True
 
     def _tracked_defects(self, defects):
-        """Match fresh camera defects to the initial defect set.
+        """Match camera defects to prior tracks and admit newly observed defects.
 
         Tracks are controller memory derived only from camera detections.  A cap
         that moves after contact remains the same attempted track instead of
-        gaining a new attempt because its quantized XY coordinate changed.
+        gaining a new attempt because its quantized XY coordinate changed.  A
+        missing-cap track that becomes a crooked-cap detection after placement
+        is deliberately a new repair task, so replacement-induced crooked caps
+        are handled in the second phase of the workflow.
         """
         if self.defect_tracks is None and defects:
             self.defect_tracks = [{"class_name": d["class_name"],
@@ -223,6 +283,22 @@ class RemediationController:
             track = self.defect_tracks[ti]
             track["last_xy"] = np.asarray(defects[di]["base_pos_m"][:2], float)
             matches.append((track, defects[di], distance))
+        for di, detection in enumerate(defects):
+            if di in assigned_detections:
+                continue
+            xy = np.asarray(detection["base_pos_m"][:2], float)
+            # A duplicate of an already attempted same-class target is not a
+            # new task.  Class transitions at the same aperture are new tasks.
+            if any(ti not in assigned_tracks and
+                   track["class_name"] == detection["class_name"] and
+                   np.linalg.norm(xy - track["last_xy"]) <= DEFECT_TRACK_GATE_M
+                   for ti, track in enumerate(self.defect_tracks)):
+                continue
+            track = {"class_name": detection["class_name"],
+                     "anchor_xy": xy.copy(), "last_xy": xy.copy(), "attempts": 0}
+            self.defect_tracks.append(track)
+            matches.append((track, detection, 0.0))
+        matches.sort(key=lambda match: match[1]["class_name"] != "missing_cap")
         return matches
 
     def hold(self, obs):
@@ -239,6 +315,11 @@ class RemediationController:
     def _add_pose(self, position, wpr, closed):
         self.queue.append(checked_pose_action(position, wpr, closed))
 
+    def _cone_tcp_for_tip(self, cone_tip_position):
+        """Fingertip TCP pose that places the CAD cone nose at a base point."""
+        rotation = wpr_to_rotation(self.cone_press_wpr_deg)
+        return np.asarray(cone_tip_position, dtype=float) - rotation @ self.cone_tip_from_tcp_m
+
     def _route(self, obs, target, spare=None):
         start = len(self.queue)
         try:
@@ -252,12 +333,15 @@ class RemediationController:
         current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
         height = max(transit_base_z(), current[2])
         target_pos = np.asarray(target["base_pos_m"], dtype=float)
-        self._add([current[0], current[1], height], False)
+        cone_batch = spare is None and self.crooked_action == "cone-press"
+        if not cone_batch:
+            self._add([current[0], current[1], height], False)
         if spare is None:
             surface_top = float(target.get("surface_top_base_z_m", np.nan))
             if not np.isfinite(surface_top):
                 raise ValueError("crooked cap requires an RGB-D surface-top height")
-            self._add([target_pos[0], target_pos[1], height], False)
+            if not cone_batch:
+                self._add([target_pos[0], target_pos[1], height], False)
             if self.crooked_action in ("shoulder", "shoulder-close"):
                 # Open fingers surround the vial; the CAD-measured internal
                 # shoulder taps from the observed cap-surface height.
@@ -296,6 +380,67 @@ class RemediationController:
                 self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], True)
                 self._add(contact + [0, 0, 0.025], True)
                 self._add(contact + [0, 0, 0.025], False)
+            elif self.crooked_action == "cone-press":
+                # Close and orient only at vial-clearance height.  The CAD cone
+                # nose is then placed from the RGB-D cap centre and surface
+                # height.  Jaw state never changes during cap contact.
+                vertical_high = np.array([target_pos[0], target_pos[1], height])
+                axis = np.asarray(target.get("cap_axis_base"), dtype=float)
+                if (axis.shape != (3,) or not np.isfinite(axis).all() or
+                        np.linalg.norm(axis[:2]) < 1e-6 or axis[2] < 0.5):
+                    raise ValueError("cone press requires a valid aligned-depth cap axis")
+                # The grid-fitted base position identifies the vial aperture;
+                # a leaning cap's observed centre can be several millimetres
+                # away.  Centre the STEP-measured 25.4 mm broad cone on that
+                # camera observation when it remains associated with the slot.
+                cap_center_xy = target_pos[:2]
+                observed_center = np.asarray(target.get("feature_base_pos_m", []), dtype=float)
+                if (observed_center.shape == (3,) and np.isfinite(observed_center).all() and
+                        np.linalg.norm(observed_center[:2] - target_pos[:2]) <= 0.016):
+                    cap_center_xy = observed_center[:2]
+                feature_xy = cap_center_xy
+                high_point = np.asarray(target.get("cap_high_point_base_m", []), dtype=float)
+                if (high_point.shape == (3,) and np.isfinite(high_point).all() and
+                        np.linalg.norm(high_point[:2] - target_pos[:2]) >= 0.001 and
+                        np.linalg.norm(high_point[:2] - target_pos[:2]) <= 0.016 and
+                        self.vial_rim_z_m - 0.020 <= high_point[2] <= self.vial_rim_z_m + 0.055):
+                    contact_surface_top = float(high_point[2])
+                else:
+                    contact_surface_top = surface_top
+                cone_high = self._cone_tcp_for_tip(vertical_high)
+                cone_pre = self._cone_tcp_for_tip(
+                    [feature_xy[0], feature_xy[1], contact_surface_top + 0.025])
+                cone_touch = self._cone_tcp_for_tip(
+                    [feature_xy[0], feature_xy[1], contact_surface_top + 0.001])
+                # Advance only through the cone-led interval from the contact
+                # trace, retreat, and reacquire the cap surface before the next
+                # tap.  This prevents the broad finger proxy from continuing
+                # through the old 45 mm sweep after the useful initial impact.
+                # This endpoint is a directly calibratable physical quantity:
+                # positive depth moves below the rim and positive press offset
+                # raises it. The old surface-relative stroke is deliberately
+                # not allowed to override a clearance-only physical trial.
+                cone_contact_z = (self.vial_rim_z_m - self.cone_press_below_rim_m +
+                                  self.tool.press_offset_m)
+                cone_contact = self._cone_tcp_for_tip(
+                    [feature_xy[0], feature_xy[1], cone_contact_z])
+                if not self.cone_oriented:
+                    current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
+                    orientation_point = np.array([current[0], current[1], height])
+                    self._add(orientation_point, True)
+                    # Stage the physical handoff exactly once for the batch:
+                    # remain straight while J6 rolls clockwise, then use the
+                    # wrist bend to lean the gripper 45 degrees.  Every later
+                    # crooked-cap waypoint retains the final posture.
+                    self._add_pose(orientation_point, self.cone_wrist_wpr_deg, True)
+                    self._add_pose(orientation_point, self.cone_press_wpr_deg, True)
+                    self.cone_oriented = True
+                self._add_pose(cone_high, self.cone_press_wpr_deg, True)
+                self._add_pose(cone_pre, self.cone_press_wpr_deg, True)
+                self._add_pose(cone_touch, self.cone_press_wpr_deg, True)
+                self._add_pose(cone_contact, self.cone_press_wpr_deg, True)
+                self._add_pose(cone_pre, self.cone_press_wpr_deg, True)
+                self._add_pose(cone_high, self.cone_press_wpr_deg, True)
             else:
                 # Reproduce the useful part of the original regrip: approach
                 # and capture coaxially with the observed crooked cap, lift
@@ -330,8 +475,9 @@ class RemediationController:
                 self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], True)
                 self._add(contact + [0, 0, 0.025], True)
                 self._add(contact + [0, 0, 0.025], False)
-            self._add([target_pos[0], target_pos[1], height], False)
-            self._add_inspection(False)
+            if not cone_batch:
+                self._add([target_pos[0], target_pos[1], height], False)
+                self._add_inspection(False)
             self.state = "repair"
         else:
             spare_pos = np.asarray(spare["base_pos_m"], dtype=float)
@@ -396,10 +542,14 @@ class RemediationController:
                        for d in detections)
             self.confirmations = self.confirmations + 1 if good else 0
             self.verify_frames += 1
-            if self.confirmations >= 2:
+            incremental_cone = (self.crooked_action == "cone-press" and
+                                self.pending["target"]["class_name"] == "crooked_cap")
+            required_confirmations = 1 if incremental_cone else 2
+            maximum_verify_frames = 1 if incremental_cone else 5
+            if self.confirmations >= required_confirmations:
                 self.events.append({"event": "visually_verified_repair", "target": target.tolist()})
                 self.state, self.pending = "inspect", None
-            elif self.verify_frames >= 5:
+            elif self.verify_frames >= maximum_verify_frames:
                 self.events.append({"event": "repair_not_verified", "target": target.tolist()})
                 self.state, self.pending = "inspect", None
             return self.hold(obs)

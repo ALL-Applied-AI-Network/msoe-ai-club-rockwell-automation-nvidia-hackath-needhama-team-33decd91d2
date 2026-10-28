@@ -22,11 +22,14 @@ echo "Running on $(hostname) with GPU allocation:"
 nvidia-smi
 echo "=========================================================="
 
-# Use project conda environment which has ultralytics, pytorch, cuda
-PYTHON_BIN="${REPO_DIR}/.conda_env/bin/python"
-
-if [ ! -x "$PYTHON_BIN" ]; then
-    echo "Error: .conda_env python not found at $PYTHON_BIN" >&2
+# Preserve the project-local desktop environment when present; cluster jobs
+# use the shared team venv that produced the current YOLO checkpoint.
+if [ -x "${REPO_DIR}/.conda_env/bin/python" ]; then
+    PYTHON_BIN="${REPO_DIR}/.conda_env/bin/python"
+elif [ -x "${REPO_DIR}/shared/cache/locateanything_3b/venv/bin/python" ]; then
+    PYTHON_BIN="${REPO_DIR}/shared/cache/locateanything_3b/venv/bin/python"
+else
+    echo "Error: no YOLO Python environment found (.conda_env or shared HPC venv)" >&2
     exit 1
 fi
 

@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:t4:1
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/slurm-%j.out
@@ -51,6 +51,19 @@ for ((i=0; i<${#remediation_args[@]}; i++)); do
     esac
 done
 
+# Keep the original project-local environment as the first choice, but support
+# the team HPC environment used by the current YOLO training/evaluation jobs.
+if [[ -x "./.conda_env/bin/python" ]]; then
+    yolo_python="./.conda_env/bin/python"
+elif [[ -x "./shared/cache/locateanything_3b/venv/bin/python" ]]; then
+    yolo_python="./shared/cache/locateanything_3b/venv/bin/python"
+else
+    echo "No YOLO Python environment found (.conda_env or shared HPC venv)" >&2
+    exit 2
+fi
+export REMEDIATION_PYTHON="$yolo_python"
+echo "[pipeline] YOLO Python: $yolo_python"
+
 # All outputs live under shared/runs/ (bare names are placed there).
 case "$out" in
     shared/runs/*) ;;
@@ -72,7 +85,7 @@ echo "[pipeline] 1/4: Capturing live TableCam observation..."
 ./scripts/run_isaac.sh src/remediation/capture_live_tablecam.py --scene "$scene" --out "$perception"
 
 echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
-./.conda_env/bin/python src/inspection/inspect_remediation_capture.py \
+"$yolo_python" src/inspection/inspect_remediation_capture.py \
     --checkpoint "$checkpoint" \
     --image "$perception/current_scene_tablecam.png" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" \
@@ -94,7 +107,7 @@ for required in attempt_report.json trace.json policy_decisions.json oracle_eval
         exit 1
     fi
 done
-./.conda_env/bin/python src/remediation/verify_policy_parity_run.py "$action"
+"$yolo_python" src/remediation/verify_policy_parity_run.py "$action"
 
 if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
     echo "[pipeline] compliant simulation produced no frames; refusing to run overlay" >&2
@@ -106,15 +119,19 @@ if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep
 fi
 
 echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
-./.conda_env/bin/python src/remediation/overlay_yolo_frames.py \
+"$yolo_python" src/remediation/overlay_yolo_frames.py \
     --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0
 
 # No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
-FFMPEG_BIN=$(command -v ffmpeg || ./.conda_env/bin/python -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
+FFMPEG_BIN=$(command -v ffmpeg || "$yolo_python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
 if [[ -x "$FFMPEG_BIN" ]]; then
     "$FFMPEG_BIN" -y -framerate 60 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
     echo "[pipeline] Video compiled successfully at $out/tablecam_yolo_compliant_remediation.mp4"
 else
-    echo "[pipeline] Note: ffmpeg not found on compute node; login node will compile the video."
+    echo "[pipeline] ffmpeg unavailable; encoding MP4 with the HPC Python/OpenCV fallback..."
+    "$yolo_python" scripts/tools/encode_frames.py \
+        --frames "$action/yolo_frames" \
+        --out "$out/tablecam_yolo_compliant_remediation.mp4" \
+        --fps 60
 fi
 

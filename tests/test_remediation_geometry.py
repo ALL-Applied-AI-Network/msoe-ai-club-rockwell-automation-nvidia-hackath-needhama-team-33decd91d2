@@ -7,6 +7,7 @@ import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from src.remediation.geometry import SPEC, base_to_uf0, cap_vertices, load_layout, resolve_height_planes, rotation, spawn_height, transit_base_z, rim_base_z, uf0_to_base
 from src.inspection.vision_pipeline import pixel_to_base, load_cameras
+from src.remediation.run_compliant_breakable_remediation import align_policy_defects_to_grid
 from src.remediation.validate_tablecam_tcp import validate as validate_tablecam_tcp
 
 
@@ -62,6 +63,36 @@ class GeometryTests(unittest.TestCase):
                                     'measured_feature_base_pos_m': point.tolist()})
         result = validate_tablecam_tcp(correspondences, cam)
         self.assertTrue(result['contact_localization_validated'])
+
+    def test_policy_defects_use_one_perception_fitted_aperture_each(self):
+        good = {'class_name': 'good_cap', 'base_pos_m': [.30, .01, .21]}
+        spare = {'class_name': 'table_cap', 'base_pos_m': [.28, .32, .01]}
+        missing = {'class_name': 'missing_cap', 'base_pos_m': [.324, -.026, .2081],
+                   'confidence': .93}
+        crooked = {'class_name': 'crooked_cap', 'base_pos_m': [.376, .036, .221],
+                   'feature_base_pos_m': [.384, .035, .221], 'confidence': .94}
+        duplicate = {**crooked, 'base_pos_m': [.368, .264, .423], 'confidence': .72}
+        summary = {
+            'missing': [{'slot': 'G17', 'xy': np.array([.331, -.027]),
+                         'detection': missing}],
+            'crooked': [{'slot': 'G23', 'xy': np.array([.382, .035]),
+                         'detection': crooked}],
+        }
+        aligned = align_policy_defects_to_grid(
+            [good, spare, missing, crooked, duplicate], summary)
+        defects = [item for item in aligned
+                   if item['class_name'] in ('missing_cap', 'crooked_cap')]
+        self.assertEqual(len(defects), 2)
+        by_class = {item['class_name']: item for item in defects}
+        np.testing.assert_allclose(by_class['missing_cap']['base_pos_m'][:2],
+                                   [.331, -.027])
+        np.testing.assert_allclose(by_class['crooked_cap']['base_pos_m'][:2],
+                                   [.382, .035])
+        np.testing.assert_allclose(by_class['crooked_cap']['feature_base_pos_m'],
+                                   crooked['feature_base_pos_m'])
+        self.assertIn('tray-grid fit', by_class['missing_cap']['localization_note'])
+        self.assertEqual([item['class_name'] for item in aligned[:2]],
+                         ['good_cap', 'table_cap'])
 
 
 if __name__=='__main__': unittest.main()

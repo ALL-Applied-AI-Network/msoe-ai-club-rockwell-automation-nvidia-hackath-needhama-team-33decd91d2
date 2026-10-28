@@ -17,10 +17,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
+from src.inspection.vision_pipeline import (RemediationVisionDetector, cap_axis_from_rgbd_points,
+                                            refine_defect_centres_from_grid)
 from src.remediation.geometry import (base_to_uf0, inspection_base_position,
                                       resolve_height_planes, transit_base_z)
-from src.remediation.controller import ContactTool, RemediationController, wpr_to_rotation
+from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
+                                        RemediationController, wpr_to_rotation)
 from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
@@ -65,6 +67,8 @@ class Policy:
                  crooked_shoulder_depth_m=0.0326838,
                  crooked_tap_depth_m=0.005,
                  crooked_action="shoulder",
+                 cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
+                 cone_press_below_rim_m=0.003,
                  crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1,
                  pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
@@ -95,6 +99,8 @@ class Policy:
             crooked_shoulder_depth_m=crooked_shoulder_depth_m,
             crooked_tap_depth_m=crooked_tap_depth_m,
             crooked_action=crooked_action,
+            cone_tip_from_tcp_m=cone_tip_from_tcp_m,
+            cone_press_below_rim_m=cone_press_below_rim_m,
             crooked_wiggle_radius_m=crooked_wiggle_radius_m,
             crooked_wiggle_cycles=crooked_wiggle_cycles,
             pickup_wiggle_radius_m=pickup_wiggle_radius_m,
@@ -114,6 +120,29 @@ class Policy:
             "vial_rim_overridden": vial_rim_z_m is not None,
         }, indent=2) + "\n")
         (self.trace_dir / "depth").mkdir(exist_ok=True)
+        config = {
+            "checkpoint": str(weights.resolve()),
+            "mode": mode,
+            "confidence": self.confidence,
+            "imgsz": int(imgsz),
+            "device": str(device),
+            "allow_provisional_contact": bool(allow_provisional_contact),
+            "pick_offset_m": float(pick_offset_m),
+            "place_offset_m": float(place_offset_m),
+            "press_offset_m": float(press_offset_m),
+            "crooked_action": crooked_action,
+            "crooked_shoulder_depth_m": float(crooked_shoulder_depth_m),
+            "crooked_tap_depth_m": float(crooked_tap_depth_m),
+            "crooked_wiggle_radius_m": float(crooked_wiggle_radius_m),
+            "crooked_wiggle_cycles": int(crooked_wiggle_cycles),
+            "pickup_wiggle_radius_m": float(pickup_wiggle_radius_m),
+            "pickup_wiggle_cycles": int(pickup_wiggle_cycles),
+            "work_surface_z_m": self.work_surface_z,
+            "vial_rim_z_m": self.vial_rim_z,
+            "cone_tip_from_tcp_m": np.asarray(cone_tip_from_tcp_m, dtype=float).tolist(),
+            "cone_press_below_rim_m": float(cone_press_below_rim_m),
+        }
+        (self.trace_dir / "policy_config.json").write_text(json.dumps(config, indent=2) + "\n")
         self.trace_file = self.trace_dir / "trace.jsonl"
         self.frame_count = 0
         self.last_saved_action = None
@@ -155,6 +184,15 @@ class Policy:
 
     def _at_inspection(self, obs):
         return np.linalg.norm(self._tcp(obs)[:3] - INSPECTION_UF0_MM) <= 2.0
+
+    def _inspection_action(self, obs):
+        """Move to the camera-clear point without undoing a staged cone wrist."""
+        joints = np.asarray(obs.get("joints", []), dtype=float)
+        closed = float(joints[6]) if joints.size > 6 and np.isfinite(joints[6]) else GRIPPER_OPEN
+        wpr = (self.controller.cone_press_wpr_deg
+               if self.controller is not None and self.controller.cone_oriented
+               else DOWN_WPR_DEG)
+        return [*map(float, INSPECTION_UF0_MM), *map(float, wpr), closed]
 
     def _validate_start_orientation(self, obs):
         if self.start_orientation_checked:
@@ -299,7 +337,11 @@ class Policy:
                 updated["depth_available"] = False
                 updated["localization_note"] += "; no valid projected depth points in box"
             fused.append(updated)
-        return fused
+        # Depth is intentionally a refinement, not an alternative coordinate
+        # system. Refit defects to the camera-derived 6x5 aperture lattice so
+        # missing-vial depth holes and crooked-cap flange centres cannot move a
+        # contact target away from its visible tray aperture.
+        return refine_defect_centres_from_grid(fused, rim_z_m=self.vial_rim_z)
 
     def _full_act(self, obs, image, stamp, fresh):
         """Pick a spare for a missing vial or press a crooked cap vertically.
@@ -327,8 +369,7 @@ class Policy:
         # Initial observation and every decision gate occur only from v47's
         # cable-safe, TableCam-clear starting pose.
         if not self._at_inspection(observed):
-            closed = bool(len(observed.get("joints", [])) > 6 and observed["joints"][6] >= 0.5)
-            action = [*map(float, INSPECTION_UF0_MM), *DOWN_WPR_DEG, float(closed)]
+            action = self._inspection_action(observed)
             self.events.append({"event": "move_to_inspection_pose"})
             self._record_snapshot(observed, image, [], action)
             return action

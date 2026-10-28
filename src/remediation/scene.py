@@ -57,27 +57,16 @@ def clear_vial_material(stage):
 
 
 def textured_tray_aluminum(stage):
-    """Satin aluminum using the tray roughness and subtle normal textures."""
-    mat = UsdShade.Material.Define(stage, '/World/RemediationLooks/Fixture')
-    shader = UsdShade.Shader.Define(stage, str(mat.GetPath()) + '/Surface')
-    shader.SetSourceAsset(Sdf.AssetPath('OmniPBR.mdl'), 'mdl')
-    shader.SetSourceAssetSubIdentifier('OmniPBR', 'mdl')
-    texture_root = ROOT / 'shared/data/fanuc_er4ia_sim/textures'
-    shader.CreateInput('diffuse_color_constant', Sdf.ValueTypeNames.Color3f).Set(
-        Gf.Vec3f(.72, .74, .76))
-    shader.CreateInput('metallic_constant', Sdf.ValueTypeNames.Float).Set(1.0)
-    shader.CreateInput('reflection_roughness_constant', Sdf.ValueTypeNames.Float).Set(.30)
-    shader.CreateInput('reflection_roughness_texture_influence', Sdf.ValueTypeNames.Float).Set(1.0)
-    shader.CreateInput('reflectionroughness_texture', Sdf.ValueTypeNames.Asset).Set(
-        Sdf.AssetPath(str(texture_root / 'alu_roughness.png')))
-    shader.CreateInput('normalmap_texture', Sdf.ValueTypeNames.Asset).Set(
-        Sdf.AssetPath(str(texture_root / 'alu_normal.png')))
-    shader.CreateInput('bump_factor', Sdf.ValueTypeNames.Float).Set(.18)
-    shader.CreateInput('project_uvw', Sdf.ValueTypeNames.Bool).Set(True)
-    shader.CreateInput('world_or_object', Sdf.ValueTypeNames.Bool).Set(False)
-    shader.CreateInput('texture_scale', Sdf.ValueTypeNames.Float2).Set(Gf.Vec2f(90, 90))
-    mat.CreateSurfaceOutput('mdl').ConnectToSource(shader.ConnectableAPI(), 'out')
-    return mat
+    """Portable satin aluminum that cannot fall back to a mirror finish.
+
+    The former OmniPBR material was fully metallic at roughness 0.30 and gave
+    its roughness texture 100% influence.  Under the bright TableCam lighting,
+    dark texels (or a failed texture lookup) produced mirror-like plate cells.
+    A fixed high roughness keeps the plate recognisably aluminum and consistent
+    across cluster nodes without changing any fixture geometry or collision.
+    """
+    return material(stage, 'Fixture', (.68, .70, .72),
+                    roughness=.55, metallic=.90)
 
 
 def collision(prim, convex=False):

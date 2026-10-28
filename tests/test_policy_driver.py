@@ -28,16 +28,17 @@ class PolicyDriverTests(unittest.TestCase):
              "surface_top_base_z_m": .210132,
              "depth_available": True, "contact_qualified": True},
         ]
-        state = {"tcp": tcp, "grasp": False}
+        state = {"tcp": tcp, "jaw": 0.0, "grasp": False}
 
         def observe(ctrl):
-            obs = {"tcp_pose": state["tcp"], "joints": [0] * 7}
+            obs = {"tcp_pose": state["tcp"], "joints": [0] * 6 + [state["jaw"]]}
             if ctrl.state == "pickup" and not ctrl.queue:
                 obs["grasp_verified"] = True
             return obs, detections
 
         def execute(action, _state):
             state["tcp"] = action[:6]
+            state["jaw"] = action[6]
 
         # Verification cannot succeed against this deliberately static detection;
         # the route still executes and returns to inspect after bounded verification.

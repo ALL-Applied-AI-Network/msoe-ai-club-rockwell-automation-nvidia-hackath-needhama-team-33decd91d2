@@ -1,8 +1,9 @@
 # Real-Life Demo: What Can Go Wrong, and the Prepared Fixes
 
 > Historical risk register: regrip and wrist-camera sections describe the retained
-> legacy controller. The active shared policy is the TableCam-only open-claw
-> internal-shoulder strategy documented in `REMEDIATION_RUNBOOK.md`.
+> legacy controller. The active shared policy is TableCam-only; the current cone
+> deployment explicitly selects its side-cone strategy as documented in
+> `REMEDIATION_RUNBOOK.md`.
 
 Everything in the remediation pipeline has so far run only in Isaac Sim
 (`physical_robot_authorized: false` in every attempt report). This list covers
@@ -251,14 +252,13 @@ a hand on the E-stop.
 
 ## 5. Integration and timing
 
-### 5.1 Nothing sends the plan to the real robot yet
-*Risk:* the runner writes `action/trace.json` with `q_cmd` per 1/60 s step. Nothing
-streams it to the controller.
-
-*Fix [ready]:* a small exporter that thins `q_cmd` to about 10 Hz joint waypoints and
-sends them over Fanuc RMI (or writes a TP program with J moves and CNT0 for the
-contact segments). The gripper open/close comes from the `jaw_m` changes in the
-trace. Rehearse it with the tray removed (5.1 and 4.2 go together).
+### 5.1 Physical transport is separate from the Isaac trace
+*Status [in code]:* do not stream or export the simulator's 60 Hz `q_cmd` trace.
+`PhysicalAI-Hackathon-2026/cell_client.py` sends the shared controller's short TCP
+actions to the approved FANUC cell API, including the binary gripper command. The
+API-compatible mock and the T4 Slurm launcher validate action shapes, limits and
+trial flow before a physical slot. Rehearse with the tray removed (5.1 and 4.2 go
+together).
 
 ### 5.2 Demo time
 *Risk:* each crooked cap takes about 5 sim-minutes (servo, regrip, regrasp, place).
