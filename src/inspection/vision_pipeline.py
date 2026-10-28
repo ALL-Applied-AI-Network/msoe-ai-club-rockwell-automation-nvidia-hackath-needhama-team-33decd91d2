@@ -293,7 +293,6 @@ class RemediationVisionDetector:
                 plane = (self.work_surface_z + SPEC.plug_depth + SPEC.flange_thickness
                          if name == 'table_cap' else self.rim_z + (0 if name == 'missing_cap' else SPEC.flange_thickness))
                 position = pixel_to_base(self.table_cam, center, plane, (w, h))
-                plane_position = position.copy()
                 depth_value=None
                 surface_top=None
                 cap_axis=None
@@ -313,20 +312,11 @@ class RemediationVisionDetector:
                         pc=np.column_stack([((uu[valid]*su-native_w/2)/self.table_cam['fx'])*z,
                                             ((vv[valid]*sv-native_h/2)/self.table_cam['fx'])*z,z])
                         points=pc@self.table_cam['T'][:3,:3].T+self.table_cam['T'][:3,3]
-                        depth_position=np.median(points,axis=0)
-                        # A loose cap is planar and its RGB box centre and depth
-                        # median have opposite perspective biases. Their fused
-                        # XY is substantially more stable for finger-pocket pickup.
-                        if name == 'table_cap':
-                            position = plane_position.copy()
-                            position[:2] = 0.5 * (plane_position[:2] + depth_position[:2])
-                        else:
-                            # Vial mouths share a measured, fixed-height plane.
-                            # Keep the commanded XYZ on the RGB bounding-box ray
-                            # intersection instead of allowing noisy/transparent-
-                            # plastic depth to move the robot target.  Depth remains
-                            # observation-only for surface validation and cap axis.
-                            position = plane_position.copy()
+                        # Robot targets always remain the calibrated RGB
+                        # bounding-box-centre ray/plane intersection.  Depth is
+                        # observation-only: clear plastic and partial cap crops
+                        # can otherwise bias pickup and placement in different
+                        # directions.
                         depth_value=float(np.median(z))
                         surface_top=float(np.percentile(points[:,2],90))
                         if name == 'crooked_cap':
@@ -349,6 +339,6 @@ class RemediationVisionDetector:
                                 'depth_available':depth_value is not None,
                                 'contact_qualified': False,
                                 'localization_note': ('RGB box-center ray intersected with the calibrated object plane; '
-                                                      'aligned depth is observation-only except loose-cap XY fusion; '
-                                                      'feature refinement and contact error budget remain unvalidated')})
-        return refine_defect_centres_from_grid(targets, rim_z_m=self.rim_z)
+                                                      'aligned depth is observation-only; '
+                                                      'contact error budget remains unvalidated')})
+        return targets
