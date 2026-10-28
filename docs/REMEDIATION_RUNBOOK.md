@@ -335,6 +335,13 @@ wrist camera facing away from the robot base. The cable-safe shared-policy pose 
 W/P/R `(-180, 0, -180)` degrees. The physical policy refuses to start more than
 20 degrees from this orientation rather than commanding an automatic wrist unwind.
 
+Full remediation observes and replans only from the shared camera-clear inspection
+pose at base `(0.240, 0.250, transit Z)` m (the v47 starting pose). It runs YOLO,
+executes one complete repair, returns to inspection, verifies, and then selects the
+next target. Missing-cap pickup retains one intermediate inspection-pose snapshot
+to verify that the loose cap left the table before placement. YOLO is not rerun
+between ordinary motion waypoints.
+
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and
 leaves the shoulder 10 mm above nominal contact. A zero or negative press offset

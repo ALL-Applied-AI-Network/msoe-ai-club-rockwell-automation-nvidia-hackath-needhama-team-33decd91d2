@@ -8,7 +8,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.remediation.geometry import SPEC, base_to_uf0, rim_base_z, transit_base_z, uf0_to_base
+from src.remediation.geometry import (SPEC, base_to_uf0, inspection_base_position,
+                                      rim_base_z, transit_base_z, uf0_to_base)
 
 
 # Camera-derived cap surfaces outside this generous band cannot belong to a
@@ -157,6 +158,9 @@ class RemediationController:
         if not 0 <= self.crooked_wiggle_cycles <= 3:
             raise ValueError("crooked wiggle cycles must be between 0 and 3")
         self.reset()
+
+    def _add_inspection(self, closed=False):
+        self._add(inspection_base_position(), closed)
 
     def reset(self):
         self.queue = deque()
@@ -321,6 +325,7 @@ class RemediationController:
                 self._add(contact + [0, 0, 0.025], True)
                 self._add(contact + [0, 0, 0.025], False)
             self._add([target_pos[0], target_pos[1], height], False)
+            self._add_inspection(False)
             self.state = "repair"
         else:
             spare_pos = np.asarray(spare["base_pos_m"], dtype=float)
@@ -329,6 +334,7 @@ class RemediationController:
             self._add(spare_pos + [0, 0, self.tool.pick_offset_m], False)
             self._add(spare_pos + [0, 0, self.tool.pick_offset_m], True)
             self._add([spare_pos[0], spare_pos[1], height], True)
+            self._add_inspection(True)
             self.state = "pickup"
         self.pending = {"target": target, "spare": spare, "height": height}
 
@@ -364,6 +370,7 @@ class RemediationController:
             self._add(p + [0, 0, self.tool.press_offset_m], True)
             self._add(p + [0, 0, self.tool.press_offset_m], False)
             self._add([p[0], p[1], self.pending["height"]], False)
+            self._add_inspection(False)
             self.state = "repair"
             return self.queue.popleft()
         if self.state == "repair":

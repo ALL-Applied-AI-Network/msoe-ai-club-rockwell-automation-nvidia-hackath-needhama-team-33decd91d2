@@ -213,6 +213,11 @@ def transit_base_z():
     return max(0.285, rim_base_z() + 0.03 + SPEC.plug_depth)
 
 
+def inspection_base_position():
+    """Cable-safe, TableCam-clear inspection TCP used by sim and physical policy."""
+    return np.array([0.240, 0.250, transit_base_z()], dtype=float)
+
+
 def cap_state(position, orientation, rim_position=None, spec=SPEC):
     """Evaluation only: derive state from a settled pose, never a requested label."""
     p, R = np.asarray(position), np.asarray(orientation)

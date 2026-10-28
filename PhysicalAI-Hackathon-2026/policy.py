@@ -18,7 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
-from src.remediation.geometry import base_to_uf0, resolve_height_planes, transit_base_z
+from src.remediation.geometry import (base_to_uf0, inspection_base_position,
+                                      resolve_height_planes, transit_base_z)
 from src.remediation.controller import ContactTool, RemediationController, wpr_to_rotation
 from calibration.geometry import depth_to_base, load as load_cameras, project
 
@@ -28,6 +29,7 @@ DOWN_WPR_DEG = (-180.0, 0.0, -180.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
 HOVER_ABOVE_CAP_M = 0.075
+INSPECTION_UF0_MM = base_to_uf0(inspection_base_position())
 # Only used by the local mock, which has no initial TCP pose.
 MOCK_START_TCP = [400.0, 0.0, TRANSIT_UF0_Z_MM, *DOWN_WPR_DEG, GRIPPER_OPEN]
 
@@ -141,6 +143,9 @@ class Policy:
 
     def _hold(self, obs):
         return self._command(self._tcp(obs)[:3])
+
+    def _at_inspection(self, obs):
+        return np.linalg.norm(self._tcp(obs)[:3] - INSPECTION_UF0_MM) <= 2.0
 
     def _validate_start_orientation(self, obs):
         if self.start_orientation_checked:
@@ -301,6 +306,22 @@ class Policy:
         if image is None or not fresh:
             return self.controller.hold(observed)
         self.last_observation_time = stamp
+        current = self._tcp(observed)
+        # Execute a previously planned repair without rerunning YOLO between
+        # ordinary waypoints. Every route ends at the shared inspection pose.
+        if self.controller.queue:
+            action = self.controller.act(observed, [])
+            self.events[:] = self.controller.events[-20:]
+            self._record_snapshot(observed, image, [], action)
+            return action
+        # Initial observation and every decision gate occur only from v47's
+        # cable-safe, TableCam-clear starting pose.
+        if not self._at_inspection(observed):
+            closed = bool(len(observed.get("joints", [])) > 6 and observed["joints"][6] >= 0.5)
+            action = [*map(float, INSPECTION_UF0_MM), *DOWN_WPR_DEG, float(closed)]
+            self.events.append({"event": "move_to_inspection_pose"})
+            self._record_snapshot(observed, image, [], action)
+            return action
         detections = self._snapshot_detections(image, stamp)
         detections = self._fuse_table_depth(detections, observed.get("depth", {}).get("table"))
         if self.controller.state == "pickup" and self.controller.pending is not None:
@@ -328,6 +349,8 @@ class Policy:
             return self._full_act(obs, image, stamp, fresh)
 
         if self.state == "inspect":
+            if not self._at_inspection(obs):
+                return self._command(INSPECTION_UF0_MM)
             if image is None or not fresh:
                 return self._hold(obs)
             self.last_observation_time = stamp

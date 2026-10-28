@@ -4,7 +4,7 @@ import numpy as np
 
 from src.remediation.controller import (ContactTool, RemediationController, axis_to_wpr,
                                         policy_observation, wpr_to_rotation)
-from src.remediation.geometry import base_to_uf0
+from src.remediation.geometry import base_to_uf0, inspection_base_position
 
 
 class RemediationControllerTests(unittest.TestCase):
@@ -68,6 +68,8 @@ class RemediationControllerTests(unittest.TestCase):
         low_actions = [action for action in actions if abs(action[2] - low) < 1e-6]
         self.assertGreater(max(action[0] for action in low_actions)
                            - min(action[0] for action in low_actions), 1.49)
+        np.testing.assert_allclose(actions[-1][:3], base_to_uf0(inspection_base_position()))
+        self.assertEqual(actions[-1][6], 0.0)
 
     def test_crooked_shoulder_depth_limits_are_rejected(self):
         tool = ContactTool(0.0, 0.0, 0.0, validated=True)
@@ -187,6 +189,15 @@ class RemediationControllerTests(unittest.TestCase):
         action = self.controller.act(self.obs, detections)
         self.assertEqual(self.controller.state, "pickup")
         self.assertEqual(len(action), 7)
+
+    def test_pickup_returns_to_inspection_while_holding_cap(self):
+        missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
+        spare = self.detection("table_cap", [0.34, -0.20, 0.02])
+        actions = [self.controller.act(self.obs, [missing, spare])]
+        while self.controller.queue:
+            actions.append(self.controller.act(self.obs, []))
+        np.testing.assert_allclose(actions[-1][:3], base_to_uf0(inspection_base_position()))
+        self.assertEqual(actions[-1][6], 1.0)
 
     def test_missing_cap_uses_calibrated_rim_without_good_cap(self):
         detections = [self.detection("missing_cap", [0.31, 0.02, 0.01]),
