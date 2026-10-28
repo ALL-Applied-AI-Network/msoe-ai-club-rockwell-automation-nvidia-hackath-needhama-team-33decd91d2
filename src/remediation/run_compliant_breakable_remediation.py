@@ -1093,9 +1093,21 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 .finger_tip_tcp(tuple(mount['cap_seat_tcp_j6_m'])))
     home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
     start_position = np.array([.24, .25, transit_base_z()])
-    # Use the reachable +Y roll branch: it points the wrist camera away from
-    # the robot base and matches the physical cable-safe home orientation.
-    q0 = P.solve(home, start_position, DOWN, SPREAD_Y, tip)
+    # Match the physical cell's verified cable-safe vertical wrist roll. The
+    # simulator camera asset appears on the opposite side, so its visual mount
+    # must not be used to redefine the real robot's home orientation.
+    q_roll_reference = P.solve(home, start_position, DOWN, SPREAD_Y, tip)
+    q0 = None
+    for roll_shift in (np.pi, -np.pi):
+        seed = q_roll_reference.copy()
+        seed[5] = np.clip(seed[5] + roll_shift, *P.limits[5])
+        try:
+            q0 = P.solve(seed, start_position, DOWN, -SPREAD_Y, tip)
+            break
+        except RuntimeError:
+            continue
+    if q0 is None:
+        raise RuntimeError('physical-cell vertical wrist branch is unreachable')
 
     # Oracle association is constructed for evaluator/tracing only and is never
     # included in the controller observation or detection dictionaries.

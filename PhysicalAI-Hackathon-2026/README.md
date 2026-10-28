@@ -109,7 +109,7 @@ derived by adding the known 10 mm tray base and 203.2 mm vial height. Use
 the policy records both effective planes in `height_planes.json`.
 
 Start from the approved vertical home with the wrist camera facing away from the
-robot base (W/P/R `-180, 0, -180` degrees). To protect the wrist-camera wiring,
+robot base (physical-cell W/P/R `-180, 0, 0` degrees). To protect the wrist-camera wiring,
 the policy refuses to start more than 20 degrees from this orientation.
 
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,

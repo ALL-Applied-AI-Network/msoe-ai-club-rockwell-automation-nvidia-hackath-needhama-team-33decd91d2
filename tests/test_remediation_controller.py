@@ -10,7 +10,7 @@ from src.remediation.geometry import base_to_uf0, inspection_base_position
 class RemediationControllerTests(unittest.TestCase):
     def setUp(self):
         self.controller = RemediationController(ContactTool(0.0, 0.0, 0.0005, validated=True))
-        self.tcp = [*base_to_uf0([0.30, 0.0, 0.30]), -180.0, 0.0, -180.0]
+        self.tcp = [*base_to_uf0([0.30, 0.0, 0.30]), -180.0, 0.0, 0.0]
         self.obs = {"tcp_pose": self.tcp, "joints": [0.0] * 7}
 
     @staticmethod
@@ -44,7 +44,7 @@ class RemediationControllerTests(unittest.TestCase):
                             for action in actions))
 
     def test_vertical_axis_has_standard_down_orientation(self):
-        np.testing.assert_allclose(axis_to_wpr([0, 0, 1]), [-180, 0, -180], atol=1e-8)
+        np.testing.assert_allclose(axis_to_wpr([0, 0, 1]), [-180, 0, 0], atol=1e-8)
         np.testing.assert_allclose(wpr_to_rotation(axis_to_wpr([0, 0, 1]))[:, 2],
                                    [0, 0, -1], atol=1e-8)
 
@@ -60,7 +60,7 @@ class RemediationControllerTests(unittest.TestCase):
             actions.append(self.controller.act(self.obs, [detection]))
         self.assertEqual(self.controller.state, "repair")
         self.assertTrue(all(action[6] == 0.0 for action in actions))
-        self.assertTrue(all(action[3:6] == [-180.0, 0.0, -180.0] for action in actions))
+        self.assertTrue(all(action[3:6] == [-180.0, 0.0, 0.0] for action in actions))
         target_uf0_z = base_to_uf0([0.31, 0.02, 0.21])[2]
         self.assertAlmostEqual(min(action[2] for action in actions),
                                target_uf0_z - 32.6838 - 5.0 + 0.5, places=4)
@@ -88,7 +88,7 @@ class RemediationControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RemediationController(tool, crooked_wiggle_cycles=4)
         with self.assertRaises(ValueError):
-            RemediationController(tool, pickup_wiggle_radius_m=0.0016)
+            RemediationController(tool, pickup_wiggle_radius_m=0.0051)
         with self.assertRaises(ValueError):
             RemediationController(tool, pickup_wiggle_cycles=3)
 
@@ -141,12 +141,12 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertIn([0.0, 1.0, 1.0], [jaw[i:i + 3] for i in range(len(jaw) - 2)])
         self.assertGreaterEqual(sum(value == 1.0 for value in jaw), 5)
         self.assertEqual(jaw[-1], 0.0)
-        tilted = [action for action in actions if not np.allclose(action[3:6], [-180, 0, -180])]
+        tilted = [action for action in actions if not np.allclose(action[3:6], [-180, 0, 0])]
         self.assertGreaterEqual(len(tilted), 4)
         np.testing.assert_allclose(
             wpr_to_rotation(tilted[0][3:6])[:, 2], -axis / np.linalg.norm(axis), atol=1e-7)
         first_tilted = next(i for i, action in enumerate(actions)
-                            if not np.allclose(action[3:6], [-180, 0, -180]))
+                            if not np.allclose(action[3:6], [-180, 0, 0]))
         self.assertAlmostEqual(actions[first_tilted][2], actions[first_tilted - 1][2])
         self.assertAlmostEqual(actions[first_tilted][0], actions[first_tilted - 1][0])
         self.assertAlmostEqual(actions[first_tilted][1], actions[first_tilted - 1][1])

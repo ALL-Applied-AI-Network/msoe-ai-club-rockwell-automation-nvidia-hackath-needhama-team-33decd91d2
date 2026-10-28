@@ -25,11 +25,15 @@ from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
-DOWN_WPR_DEG = (-180.0, 0.0, -180.0)
+DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
 HOVER_ABOVE_CAP_M = 0.075
 INSPECTION_UF0_MM = base_to_uf0(inspection_base_position())
+MAX_ROW_TRANSLATION_MM = 9.0
+MAX_ROW_WPR_DEG = 5.0
+ARRIVAL_TRANSLATION_MM = 1.5
+ARRIVAL_ORIENTATION_DEG = 2.0
 # Only used by the local mock, which has no initial TCP pose.
 MOCK_START_TCP = [400.0, 0.0, TRANSIT_UF0_Z_MM, *DOWN_WPR_DEG, GRIPPER_OPEN]
 
@@ -122,6 +126,8 @@ class Policy:
         self.target = None
         self.last_observation_time = None
         self.events = []
+        self.hover_detections = []
+        self.motion_goal = None
         self.start_orientation_checked = False
         if self.controller is not None:
             self.controller.reset()
@@ -165,6 +171,7 @@ class Policy:
 
     def _choose_table_cap(self, image, stamp):
         detections = self.detector.detect(image, timestamp=stamp)
+        self.hover_detections = detections
         candidates = [d for d in detections
                       if d["class_name"] == "table_cap" and d["confidence"] >= self.confidence]
         if not candidates:
@@ -342,7 +349,45 @@ class Policy:
         self._record_snapshot(observed, image, detections, action)
         return action
 
-    def act(self, obs):
+    @staticmethod
+    def _shortest_angle_delta_deg(target, current):
+        return (np.asarray(target, float) - np.asarray(current, float) + 180.0) % 360.0 - 180.0
+
+    def _goal_reached(self, obs, goal):
+        current = self._tcp(obs)
+        position_ok = np.linalg.norm(current[:3] - goal[:3]) <= ARRIVAL_TRANSLATION_MM
+        relative = wpr_to_rotation(current[3:6]).T @ wpr_to_rotation(goal[3:6])
+        angle = np.degrees(np.arccos(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0)))
+        joints = np.asarray(obs.get("joints", []), dtype=float)
+        jaw_ok = (joints.size <= 6 or not np.isfinite(joints[6]) or
+                  (joints[6] >= 0.5) == (goal[6] >= 0.5))
+        return position_ok and angle <= ARRIVAL_ORIENTATION_DEG and jaw_ok
+
+    def _motion_chunk(self, obs, goal):
+        current = self._tcp(obs)
+        delta = goal[:3] - current[:3]
+        distance = float(np.linalg.norm(delta))
+        angular = self._shortest_angle_delta_deg(goal[3:6], current[3:6])
+        largest = float(np.max(np.abs(angular)))
+        rows = max(1, int(np.ceil(distance / MAX_ROW_TRANSLATION_MM)),
+                   int(np.ceil(largest / MAX_ROW_WPR_DEG)))
+        chunk = []
+        for fraction in np.linspace(1.0 / rows, 1.0, rows):
+            xyz = current[:3] + fraction * delta
+            wpr = current[3:6] + fraction * angular
+            chunk.append([*map(float, xyz), *map(float, wpr), float(goal[6])])
+        return chunk
+
+    def _dispatch(self, obs, desired):
+        self.motion_goal = np.asarray(desired, dtype=float)
+        chunk = self._motion_chunk(obs, self.motion_goal)
+        self._write_trace({"t": obs.get("t"), "controller_state": self.controller.state if self.controller else self.state,
+                           "event": "motion_chunk", "tcp_pose_before": obs.get("tcp_pose"),
+                           "motion_goal": self.motion_goal.tolist(), "row_count": len(chunk),
+                           "action_tcp": chunk[-1]})
+        return chunk
+
+    def _decide_action(self, obs):
         self._validate_start_orientation(obs)
         image = obs.get("images", {}).get("table")
         stamp = obs.get("t")
@@ -353,13 +398,18 @@ class Policy:
 
         if self.state == "inspect":
             if not self._at_inspection(obs):
-                return self._command(INSPECTION_UF0_MM)
+                action = self._command(INSPECTION_UF0_MM)
+                if image is not None:
+                    self._record_snapshot(obs, image, [], action)
+                return action
             if image is None or not fresh:
                 return self._hold(obs)
             self.last_observation_time = stamp
             self.target = self._choose_table_cap(image, stamp)
             if self.target is None:
-                return self._hold(obs)
+                action = self._hold(obs)
+                self._record_snapshot(obs, image, self.hover_detections, action)
+                return action
             self.state = "raise"
 
         current = self._tcp(obs)
@@ -368,15 +418,37 @@ class Policy:
 
         if self.state == "raise":
             self.state = "translate"
-            return self._command([current[0], current[1], max(current[2], TRANSIT_UF0_Z_MM)])
+            action = self._command([current[0], current[1], max(current[2], TRANSIT_UF0_Z_MM)])
+            self._record_snapshot(obs, image, self.hover_detections, action)
+            return action
         if self.state == "translate":
             self.state = "hover"
-            return self._command([hover_uf0[0], hover_uf0[1], TRANSIT_UF0_Z_MM])
+            action = self._command([hover_uf0[0], hover_uf0[1], TRANSIT_UF0_Z_MM])
+            self._record_snapshot(obs, image, self.hover_detections, action)
+            return action
         if self.state == "hover":
             self.state = "hold"
             self.events.append({"event": "hovered_above_table_cap",
                                 "pixel": self.target["pixel"],
                                 "base_pos_m": cap_base.tolist(),
                                 "hover_uf0_mm": hover_uf0.tolist()})
-            return self._command(hover_uf0)
-        return self._hold(obs)
+            action = self._command(hover_uf0)
+            self._record_snapshot(obs, image, self.hover_detections, action)
+            return action
+        action = self._hold(obs)
+        self._record_snapshot(obs, image, self.hover_detections, action)
+        return action
+
+    def act(self, obs):
+        self._validate_start_orientation(obs)
+        if self.motion_goal is not None:
+            if not self._goal_reached(obs, self.motion_goal):
+                chunk = self._motion_chunk(obs, self.motion_goal)
+                self._write_trace({"t": obs.get("t"),
+                                   "controller_state": self.controller.state if self.controller else self.state,
+                                   "event": "motion_correction_chunk", "tcp_pose_before": obs.get("tcp_pose"),
+                                   "motion_goal": self.motion_goal.tolist(), "row_count": len(chunk),
+                                   "action_tcp": chunk[-1]})
+                return chunk
+            self.motion_goal = None
+        return self._dispatch(obs, self._decide_action(obs))
