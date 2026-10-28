@@ -118,3 +118,230 @@ Modern pharmaceutical and chemical fill lines suffer significant downtime and sc
 - **AI Agent Tools:** Antigravity / Cursor coding agents with NVIDIA Omniverse & PyTorch libraries.
 - **Mentor Support Requested:** Guidance on practical collision-avoidance timing with conveyor fixtures and Rockwell FactoryTalk/Emulate3D integration patterns.
 
+---
+
+## 7. Generalizable Defect Detector Trainer
+
+### Objective
+
+Build a configurable real-image training pipeline that can create a YOLO defect detector from a small human-reviewed seed set, LocateAnything object proposals, and VLM-assisted crop labels. The resulting real-image dataset can train a detector directly or fine-tune a checkpoint pretrained on synthetic data.
+
+The trainer is an extension of the inspection and dataset tooling. It must not replace or introduce an alternative to the compliant remediation runtime described in `AGENTS.md`.
+
+For vial-cap inspection, the learned appearance classes are:
+
+1. `good_cap`: an intact cap, whether seated on a vial or lying on the table.
+2. `crooked_cap`: a cap visibly tilted, raised, or off-center on a vial.
+3. `missing_cap`: an open vial top where a cap should be present.
+
+`table_cap` is not a learned appearance class in new datasets. At runtime, calibrated RGB-D height determines whether a detected `good_cap` is seated on a vial or is a spare on the table. A compatibility mapping may continue emitting `table_cap` to the existing remediation controller until its observation schema is updated.
+
+### End-to-End Workflow
+
+1. Define the object prompt, defect taxonomy, crop scale, review thresholds, split policy, and training settings in a project configuration file.
+2. Group and split real captures by video, tray state, specimen, or capture session before generating weak labels.
+3. Manually draw boxes and assign appearance labels on a small, diverse training seed set.
+4. Expand each seed box to 1.25 times its width and height, producing reviewed VLM reference crops.
+5. Run LocateAnything over the remaining full images using a class-agnostic object-of-interest prompt.
+6. Create 1.25-times context crops from the generated proposals while retaining the original proposal boxes.
+7. Use a few-shot VLM to assign an appearance class or `uncertain` to every crop.
+8. Send low-confidence, conflicting, malformed, or anomalous results to human review.
+9. Attach the accepted class to the original, unpadded full-image box.
+10. Export versioned YOLO train, validation, and test splits with complete provenance.
+11. Train from a standard pretrained YOLO checkpoint, fine-tune a synthetic checkpoint, or train with controlled real/synthetic replay.
+12. Evaluate against a fully human-reviewed real holdout before registering or deploying the checkpoint.
+
+### Project Configuration
+
+The reusable implementation must obtain class names and behavior from configuration instead of importing the remediation-specific `CLASS_NAMES`. A vial-cap configuration should express at least:
+
+```yaml
+schema_version: 1
+project_name: vial_cap_defects
+
+localization:
+  model: nvidia/LocateAnything-3B
+  prompt: "cap or open top of each vial"
+  nms_iou: 0.70
+
+classes:
+  - name: good_cap
+    description: "Intact cap with no visible damage or deformation."
+  - name: crooked_cap
+    description: "Cap on a vial that is tilted, raised, or off-center."
+  - name: missing_cap
+    description: "Open vial top where a cap should be present."
+
+crop:
+  scale: 1.25
+  square: false
+
+classification:
+  uncertain_label: uncertain
+  automatic_acceptance: 0.90
+  review_threshold: 0.70
+  require_consensus: true
+
+split:
+  group_key: capture_sequence
+  train: 0.70
+  val: 0.15
+  test: 0.15
+```
+
+A crop scale of `1.25` means 25 percent greater total width and height, centered on the source box and clipped to the image boundary. The expanded box supplies VLM context only; it must never replace the source box in YOLO labels.
+
+### Canonical Object Record
+
+Every human or generated proposal receives a stable object ID and a manifest record containing:
+
+- Source image, image dimensions, split, and split group.
+- Original full-image box and padded crop box in pixel coordinates.
+- Localization model, prompt, raw response, and proposal provenance.
+- Appearance label, label source, confidence, VLM response, and reference IDs.
+- Review status and any human correction.
+
+The original box is authoritative for YOLO geometry. The padded box is authoritative only for crop extraction. Human corrections override the effective label but do not erase the original model response.
+
+### Dataset Splitting and Leakage Control
+
+- Assign splits before VLM classification.
+- Keep related video frames, tray states, specimens, and capture sessions in one split.
+- Use only training-split seed crops as VLM references.
+- Make the validation set predominantly human-reviewed.
+- Make the test set fully human-labeled and never use it for prompt selection, references, threshold selection, or training.
+- Detect near-duplicate frames and prevent them from crossing split boundaries.
+
+### LocateAnything Proposal Stage
+
+Generalize the current resumable LocateAnything inference code so it accepts unlabeled image directories and a configurable object prompt. The stage must:
+
+- Produce class-agnostic full-image boxes.
+- Preserve raw responses and inference configuration.
+- Clamp invalid coordinates and discard degenerate boxes.
+- Merge duplicate proposals with configurable NMS or clustering.
+- Resume at image granularity.
+- Record images with zero proposals and unusual object counts.
+- Generate proposal overlays for audit.
+
+LocateAnything should locate objects, not decide whether they are good or defective. Separate class-specific localization prompts should be reserved for evaluation experiments rather than the default trainer.
+
+### Crop and VLM Classification Stage
+
+Crop generation must be deterministic and record boundary clipping. The VLM receives class definitions, several reviewed training examples per class, and one candidate crop. It must return structured output such as:
+
+```json
+{
+  "label": "crooked_cap",
+  "confidence": 0.91,
+  "reason": "The cap is raised and tilted relative to the vial rim."
+}
+```
+
+The classifier must reject unknown classes and malformed responses and must support an explicit `uncertain` result. The preferred initial policy is:
+
+- Confidence at least `0.90` with classifier consensus: automatically accept.
+- Confidence from `0.70` through `0.90`: require human review.
+- Confidence below `0.70`, disagreement, malformed output, or `uncertain`: exclude until reviewed.
+
+Consensus may combine direct multiclass classification with a second reference-similarity pass. The VLM backend must be replaceable without changing crop generation or YOLO export.
+
+### Review and Dataset Finalization
+
+The review output must include:
+
+- Low-confidence and conflicting predictions.
+- Heavily clipped, unusually small, or unusually large boxes.
+- Images with zero or unexpected proposal counts.
+- Per-class crop contact sheets.
+- Full-image overlays using final boxes and labels.
+- A random audit sample of automatically accepted labels.
+
+Finalization writes YOLO `images/<split>` and `labels/<split>` directories, `data.yaml`, a dataset manifest, a build report, and preview overlays. Reviewed negative images require empty label files so that they contribute valid background examples.
+
+### Synthetic Data and Training Modes
+
+The trainer must support:
+
+1. **Real only:** train a standard pretrained YOLO model from accepted real annotations.
+2. **Synthetic initialization:** fine-tune the best synthetic detector on accepted real annotations. This is the preferred initial vial-cap mode.
+3. **Mixed replay:** train with real annotations plus a controlled, reproducible sample of synthetic examples to reduce catastrophic forgetting.
+
+New three-class synthetic datasets are derived without modifying the original four-class datasets:
+
+```text
+old good_cap  -> good_cap
+old table_cap -> good_cap
+old crooked_cap -> crooked_cap
+old missing_cap -> missing_cap
+```
+
+Training records the initial checkpoint, dataset and configuration hashes, class mapping, hyperparameters, per-class metrics, and real and synthetic holdout results. GPU VLM inference and YOLO training must use Slurm. Run artifacts belong under `shared/runs/YYYY-MM-DD_<project>_weak_labeling/`.
+
+### Runtime Z Qualification
+
+The detector predicts appearance only. For each detected `good_cap`, sample valid depth inside an eroded region of its box and compute a robust height statistic rather than using one center pixel.
+
+Expected top heights are:
+
+```python
+seated_z = rim_z + SPEC.flange_thickness
+spare_z = surface_z + SPEC.plug_depth + SPEC.flange_thickness
+```
+
+Apply configurable, empirically calibrated tolerances:
+
+```text
+Z near seated_z -> seated_good_cap
+Z near spare_z  -> spare_cap
+invalid or intermediate Z -> ambiguous
+```
+
+No backprojected aperture or vial XY coordinates are required for this gate because the table and vial-top states differ by approximately the vial height. The depth calculation must ignore invalid pixels, require a minimum valid-pixel count, and reject ambiguous observations. During migration, `spare_cap` maps to the controller's current `table_cap` observation; ambiguous caps are never offered to the controller as spares.
+
+### Evaluation and Release Gates
+
+Evaluate each stage separately:
+
+- **Localization:** proposal recall, IoU, center error, missed-object rate, and duplicate rate.
+- **VLM labeling:** reviewed accuracy, confusion matrix, per-class precision and recall, abstention rate, confidence calibration, and human correction rate.
+- **YOLO detector:** real-image precision, recall, mAP, per-class failures, capture-condition performance, and synthetic regression.
+- **Z qualification:** seated-versus-table accuracy, invalid/ambiguous rate, false-spare rate, and missed-spare rate.
+
+Robot release requires a fully reviewed operational evaluation set and zero false-spare selections. A detector checkpoint remains experimental until real-image and contact-localization gates pass.
+
+### Required Tests
+
+- Exact 1.25-times crop expansion and image-boundary clipping.
+- Preservation of original proposal geometry through classification and export.
+- YOLO coordinate round trips.
+- Stable object IDs and resumable inference.
+- Rejection of malformed, unknown, or low-confidence VLM results.
+- Group-aware splits with no reference examples from validation or test.
+- Empty-label handling for reviewed negative images.
+- Four-class to three-class synthetic label conversion.
+- Robust depth sampling and seated/table/ambiguous Z decisions.
+- Compatibility conversion from a table-height `good_cap` to the existing `table_cap` controller observation.
+
+### Delivery Phases
+
+#### Phase A: Weak-Labeling MVP
+
+- Add configuration, schemas, seed import, proposal generation, crop generation, VLM classification, review reports, and YOLO export.
+- Validate on a small, fully reviewed subset before processing the complete real dataset.
+
+#### Phase B: Detector Training
+
+- Add three-class synthetic conversion, real/synthetic composition, YOLO fine-tuning, Slurm launchers, and real holdout evaluation.
+
+#### Phase C: Runtime Integration
+
+- Add robust depth sampling, Z-based seated/spare qualification, compatibility mapping, controller tests, and end-to-end dry runs.
+
+#### Phase D: Active Learning
+
+- Run the trained detector on additional real captures.
+- Prioritize uncertain, conflicting, and visually novel examples for review.
+- Add corrections to the versioned seed set and retrain.
+- Track whether each iteration reduces VLM abstentions and human correction rates.
+
