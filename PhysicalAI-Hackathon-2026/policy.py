@@ -19,17 +19,19 @@ sys.path.insert(0, str(ROOT))
 
 from src.inspection.vision_pipeline import (RemediationVisionDetector, cap_axis_from_rgbd_points,
                                             refine_defect_centres_from_grid)
-from src.remediation.geometry import base_to_uf0, transit_base_z
+from src.remediation.geometry import (base_to_uf0, inspection_base_position,
+                                      resolve_height_planes, transit_base_z)
 from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
-                                        RemediationController)
+                                        RemediationController, wpr_to_rotation)
 from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
-DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
+DOWN_WPR_DEG = (-180.0, 0.0, -180.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
 HOVER_ABOVE_CAP_M = 0.075
+INSPECTION_UF0_MM = base_to_uf0(inspection_base_position())
 # Only used by the local mock, which has no initial TCP pose.
 MOCK_START_TCP = [400.0, 0.0, TRANSIT_UF0_Z_MM, *DOWN_WPR_DEG, GRIPPER_OPEN]
 
@@ -63,6 +65,10 @@ class Policy:
                  crooked_action="shoulder",
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_press_below_rim_m=0.003,
+                 crooked_wiggle_radius_m=0.00075,
+                 crooked_wiggle_cycles=1,
+                 pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
+                 work_surface_z_m=-0.0051, vial_rim_z_m=None,
                  trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
         if str(device).lower() != "cpu":
@@ -72,8 +78,11 @@ class Policy:
                     "GPU inference requested but CUDA is unavailable. Claim a GPU (for example, "
                     "srun --gres=gpu:1 ...) or explicitly pass --device cpu."
                 )
+        self.work_surface_z, self.vial_rim_z, self.derived_vial_rim_z = resolve_height_planes(
+            work_surface_z_m, vial_rim_z_m)
         self.detector = RemediationVisionDetector(
-            weights, confidence=confidence, imgsz=imgsz, device=device)
+            weights, confidence=confidence, imgsz=imgsz, device=device,
+            work_surface_z_m=self.work_surface_z, rim_z=self.vial_rim_z)
         self.confidence = float(confidence)
         self.cameras = load_cameras()
         mode = mode.lower()
@@ -87,7 +96,12 @@ class Policy:
             crooked_tap_depth_m=crooked_tap_depth_m,
             crooked_action=crooked_action,
             cone_tip_from_tcp_m=cone_tip_from_tcp_m,
-            cone_press_below_rim_m=cone_press_below_rim_m)
+            cone_press_below_rim_m=cone_press_below_rim_m,
+            crooked_wiggle_radius_m=crooked_wiggle_radius_m,
+            crooked_wiggle_cycles=crooked_wiggle_cycles,
+            pickup_wiggle_radius_m=pickup_wiggle_radius_m,
+            pickup_wiggle_cycles=pickup_wiggle_cycles,
+            vial_rim_z_m=self.vial_rim_z)
             if self.full_remediation else None)
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
         # Physical-policy traces are team artifacts, so share them by default.
@@ -95,6 +109,12 @@ class Policy:
         self.trace_dir.mkdir(parents=True, exist_ok=True)
         (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
+        (self.trace_dir / "height_planes.json").write_text(json.dumps({
+            "work_surface_z": self.work_surface_z,
+            "vial_rim_z": self.vial_rim_z,
+            "derived_vial_rim_z": self.derived_vial_rim_z,
+            "vial_rim_overridden": vial_rim_z_m is not None,
+        }, indent=2) + "\n")
         (self.trace_dir / "depth").mkdir(exist_ok=True)
         config = {
             "checkpoint": str(weights.resolve()),
@@ -109,6 +129,12 @@ class Policy:
             "crooked_action": crooked_action,
             "crooked_shoulder_depth_m": float(crooked_shoulder_depth_m),
             "crooked_tap_depth_m": float(crooked_tap_depth_m),
+            "crooked_wiggle_radius_m": float(crooked_wiggle_radius_m),
+            "crooked_wiggle_cycles": int(crooked_wiggle_cycles),
+            "pickup_wiggle_radius_m": float(pickup_wiggle_radius_m),
+            "pickup_wiggle_cycles": int(pickup_wiggle_cycles),
+            "work_surface_z_m": self.work_surface_z,
+            "vial_rim_z_m": self.vial_rim_z,
             "cone_tip_from_tcp_m": np.asarray(cone_tip_from_tcp_m, dtype=float).tolist(),
             "cone_press_below_rim_m": float(cone_press_below_rim_m),
         }
@@ -125,6 +151,7 @@ class Policy:
         self.target = None
         self.last_observation_time = None
         self.events = []
+        self.start_orientation_checked = False
         if self.controller is not None:
             self.controller.reset()
 
@@ -148,6 +175,31 @@ class Policy:
 
     def _hold(self, obs):
         return self._command(self._tcp(obs)[:3])
+
+    def _at_inspection(self, obs):
+        return np.linalg.norm(self._tcp(obs)[:3] - INSPECTION_UF0_MM) <= 2.0
+
+    def _inspection_action(self, obs):
+        """Move to the camera-clear point without undoing a staged cone wrist."""
+        joints = np.asarray(obs.get("joints", []), dtype=float)
+        closed = float(joints[6]) if joints.size > 6 and np.isfinite(joints[6]) else GRIPPER_OPEN
+        wpr = (self.controller.cone_press_wpr_deg
+               if self.controller is not None and self.controller.cone_oriented
+               else DOWN_WPR_DEG)
+        return [*map(float, INSPECTION_UF0_MM), *map(float, wpr), closed]
+
+    def _validate_start_orientation(self, obs):
+        if self.start_orientation_checked:
+            return
+        current = self._tcp(obs)
+        relative = wpr_to_rotation(current[3:6]).T @ wpr_to_rotation(DOWN_WPR_DEG)
+        angle = np.degrees(np.arccos(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0)))
+        if angle > 20.0:
+            raise RuntimeError(
+                f"starting tool orientation is {angle:.1f} deg from the outward-facing wrist-camera "
+                f"home {DOWN_WPR_DEG}; jog to the approved home pose instead of allowing an automatic wrist turn"
+            )
+        self.start_orientation_checked = True
 
     def _choose_table_cap(self, image, stamp):
         detections = self.detector.detect(image, timestamp=stamp)
@@ -253,6 +305,15 @@ class Policy:
                 selected = points[inside]
                 selected_depth = depth_mm[pixels[inside, 1], pixels[inside, 0]].astype(float) / 1000.0
                 point = np.median(selected, axis=0)
+                if updated["class_name"] == "table_cap":
+                    plane_point = np.asarray(item["base_pos_m"], dtype=float)
+                    point[:2] = 0.5 * (point[:2] + plane_point[:2])
+                    point[2] = plane_point[2]
+                else:
+                    # The measured vial-rim plane is more reliable than depth on
+                    # clear plastic. Keep the RGB bounding-box ray/plane target;
+                    # retain RGB-D only for validation and crooked-cap shape.
+                    point = np.asarray(item["base_pos_m"], dtype=float)
                 updated["base_pos_m"] = point.tolist()
                 updated["tcp_pos_mm"] = base_to_uf0(point).tolist()
                 updated["depth_median_m"] = float(np.median(selected_depth))
@@ -262,7 +323,9 @@ class Policy:
                     updated["cap_axis_base"] = None if axis is None else axis.tolist()
                 updated["depth_available"] = True
                 updated["depth_rgbd_point_count"] = int(inside.sum())
-                updated["localization_note"] += "; calibrated RGB-D box median"
+                updated["localization_note"] += ("; fused RGB plane centre and calibrated RGB-D median"
+                                                  if updated["class_name"] == "table_cap"
+                                                  else "; commanded on calibrated vial plane; RGB-D observation only")
             else:
                 updated["depth_available"] = False
                 updated["localization_note"] += "; no valid projected depth points in box"
@@ -271,7 +334,7 @@ class Policy:
         # system. Refit defects to the camera-derived 6x5 aperture lattice so
         # missing-vial depth holes and crooked-cap flange centres cannot move a
         # contact target away from its visible tray aperture.
-        return refine_defect_centres_from_grid(fused)
+        return refine_defect_centres_from_grid(fused, rim_z_m=self.vial_rim_z)
 
     def _full_act(self, obs, image, stamp, fresh):
         """Pick a spare for a missing vial or press a crooked cap vertically.
@@ -288,6 +351,21 @@ class Policy:
         if image is None or not fresh:
             return self.controller.hold(observed)
         self.last_observation_time = stamp
+        current = self._tcp(observed)
+        # Execute a previously planned repair without rerunning YOLO between
+        # ordinary waypoints. Every route ends at the shared inspection pose.
+        if self.controller.queue:
+            action = self.controller.act(observed, [])
+            self.events[:] = self.controller.events[-20:]
+            self._record_snapshot(observed, image, [], action)
+            return action
+        # Initial observation and every decision gate occur only from v47's
+        # cable-safe, TableCam-clear starting pose.
+        if not self._at_inspection(observed):
+            action = self._inspection_action(observed)
+            self.events.append({"event": "move_to_inspection_pose"})
+            self._record_snapshot(observed, image, [], action)
+            return action
         detections = self._snapshot_detections(image, stamp)
         detections = self._fuse_table_depth(detections, observed.get("depth", {}).get("table"))
         if self.controller.state == "pickup" and self.controller.pending is not None:
@@ -306,6 +384,7 @@ class Policy:
         return action
 
     def act(self, obs):
+        self._validate_start_orientation(obs)
         image = obs.get("images", {}).get("table")
         stamp = obs.get("t")
         fresh = stamp is None or self.last_observation_time is None or stamp > self.last_observation_time
@@ -314,6 +393,8 @@ class Policy:
             return self._full_act(obs, image, stamp, fresh)
 
         if self.state == "inspect":
+            if not self._at_inspection(obs):
+                return self._command(INSPECTION_UF0_MM)
             if image is None or not fresh:
                 return self._hold(obs)
             self.last_observation_time = stamp

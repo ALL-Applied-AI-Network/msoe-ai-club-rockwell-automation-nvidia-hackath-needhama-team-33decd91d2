@@ -5,7 +5,7 @@ This module enforces physically correct, jitter-free PhysX collision behavior:
 2. Applies calibrated sub-millimeter contact offsets (eliminating 20 mm ghost bubbles).
 3. Configures Continuous Collision Detection (CCD) to prevent mesh tunneling.
 4. Establishes dedicated PhysX collision groups and filtering rules.
-5. Sets high-friction viscoelastic physics materials for realistic gripping.
+5. Uses high-friction gripper pads and lower-friction plastic cap/vial contact.
 6. Anchors static fixtures (vial tray, tubes, tabletop) against downward press forces.
 """
 
@@ -59,8 +59,11 @@ class CollisionConfig:
     cone_compliant_stiffness_N_per_m: float = 1.0e5
     cone_compliant_damping_Ns_per_m: float = 120.0
 
-    cap_static_friction: float = 1.2
-    cap_dynamic_friction: float = 1.0
+    # Smooth molded plastic against a clear plastic vial.  The old rubber-like
+    # 1.2/1.0 pair wedged a four-point crooked cap onto the rim instead of
+    # allowing it to pivot into the 1.27 mm radial plug clearance.
+    cap_static_friction: float = 0.35
+    cap_dynamic_friction: float = 0.25
     cap_restitution: float = 0.0
 
     # Vial "give": glass held in the tray is not perfectly rigid at the rim.  PhysX
@@ -68,8 +71,8 @@ class CollisionConfig:
     # deflection at a 30 N press, instead of a hard non-penetration constraint.
     vial_compliant_stiffness_N_per_m: float = 6.0e4
     vial_compliant_damping_Ns_per_m: float = 100.0
-    vial_static_friction: float = 1.2
-    vial_dynamic_friction: float = 1.0
+    vial_static_friction: float = 0.35
+    vial_dynamic_friction: float = 0.25
 
 
 CONFIG = CollisionConfig()
@@ -112,7 +115,7 @@ class CollisionSubAgent:
             self.cfg.cone_compliant_damping_Ns_per_m)
         cap_material = self._get_or_create_physics_material(
             stage,
-            "/World/PhysicsMaterials/RubberCapMaterial",
+            "/World/PhysicsMaterials/PlasticCapMaterial",
             static_friction=self.cfg.cap_static_friction,
             dynamic_friction=self.cfg.cap_dynamic_friction,
             restitution=self.cfg.cap_restitution,
@@ -325,9 +328,9 @@ class CollisionSubAgent:
         return configured
 
     def configure_vial_give(self, stage: Usd.Stage) -> List[str]:
-        """Bind a compliant-contact glass material to every vial tube collider."""
+        """Bind a compliant-contact clear-plastic material to every vial collider."""
         glass = self._get_or_create_physics_material(
-            stage, "/World/PhysicsMaterials/VialGlassCompliant",
+            stage, "/World/PhysicsMaterials/VialPlasticCompliant",
             static_friction=self.cfg.vial_static_friction,
             dynamic_friction=self.cfg.vial_dynamic_friction,
             restitution=0.0,

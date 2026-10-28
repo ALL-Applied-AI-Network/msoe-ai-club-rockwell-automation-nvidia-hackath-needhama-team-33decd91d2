@@ -55,6 +55,17 @@ class PolicyMotionInterpolationTests(unittest.TestCase):
         self.assertTrue(is_cone_prepare_action(
             'crooked_cap', False, 0.006, 0.002, vertical))
 
+    def test_robot_local_x_down_converts_to_logical_tcp_z_down(self):
+        planner = Planner.__new__(Planner)
+        planner.tool_axis = np.array([1.0, 0.0, 0.0])
+        planner.spread_axis = np.array([0.0, 1.0, 0.0])
+        robot_rotation = np.column_stack(([0.0, 0.0, -1.0],
+                                          [0.0, -1.0, 0.0],
+                                          [-1.0, 0.0, 0.0]))
+        logical = planner.logical_tcp_rotation(robot_rotation)
+        expected = Rotation.from_euler("xyz", [-180, 0, 0], degrees=True).as_matrix()
+        np.testing.assert_allclose(logical, expected, atol=1e-12)
+
     def test_joint_step_uses_shortest_angle(self):
         q0 = np.radians([179, 0, 0, 0, 0, 0])
         q1 = np.radians([-179, 0, 0, 0, 0, 0])
@@ -90,6 +101,8 @@ class PolicyMotionInterpolationTests(unittest.TestCase):
 
     def test_cartesian_planner_refines_small_joint_step_excess(self):
         planner = Planner.__new__(Planner)
+        planner.tool_axis = np.array([0.0, 0.0, 1.0])
+        planner.spread_axis = np.array([0.0, 1.0, 0.0])
 
         def amplified_solve(_q, p, _d, _s, _tool):
             result = np.zeros(6)

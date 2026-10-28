@@ -112,6 +112,7 @@ POLICY_ENDPOINT_ERROR_DEG = 1.0
 # low inside the pocket's 4.7625 mm flange band; the TPU fingers tolerate the
 # low miss and this remains exclusive to the opt-in cone workflow.
 CONE_TABLE_CAP_PICK_OFFSET_M = -0.006
+POLICY_DEGRADED_TRACKING_LIMIT_DEG = 3.0
 # Near the base a cap leaning toward the robot needs J3 past its limit for a coaxial
 # grip, and at the far tray edge a cap leaning away needs the wrist beyond reach; the
 # tool is then tilted toward vertical (about the spread axis) in 2 deg steps up to this
@@ -389,7 +390,7 @@ def tablecam_points(depth, capture_report):
     return pc @ cam['T'][:3, :3].T + cam['T'][:3, 3], scale
 
 
-def refine_caps_with_depth(observed, depth, capture_report):
+def refine_caps_with_depth(observed, depth, capture_report, work_surface_z_m=None, vial_rim_z_m=None):
     """Replace each good-cap and table-cap position with the centroid of its flange top
     in TableCam depth.
 
@@ -399,10 +400,11 @@ def refine_caps_with_depth(observed, depth, capture_report):
     height) is a full annulus about the cap axis, so its centroid is the cap axis
     (within 0.5 mm).
     """
-    from src.remediation.geometry import SPEC, rim_base_z
+    from src.remediation.geometry import SPEC, resolve_height_planes
+    surface_z, rim_z, _ = resolve_height_planes(work_surface_z_m, vial_rim_z_m)
     pts, scale = tablecam_points(depth, capture_report)
-    tops = {'good_cap': rim_base_z() + SPEC.flange_thickness,
-            'table_cap': SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness}
+    tops = {'good_cap': rim_z + SPEC.flange_thickness,
+            'table_cap': surface_z + SPEC.plug_depth + SPEC.flange_thickness}
     out = []
     for d in observed:
         d = dict(d)
@@ -432,14 +434,14 @@ def refine_caps_with_depth(observed, depth, capture_report):
     return out
 
 
-def classify_slots_from_depth(grid, depth, capture_report):
+def classify_slots_from_depth(grid, depth, capture_report, vial_rim_z_m=None):
     """Per-slot state from TableCam depth on the fitted grid (see SLOT_* above):
     {slot: {'state': 'seated' | 'crooked' | 'missing' | 'empty', point counts}}."""
     from src.remediation.geometry import SPEC, rim_base_z
     pts, _ = tablecam_points(depth, capture_report)
     pts = pts.reshape(-1, 3)
     pts = pts[np.isfinite(pts).all(1)]
-    rim_z = rim_base_z()
+    rim_z = rim_base_z() if vial_rim_z_m is None else float(vial_rim_z_m)
     out = {}
     for slot, xy in grid.items():
         r = np.linalg.norm(pts[:, :2] - xy, axis=1)
@@ -458,7 +460,8 @@ def classify_slots_from_depth(grid, depth, capture_report):
     return out
 
 
-def choose_targets(observed, layout, depth_refined=False, depth=None, capture_report=None):
+def choose_targets(observed, layout, depth_refined=False, depth=None, capture_report=None,
+                   vial_rim_z_m=None):
     """Every missing and crooked slot, and a spare table cap per missing slot, from the
     current TableCam detections.
 
@@ -483,13 +486,14 @@ def choose_targets(observed, layout, depth_refined=False, depth=None, capture_re
     if depth is not None:
         # Depth decides each slot's state: it finds the defects YOLO misses or calls good,
         # and rejects missing-cap detections on apertures without a vial.
-        slot_depth = classify_slots_from_depth(grid, depth, capture_report)
+        slot_depth = classify_slots_from_depth(grid, depth, capture_report, vial_rim_z_m)
         for s, v in slot_depth.items():
             cls = {'missing': 'missing_cap', 'crooked': 'crooked_cap'}.get(v['state'])
             if cls is None:
                 per_slot.pop(s, None)
             elif s not in per_slot:
-                per_slot[s] = {'class_name': cls, 'confidence': 0.0, 'base_pos_m': [*grid[s].tolist(), rim_base_z()],
+                effective_rim_z = rim_base_z() if vial_rim_z_m is None else float(vial_rim_z_m)
+                per_slot[s] = {'class_name': cls, 'confidence': 0.0, 'base_pos_m': [*grid[s].tolist(), effective_rim_z],
                                'source': 'tablecam_depth_slot_check'}
             elif per_slot[s]['class_name'] != cls:
                 per_slot[s] = {**per_slot[s], 'class_name': cls, 'yolo_class_name': per_slot[s]['class_name'],
@@ -559,6 +563,8 @@ class Planner:
         import scene_config as C
         self.ik = ik
         self.limits = np.deg2rad([C.JOINT_LIMITS_DEG[f'J{i}'] for i in range(1, 7)])
+        self.tool_axis = np.asarray(C.TOOL_AXIS, float)
+        self.spread_axis = np.asarray(C.FINGER_SPREAD_AXIS, float)
         ik.set_tool_axis(C.TOOL_AXIS)
         ik.set_spread_axis(C.FINGER_SPREAD_AXIS)
 
@@ -575,15 +581,31 @@ class Planner:
             path.append(q.copy())
         return path
 
+    def logical_tcp_rotation(self, robot_rotation):
+        """Convert the Fanuc link frame to the policy's logical TCP frame.
+
+        The robot model approaches along local +X, while policy W/P/R uses
+        logical +Z as approach. Both use logical +Y for finger spread.
+        """
+        robot_rotation = np.asarray(robot_rotation, float)
+        z = robot_rotation @ self.tool_axis
+        y = robot_rotation @ self.spread_axis
+        y = y - np.dot(y, z) * z
+        y /= np.linalg.norm(y)
+        z /= np.linalg.norm(z)
+        x = np.cross(y, z)
+        return np.column_stack([x, y, z])
+
     def pose_line(self, q, p0, R0, p1, R1, tool, min_steps=60):
         """Cartesian path with simultaneous speed-limited orientation change."""
         q_start = np.asarray(q, float).copy()
+        R0_tcp = self.logical_tcp_rotation(R0)
         requested_steps = int(min_steps)
         last_step_deg = float('inf')
         for _ in range(4):
             q = q_start.copy()
             path = []
-            samples = pose_interpolation(p0, R0, p1, R1, requested_steps)
+            samples = pose_interpolation(p0, R0_tcp, p1, R1, requested_steps)
             for p, R in samples:
                 q_next = self.solve(q, p, R[:, 2], R[:, 1], tool)
                 last_step_deg = joint_step_deg(q, q_next)
@@ -1010,6 +1032,13 @@ class Executor:
         self.eoat_paths = tuple(eoat_paths)
         self.eoat_reference = self._eoat_distances() if self.eoat_paths else ()
         self.closed_loop_tracking = bool(closed_loop_tracking)
+        self.tracking_warnings = []
+
+    def _record_tracking_warning(self, phase, error_deg):
+        warning = {'phase': phase, 'tracking_error_deg': float(error_deg)}
+        self.tracking_warnings.append(warning)
+        print(f'[remediation] continuing with degraded Isaac tracking during {phase}: '
+              f'{error_deg:.2f} deg', flush=True)
 
     def _eoat_distances(self):
         """Distances from each moving jaw root to the flange in world space."""
@@ -1074,13 +1103,23 @@ class Executor:
             # recovered close to the trajectory.
             if settle > 0 and error_deg <= POLICY_RESUME_ERROR_DEG:
                 return
-        raise RuntimeError(f'robot articulation did not settle on waypoint within {settle_steps} steps '
-                           f'({error_deg:.1f} deg error)')
+        if error_deg <= POLICY_DEGRADED_TRACKING_LIMIT_DEG:
+            self._record_tracking_warning(phase, error_deg)
+            return
+        actual = np.asarray(self.arm.get_joint_positions()[self.arm_idx], float)
+        delta_deg = np.degrees((actual - self.q + np.pi) % (2.0 * np.pi) - np.pi)
+        worst = int(np.argmax(np.abs(delta_deg)))
+        raise RuntimeError(
+            f'robot articulation did not settle during {phase} within {settle_steps} steps '
+            f'(J{worst + 1}: command {np.degrees(self.q[worst]):.2f} deg, '
+            f'actual {np.degrees(actual[worst]):.2f} deg, error {abs(delta_deg[worst]):.2f} deg)')
 
     def _log(self, phase, jaw, pairs):
         entry = {'step': len(self.trace), 'phase': phase, 'jaw_m': float(jaw), 'caps': {},
                  'q_cmd': np.round(self.q, 5).tolist(),
-                 'q_act': np.round(self.arm.get_joint_positions()[self.arm_idx], 5).tolist()}
+                 'q_act': np.round(self.arm.get_joint_positions()[self.arm_idx], 5).tolist(),
+                 'contact_pairs': [{'a': a, 'b': b, 'force_N': float(np.linalg.norm(f))}
+                                   for a, b, f in pairs if np.linalg.norm(f) > 1e-6]}
         for prim in self.tracked:
             path = str(prim.GetPath())
             pos, quat = get_cap_pose(prim)
@@ -1099,12 +1138,16 @@ class Executor:
             # was bounded. Hold the final command until the physical drive bias
             # is reached or fail rather than claiming the TCP destination.
             for _ in range(60):
-                if self._tracking_error_deg() <= POLICY_ENDPOINT_ERROR_DEG:
+                error = self._tracking_error_deg()
+                if error <= POLICY_ENDPOINT_ERROR_DEG:
                     break
                 self.step(phase + '_endpoint_settle', self.q, jaw)
-            else:
+            error = self._tracking_error_deg()
+            if error > POLICY_DEGRADED_TRACKING_LIMIT_DEG:
                 raise RuntimeError('robot articulation did not settle at action endpoint '
-                                   f'({self._tracking_error_deg():.1f} deg error)')
+                                   f'({error:.1f} deg error)')
+            if error > POLICY_RESUME_ERROR_DEG:
+                self._record_tracking_warning(phase + '_endpoint', error)
 
     def hold(self, phase, jaw, n):
         for _ in range(n):
@@ -1172,15 +1215,20 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     from src.remediation.controller import (ContactTool, RemediationController,
                                             command_rotation_to_j6,
                                             j6_rotation_to_command, wpr_to_rotation)
-    from src.remediation.geometry import SPEC, base_to_uf0, transit_base_z, uf0_to_base
+    from src.remediation.geometry import SPEC, base_to_uf0, resolve_height_planes, transit_base_z, uf0_to_base
+    work_surface_z, vial_rim_z, derived_vial_rim_z = resolve_height_planes(
+        args.work_surface_z_m, args.vial_rim_z_m)
     from src.remediation.geometry import load_layout
     from src.remediation.policy_driver import PolicyDriver
 
     P = Planner()
     tip = tuple(__import__('src.remediation.custom_gripper', fromlist=['finger_tip_tcp'])
                 .finger_tip_tcp(tuple(mount['cap_seat_tcp_j6_m'])))
-    q0 = P.solve(np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)]),
-                 np.array([.24, .25, transit_base_z()]), DOWN, SPREAD_Y, tip)
+    home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
+    start_position = np.array([.24, .25, transit_base_z()])
+    # Use the reachable +Y roll branch: it points the wrist camera away from
+    # the robot base and matches the physical cable-safe home orientation.
+    q0 = P.solve(home, start_position, DOWN, SPREAD_Y, tip)
 
     # Oracle association is constructed for evaluator/tracing only and is never
     # included in the controller observation or detection dictionaries.
@@ -1239,7 +1287,12 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                                      (-180.0, 0.0, -90.0)),
         cone_press_wpr_deg=mount.get('cone_press_wpr_deg',
                                      (-180.0, 45.0, -90.0)),
-        cone_press_below_rim_m=args.cone_press_below_rim_m)
+        cone_press_below_rim_m=args.cone_press_below_rim_m,
+        crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+        crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+        pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+        pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+        vial_rim_z_m=vial_rim_z)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
     checkpoint = Path(args.checkpoint).resolve()
@@ -1274,7 +1327,10 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         command = [str(conda_python), str(inspect_script), '--checkpoint', str(checkpoint),
                    '--image', str(image_path), '--depth', str(depth_path),
                    '--capture-report', str(capture_report), '--out', str(result_path),
-                   '--device', args.inference_device]
+                   '--device', args.inference_device,
+                   '--work-surface-z-m', str(work_surface_z)]
+        if args.vial_rim_z_m is not None:
+            command += ['--vial-rim-z-m', str(vial_rim_z)]
         # Isaac sets its embedded Python paths in the process environment.  Do
         # not leak those paths into the separate conda interpreter used for
         # YOLO, or its extension modules and stdlib can come from incompatible
@@ -1284,7 +1340,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         inference_env.pop('PYTHONPATH', None)
         subprocess.run(command, cwd=ROOT, check=True, env=inference_env)
         raw = json.loads(result_path.read_text())['targets']
-        refined = refine_caps_with_depth(raw, depth, capture)
+        refined = refine_caps_with_depth(raw, depth, capture, work_surface_z, vial_rim_z)
         fitted = choose_targets(refined, load_layout(), depth_refined=True,
                                 depth=depth, capture_report=capture)
         detections = []
@@ -1404,7 +1460,17 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         last_action = action[:6].tolist()
 
     driver = PolicyDriver(controller, observe, execute, max_decisions=240, max_idle=8)
-    driver.run()
+    try:
+        driver.run()
+    except BaseException:
+        # Preserve the evidence needed to distinguish drive tracking, contact,
+        # and policy failures. These evaluator values never enter a decision.
+        (args.out / 'partial_trace.json').write_text(json.dumps(ex.trace) + '\n')
+        (args.out / 'partial_policy_decisions.json').write_text(
+            json.dumps(controller.decision_records, indent=2) + '\n')
+        (args.out / 'partial_vial_loads.json').write_text(
+            json.dumps(monitor.vial_states, indent=2) + '\n')
+        raise
     ex.hold('policy_settle', current_jaw, 30)
     for _ in range(120):
         world.step(render=False)
@@ -1426,6 +1492,12 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         'decision_provenance': controller.decision_records,
         'oracle_evaluator_only': True,
         'physical_robot_authorized': False,
+        'height_planes_base_m': {
+            'work_surface_z': work_surface_z,
+            'vial_rim_z': vial_rim_z,
+            'derived_vial_rim_z': derived_vial_rim_z,
+            'vial_rim_overridden': args.vial_rim_z_m is not None,
+        },
         'collision_configuration': collision_report,
         'command_count': len(controller.decision_records),
         'vial_breakability_evaluator': {'vials': monitor.vial_states,
@@ -1435,6 +1507,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         'seated_count': sum(value['seated'] for value in seating.values()),
         'remediated_count': len(seating),
         'frames_written': ex.frames,
+        'tracking_quality': ('degraded' if ex.tracking_warnings else 'nominal'),
+        'tracking_warnings': ex.tracking_warnings,
     }
     # The deployable trace contains policy inputs/actions only. Simulator poses,
     # contacts and loads are deliberately segregated into an oracle evaluator file.
@@ -1468,11 +1542,23 @@ def main():
     parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
                         help='cone nose endpoint below the calibrated vial rim; positive is lower '
                              '(default: 0.003 m; use a negative value for a clearance-only trial)')
+    parser.add_argument('--work-surface-z-m', type=float, default=-0.0051,
+                        help='work-surface plane Z in robot-base metres (default: -0.0051)')
+    parser.add_argument('--vial-rim-z-m', type=float,
+                        help='explicit vial-rim Z override; default is work surface + 0.0100 + 0.2032 m')
     parser.add_argument('--crooked-shoulder-depth-m', type=float, default=0.0326838)
     parser.add_argument('--crooked-tap-depth-m', type=float, default=0.005,
                         help='descent beyond RGB-D-measured shoulder contact (default: 0.005 m)')
+    parser.add_argument('--crooked-wiggle-radius-m', type=float, default=0.00075,
+                        help='open-shoulder XY orbit radius at each press depth (default: 0.00075 m)')
+    parser.add_argument('--crooked-wiggle-cycles', type=int, default=1,
+                        help='square shoulder orbits per press depth; 0 disables (default: 1)')
+    parser.add_argument('--pickup-wiggle-radius-m', type=float, default=0.0,
+                        help='open-claw centering orbit at loose-cap pickup height; default disabled')
+    parser.add_argument('--pickup-wiggle-cycles', type=int, default=0,
+                        help='pickup centering orbits before jaw closure; default 0')
     parser.add_argument('--crooked-action',
-                        choices=('shoulder', 'closed-tip', 'regrip', 'cone-press'),
+                        choices=('shoulder', 'shoulder-close', 'closed-tip', 'regrip', 'cone-press'),
                         default='shoulder',
                         help='shared-controller crooked-cap action; cone-press selects the separate '
                              'side-cone CAD tool (default remains shoulder)')
@@ -1493,13 +1579,15 @@ def main():
     observed = current_observation.get('targets', [])
     args.out.mkdir(parents=True, exist_ok=True)
 
-    from src.remediation.geometry import load_layout
+    from src.remediation.geometry import load_layout, resolve_height_planes
+    work_surface_z, vial_rim_z, _ = resolve_height_planes(args.work_surface_z_m, args.vial_rim_z_m)
     have_depth = bool(args.depth and args.capture_report)
     if have_depth:
         depth_img, capture = np.load(args.depth), json.loads(args.capture_report.read_text())
-        observed = refine_caps_with_depth(observed, depth_img, capture)
+        observed = refine_caps_with_depth(observed, depth_img, capture, work_surface_z, vial_rim_z)
     targets = choose_targets(observed, load_layout(), depth_refined=have_depth,
-                             depth=depth_img if have_depth else None, capture_report=capture if have_depth else None)
+                             depth=depth_img if have_depth else None, capture_report=capture if have_depth else None,
+                             vial_rim_z_m=vial_rim_z)
     missing, crooked = targets['missing'], targets['crooked']
     if not missing and not crooked:
         raise RuntimeError('no missing or crooked cap detected on the tray')
@@ -1508,8 +1596,8 @@ def main():
     for c in crooked:
         c['tilt'] = None
         if have_depth and args.crooked_press != 'regrip' and 'bbox_xyxy' in c['detection']:
-            from src.remediation.geometry import rim_base_z
-            az, tilt, n = cap_tilt_from_depth(depth_img, capture, c['detection']['bbox_xyxy'], c['xy'], rim_base_z())
+            az, tilt, n = cap_tilt_from_depth(
+                depth_img, capture, c['detection']['bbox_xyxy'], c['xy'], vial_rim_z)
             c['tilt'] = {'high_side_azimuth_deg': float(np.degrees(az)), 'tilt_deg': tilt, 'depth_points': n}
             print(f"[remediation] crooked cap {c['slot']} from depth: high side {np.degrees(az):.1f} deg, "
                   f"tilt {tilt:.1f} deg ({n} points)", flush=True)

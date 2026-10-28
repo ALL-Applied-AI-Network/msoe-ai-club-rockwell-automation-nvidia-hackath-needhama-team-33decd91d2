@@ -316,13 +316,36 @@ Test one operation at a time over a clear work area. Suggested progression is
 over the vial. The controls have distinct effects:
 
 - `--pick-offset-m`: loose-cap gripper closing height.
+- `--work-surface-z-m`: work-surface Z in robot-base metres (default `-0.0051`).
+  The default vial-rim plane is derived from this as work surface + 10 mm tray
+  base + 203.2 mm vial height.
+- `--vial-rim-z-m`: optional direct vial-rim Z override. Prefer setting only the
+  work-surface value unless a rim measurement is more trustworthy. Both effective
+  planes are written to the run artifacts. This is independent of the pickup,
+  placement, and press offsets.
 - `--place-offset-m`: release height above a missing-cap target.
 - `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
 - `--cone-press-below-rim-m`: side-cone endpoint relative to the calibrated rim; positive is lower and negative is clearance.
 - `--cone-tip-from-tcp-m X Y Z`: measured cone-nose offset from UTOOL1, replacing the CAD default.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
 - `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
-- `--crooked-action shoulder|closed-tip|regrip|cone-press`: choose the shared camera-only crooked-cap sequence; default remains `shoulder`, while deployment of the side-mounted TPU cone must explicitly select `cone-press`.
+- `--crooked-wiggle-radius-m`: open-shoulder XY orbit radius at each of three incremental press depths; default is `0.00075` m.
+- `--crooked-wiggle-cycles`: square orbits per press depth; default is `1`, and `0` disables the wiggle.
+- `--pickup-wiggle-radius-m`: optional open-claw square centering orbit at the loose-cap pickup height; default `0` disables it. Start experiments at `0.0005` m.
+- `--pickup-wiggle-cycles`: pickup centering orbits before closing; default `0`, with `1` recommended for the first comparison.
+- `--crooked-action shoulder|shoulder-close|closed-tip|regrip|cone-press`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. Deployment of the side-mounted TPU cone must explicitly select `cone-press`.
+
+Before physical execution, jog the robot to the approved vertical home with the
+wrist camera facing away from the robot base. The cable-safe shared-policy pose is
+W/P/R `(-180, 0, -180)` degrees. The physical policy refuses to start more than
+20 degrees from this orientation rather than commanding an automatic wrist unwind.
+
+Full remediation observes and replans only from the shared camera-clear inspection
+pose at base `(0.240, 0.250, transit Z)` m (the v47 starting pose). It runs YOLO,
+executes one complete repair, returns to inspection, verifies, and then selects the
+next target. Missing-cap pickup retains one intermediate inspection-pose snapshot
+to verify that the loose cap left the table before placement. YOLO is not rerun
+between ordinary motion waypoints.
 
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and

@@ -71,8 +71,11 @@ class PolicyParityContractTests(unittest.TestCase):
         self.assertIn("closed_loop_tracking=True", runner)
         self.assertIn("POLICY_MAX_FOLLOWING_ERROR_DEG", runner)
         self.assertIn("POLICY_RESUME_ERROR_DEG", runner)
+        self.assertIn("POLICY_DEGRADED_TRACKING_LIMIT_DEG", runner)
         self.assertIn("EOAT detached from flange", runner)
         self.assertIn("refusing joint-space fallback below tray clearance", runner)
+        self.assertIn("R0_tcp = self.logical_tcp_rotation(R0)", runner)
+        self.assertIn("rotation[:, 2], rotation[:, 1]", runner)
 
     def test_identical_observation_replay_produces_identical_action(self):
         tool = ContactTool(.005, .005, .005, validated=True)

@@ -92,14 +92,16 @@ For supervised provisional contact, use CLI options rather than environment vari
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
+  --work-surface-z-m -0.0051 \
   --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m -0.005
 ```
 
 `--crooked-action` selects `cone-press` (the side-mounted TPU cone),
 `shoulder` (open-claw internal-shoulder tap),
+`shoulder-close` (close 3 mm above shoulder contact, press, open before retreat),
 `closed-tip` (closed fingertip-face tap), or `regrip` (camera-positioned pickup,
-lift, same-vial replacement, release, and closed-tip tap). All four use the
+lift, same-vial replacement, release, and closed-tip tap). All five use the
 same shared controller in simulation and physical execution.
 
 Positive pick/place/press offsets move the TCP upward. For the cone endpoint,
@@ -120,6 +122,19 @@ If the operator provides a direct cell token, export it as
 `PHYSICAL_CELL_TOKEN` before submitting the job rather than putting the secret
 in the command line. Without a direct token, `run.py` uses the private
 `.request.json` created by the normal submission/approval workflow.
+
+`--work-surface-z-m` is expressed in robot-base metres. The vial-rim plane is
+derived by adding the known 10 mm tray base and 203.2 mm vial height. Use
+`--vial-rim-z-m` only when directly overriding that derived rim measurement;
+the policy records both effective planes in `height_planes.json`.
+
+Start from the approved vertical home with the wrist camera facing away from the
+robot base (W/P/R `-180, 0, -180` degrees). To protect the wrist-camera wiring,
+the policy refuses to start more than 20 degrees from this orientation.
+
+Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
+then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press
+offsets may create contact with glass.
 
 Runs your policy against a stand-in for the cell on your machine, with no robot. It ends with
 **✓ Ready for the real robot**, or **✗ Not ready** with what to fix (an action the robot would reject, or an error

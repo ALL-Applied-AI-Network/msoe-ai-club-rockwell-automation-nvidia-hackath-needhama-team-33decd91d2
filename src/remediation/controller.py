@@ -8,13 +8,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.remediation.geometry import base_to_uf0, rim_base_z, transit_base_z, uf0_to_base
+from src.remediation.geometry import (SPEC, base_to_uf0, inspection_base_position,
+                                      rim_base_z, transit_base_z, uf0_to_base)
 
 
-# Camera-derived cap surfaces outside this generous band cannot belong to a
-# vial cap.  The band is relative to the calibrated vial rim, not an XY slot.
-CROOKED_SURFACE_MIN_M = rim_base_z() - 0.020
-CROOKED_SURFACE_MAX_M = rim_base_z() + 0.055
 DEFECT_TRACK_GATE_M = 0.100
 
 # The cone is on the outside of the negative-Y finger.  These values are from
@@ -80,7 +77,9 @@ class ContactTool:
 
 
 def checked_action(base_position, closed):
-    return checked_pose_action(base_position, (-180.0, 0.0, 0.0), closed)
+    # Equivalent downward-tool roll chosen so the wrist camera faces away from
+    # the robot base, reducing cable wrap on the physical wrist.
+    return checked_pose_action(base_position, (-180.0, 0.0, -180.0), closed)
 
 
 def checked_pose_action(base_position, wpr_deg, closed):
@@ -98,7 +97,7 @@ def axis_to_wpr(axis_base):
     """Fanuc W/P/R whose tool +Z points down the observed cap axis.
 
     The roll-pitch-yaw convention is the same fixed XYZ convention for which
-    the normal vertical tool pose is (-180, 0, 0) degrees.
+    the cable-safe normal vertical tool pose is (-180, 0, -180) degrees.
     """
     axis = np.asarray(axis_base, dtype=float)
     if axis.shape != (3,) or not np.isfinite(axis).all() or np.linalg.norm(axis) < 1e-9:
@@ -110,7 +109,7 @@ def axis_to_wpr(axis_base):
     reference = np.array([0.0, 0.0, 1.0])
     y = np.cross(reference, axis)
     if np.linalg.norm(y) < 1e-6:
-        y = np.array([0.0, -1.0, 0.0])
+        y = np.array([0.0, 1.0, 0.0])
     else:
         y /= np.linalg.norm(y)
     x = np.cross(y, z)
@@ -164,7 +163,9 @@ def j6_rotation_to_command(rotation):
 class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
                  crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
-                 crooked_action="shoulder",
+                 crooked_action="shoulder", crooked_wiggle_radius_m=0.00075,
+                 crooked_wiggle_cycles=1, pickup_wiggle_radius_m=0.0,
+                 pickup_wiggle_cycles=0, vial_rim_z_m=None,
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_wrist_wpr_deg=DEFAULT_CONE_WRIST_WPR_DEG,
                  cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
@@ -174,6 +175,7 @@ class RemediationController:
         self.tool = tool
         self.max_attempts = max_attempts
         self.min_confidence = float(min_confidence)
+        self.vial_rim_z_m = rim_base_z() if vial_rim_z_m is None else float(vial_rim_z_m)
         if not 0.0 < self.min_confidence < 1.0:
             raise ValueError("min_confidence must be between 0 and 1")
         self.crooked_shoulder_depth_m = float(crooked_shoulder_depth_m)
@@ -182,9 +184,22 @@ class RemediationController:
         self.crooked_tap_depth_m = float(crooked_tap_depth_m)
         if not 0.0 < self.crooked_tap_depth_m <= 0.010:
             raise ValueError("crooked tap depth must be greater than 0 and at most 0.010 m")
-        if crooked_action not in ("shoulder", "closed-tip", "regrip", "cone-press"):
-            raise ValueError("crooked_action must be shoulder, closed-tip, regrip, or cone-press")
+        if crooked_action not in ("shoulder", "shoulder-close", "closed-tip", "regrip", "cone-press"):
+            raise ValueError(
+                "crooked_action must be shoulder, shoulder-close, closed-tip, regrip, or cone-press")
         self.crooked_action = crooked_action
+        self.crooked_wiggle_radius_m = float(crooked_wiggle_radius_m)
+        self.crooked_wiggle_cycles = int(crooked_wiggle_cycles)
+        if not 0.0 <= self.crooked_wiggle_radius_m <= 0.002:
+            raise ValueError("crooked wiggle radius must be between 0 and 0.002 m")
+        if not 0 <= self.crooked_wiggle_cycles <= 3:
+            raise ValueError("crooked wiggle cycles must be between 0 and 3")
+        self.pickup_wiggle_radius_m = float(pickup_wiggle_radius_m)
+        self.pickup_wiggle_cycles = int(pickup_wiggle_cycles)
+        if not 0.0 <= self.pickup_wiggle_radius_m <= 0.0015:
+            raise ValueError("pickup wiggle radius must be between 0 and 0.0015 m")
+        if not 0 <= self.pickup_wiggle_cycles <= 2:
+            raise ValueError("pickup wiggle cycles must be between 0 and 2")
         self.cone_tip_from_tcp_m = np.asarray(cone_tip_from_tcp_m, dtype=float)
         self.cone_wrist_wpr_deg = tuple(np.asarray(cone_wrist_wpr_deg, dtype=float))
         self.cone_press_wpr_deg = tuple(np.asarray(cone_press_wpr_deg, dtype=float))
@@ -201,6 +216,9 @@ class RemediationController:
                 not -0.010 <= self.cone_press_below_rim_m <= 0.010):
             raise ValueError("cone press depth must be between -0.010 and 0.010 m")
         self.reset()
+
+    def _add_inspection(self, closed=False):
+        self._add(inspection_base_position(), closed)
 
     def reset(self):
         self.queue = deque()
@@ -224,7 +242,7 @@ class RemediationController:
         if detection.get("class_name") != "crooked_cap":
             return True
         top = float(detection.get("surface_top_base_z_m", np.nan))
-        if not CROOKED_SURFACE_MIN_M <= top <= CROOKED_SURFACE_MAX_M:
+        if not self.vial_rim_z_m - 0.020 <= top <= self.vial_rim_z_m + 0.055:
             self.events.append({"event": "target_rejected",
                                 "reason": "crooked RGB-D surface height outside physical range",
                                 "surface_top_base_z_m": top})
@@ -325,13 +343,34 @@ class RemediationController:
                 raise ValueError("crooked cap requires an RGB-D surface-top height")
             if not cone_batch:
                 self._add([target_pos[0], target_pos[1], height], False)
-            if self.crooked_action == "shoulder":
+            if self.crooked_action in ("shoulder", "shoulder-close"):
                 # Open fingers surround the vial; the CAD-measured internal
                 # shoulder taps from the observed cap-surface height.
                 contact = np.array([target_pos[0], target_pos[1],
                                     surface_top - self.crooked_shoulder_depth_m])
                 self._add(contact + [0, 0, 0.025], False)
-                self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], False)
+                press_closed = self.crooked_action == "shoulder-close"
+                if press_closed:
+                    # Close with the internal shoulder still clear of the cap.
+                    # Opening at the bottom releases any flange captured by the
+                    # pockets before the vertical retreat.
+                    preclose = contact + [0, 0, self.tool.press_offset_m + 0.003]
+                    self._add(preclose, False)
+                    self._add(preclose, True)
+                # The physical cap balances at four rim contacts. Descend in
+                # bounded increments and use a tiny square orbit to break that
+                # static-friction balance without estimating the cap axis.
+                for fraction in (1.0 / 3.0, 2.0 / 3.0, 1.0):
+                    low = contact + [0, 0, self.tool.press_offset_m
+                                     - fraction * self.crooked_tap_depth_m]
+                    self._add(low, press_closed)
+                    radius = self.crooked_wiggle_radius_m
+                    for _ in range(self.crooked_wiggle_cycles):
+                        for dx, dy in ((radius, 0), (0, radius), (-radius, 0),
+                                       (0, -radius), (0, 0)):
+                            self._add(low + [dx, dy, 0], press_closed)
+                if press_closed:
+                    self._add(low, False)
                 self._add(contact + [0, 0, 0.025], False)
             elif self.crooked_action == "closed-tip":
                 # Close in free space and use the two fingertip end faces as a
@@ -365,7 +404,7 @@ class RemediationController:
                 if (high_point.shape == (3,) and np.isfinite(high_point).all() and
                         np.linalg.norm(high_point[:2] - target_pos[:2]) >= 0.001 and
                         np.linalg.norm(high_point[:2] - target_pos[:2]) <= 0.016 and
-                        CROOKED_SURFACE_MIN_M <= high_point[2] <= CROOKED_SURFACE_MAX_M):
+                        self.vial_rim_z_m - 0.020 <= high_point[2] <= self.vial_rim_z_m + 0.055):
                     contact_surface_top = float(high_point[2])
                 else:
                     contact_surface_top = surface_top
@@ -382,7 +421,7 @@ class RemediationController:
                 # positive depth moves below the rim and positive press offset
                 # raises it. The old surface-relative stroke is deliberately
                 # not allowed to override a clearance-only physical trial.
-                cone_contact_z = (rim_base_z() - self.cone_press_below_rim_m +
+                cone_contact_z = (self.vial_rim_z_m - self.cone_press_below_rim_m +
                                   self.tool.press_offset_m)
                 cone_contact = self._cone_tcp_for_tip(
                     [feature_xy[0], feature_xy[1], cone_contact_z])
@@ -439,14 +478,22 @@ class RemediationController:
                 self._add(contact + [0, 0, 0.025], False)
             if not cone_batch:
                 self._add([target_pos[0], target_pos[1], height], False)
+                self._add_inspection(False)
             self.state = "repair"
         else:
             spare_pos = np.asarray(spare["base_pos_m"], dtype=float)
             self._add([spare_pos[0], spare_pos[1], height], False)
             self._add(spare_pos + [0, 0, 0.025], False)
-            self._add(spare_pos + [0, 0, self.tool.pick_offset_m], False)
-            self._add(spare_pos + [0, 0, self.tool.pick_offset_m], True)
+            pick = spare_pos + [0, 0, self.tool.pick_offset_m]
+            self._add(pick, False)
+            radius = self.pickup_wiggle_radius_m
+            for _ in range(self.pickup_wiggle_cycles):
+                for dx, dy in ((radius, 0), (0, radius), (-radius, 0),
+                               (0, -radius), (0, 0)):
+                    self._add(pick + [dx, dy, 0], False)
+            self._add(pick, True)
             self._add([spare_pos[0], spare_pos[1], height], True)
+            self._add_inspection(True)
             self.state = "pickup"
         self.pending = {"target": target, "spare": spare, "height": height}
 
@@ -482,6 +529,7 @@ class RemediationController:
             self._add(p + [0, 0, self.tool.press_offset_m], True)
             self._add(p + [0, 0, self.tool.press_offset_m], False)
             self._add([p[0], p[1], self.pending["height"]], False)
+            self._add_inspection(False)
             self.state = "repair"
             return self.queue.popleft()
         if self.state == "repair":
@@ -521,6 +569,12 @@ class RemediationController:
             if target["class_name"] == "missing_cap":
                 if not spares:
                     continue
+                # The bbox centre is backprojected onto the calibrated vial-rim
+                # plane by both adapters. Do not derive placement Z from hollow-
+                # vial depth or require a neighbouring good cap.
+                target = dict(target)
+                target["base_pos_m"] = list(target["base_pos_m"])
+                target["base_pos_m"][2] = self.vial_rim_z_m
                 spare = min(spares, key=lambda s: np.linalg.norm(
                     np.asarray(s["base_pos_m"]) - np.asarray(target["base_pos_m"])))
             try:

@@ -221,16 +221,24 @@ def main() -> None:
     p.add_argument("--pick-offset-m", type=float, default=0.0)
     p.add_argument("--place-offset-m", type=float, default=0.0)
     p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
+    p.add_argument("--vial-rim-z-m", type=float,
+                   help="explicit vial-rim Z override; default derives from work surface and known dimensions")
     p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
                    help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
-    p.add_argument("--crooked-action", choices=("shoulder", "closed-tip", "regrip", "cone-press"),
+    p.add_argument("--crooked-action",
+                   choices=("shoulder", "shoulder-close", "closed-tip", "regrip", "cone-press"),
                    default="shoulder")
     p.add_argument("--cone-tip-from-tcp-m", type=float, nargs=3,
                    metavar=("X", "Y", "Z"), default=None,
                    help="measured cone-nose offset from UTOOL1 in metres (default: CAD value)")
     p.add_argument("--cone-press-below-rim-m", type=float, default=0.003,
                    help="cone endpoint below the calibrated rim; positive is lower, negative is clearance")
+    p.add_argument("--crooked-wiggle-radius-m", type=float, default=0.00075)
+    p.add_argument("--crooked-wiggle-cycles", type=int, default=1)
+    p.add_argument("--pickup-wiggle-radius-m", type=float, default=0.0)
+    p.add_argument("--pickup-wiggle-cycles", type=int, default=0)
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -262,6 +270,12 @@ def main() -> None:
                                                      if args.cone_tip_from_tcp_m is not None
                                                      else DEFAULT_CONE_TIP_FROM_TCP_M),
                                  cone_press_below_rim_m=args.cone_press_below_rim_m,
+                                 crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                                 crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                                 pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                                 pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+                                 work_surface_z_m=args.work_surface_z_m,
+                                 vial_rim_z_m=args.vial_rim_z_m,
                                  trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
@@ -293,6 +307,12 @@ def main() -> None:
                                         if args.cone_tip_from_tcp_m is not None
                                         else DEFAULT_CONE_TIP_FROM_TCP_M),
                    cone_press_below_rim_m=args.cone_press_below_rim_m,
+                   crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                   crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                   pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                   pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+                   work_surface_z_m=args.work_surface_z_m,
+                   vial_rim_z_m=args.vial_rim_z_m,
                    trace_dir=args.trace_dir))
 
 
