@@ -201,6 +201,7 @@ def main() -> int:
         rim_light.GetIntensityAttr().Set(lighting["rim"])
 
         paper = None
+        paper_color = None
         if args.pink_table_paper:
             paper_path = "/World/TrueLightingPinkPaper"
             paper = UsdGeom.Mesh.Define(stage, paper_path)
@@ -216,9 +217,11 @@ def main() -> int:
             material = UsdShade.Material.Define(stage, paper_path + "/PinkMaterial")
             shader = UsdShade.Shader.Define(stage, paper_path + "/PinkMaterial/Surface")
             shader.CreateIdAttr("UsdPreviewSurface")
-            shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
-                Gf.Vec3f(0.92, 0.20, 0.52)
-            )
+            # The default matches the light physical sheet photographed under
+            # TableCam-like lighting. Domain-randomized runs also sample the
+            # darker physical sheet and the original saturated synthetic pink.
+            paper_color = shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f)
+            paper_color.Set(Gf.Vec3f(0.82, 0.47, 0.56))
             shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.88)
             material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
             UsdShade.MaterialBindingAPI.Apply(paper.GetPrim()).Bind(material)
@@ -329,12 +332,23 @@ def main() -> int:
             if args.domain_randomization:
                 # Production-batch cap tint: all caps in a frame remain the
                 # same material while hue/value shift gently between frames.
-                outer_rgb = [rng.uniform(0.90, 1.00), rng.uniform(0.68, 0.84),
-                             rng.uniform(0.025, 0.075)]
+                outer_rgb = [rng.uniform(0.78, 1.00), rng.uniform(0.58, 0.90),
+                             rng.uniform(0.02, 0.16)]
                 cavity_rgb = [outer_rgb[0] * 0.54, outer_rgb[1] * 0.49,
                               outer_rgb[2] * 0.28]
                 cap_color.Set(Gf.Vec3f(*outer_rgb))
                 cavity_color.Set(Gf.Vec3f(*cavity_rgb))
+                if paper_color is not None:
+                    paper_palette = (
+                        (0.82, 0.47, 0.56),  # measured light physical paper
+                        (0.48, 0.27, 0.35),  # measured dark physical paper
+                        (0.92, 0.20, 0.52),  # retained saturated synthetic pink
+                    )
+                    paper_base = paper_palette[rng.randrange(len(paper_palette))]
+                    paper_rgb = [min(1.0, max(0.0, value + rng.uniform(-0.045, 0.045)))
+                                 for value in paper_base]
+                    paper_color.Set(Gf.Vec3f(*paper_rgb))
+                    randomization["paper_rgb"] = paper_rgb
 
                 frame_lighting = {
                     "dome": rng.uniform(500.0, 820.0),
@@ -593,8 +607,11 @@ def main() -> int:
                          "purpose": "visible table-cap contact shadows"},
             "domain_randomization": {
                 "enabled": args.domain_randomization,
-                "cap_rgb": {"r": [0.90, 1.00], "g": [0.68, 0.84],
-                            "b": [0.025, 0.075]},
+                "cap_rgb": {"r": [0.78, 1.00], "g": [0.58, 0.90],
+                            "b": [0.02, 0.16]},
+                "paper_rgb_bases": [[0.82, 0.47, 0.56], [0.48, 0.27, 0.35],
+                                    [0.92, 0.20, 0.52]],
+                "paper_rgb_jitter": [-0.045, 0.045],
                 "tray_translation_xy_m": [-0.014, 0.014],
                 "tray_yaw_deg": [-2.5, 2.5],
                 "vial_tilt_deg": [0.0, 1.8],
