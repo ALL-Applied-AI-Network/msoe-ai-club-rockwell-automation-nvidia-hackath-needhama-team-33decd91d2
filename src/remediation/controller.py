@@ -133,7 +133,8 @@ class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
                  crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
                  crooked_action="shoulder", crooked_wiggle_radius_m=0.00075,
-                 crooked_wiggle_cycles=1, vial_rim_z_m=None):
+                 crooked_wiggle_cycles=1, pickup_wiggle_radius_m=0.0,
+                 pickup_wiggle_cycles=0, vial_rim_z_m=None):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -157,6 +158,12 @@ class RemediationController:
             raise ValueError("crooked wiggle radius must be between 0 and 0.002 m")
         if not 0 <= self.crooked_wiggle_cycles <= 3:
             raise ValueError("crooked wiggle cycles must be between 0 and 3")
+        self.pickup_wiggle_radius_m = float(pickup_wiggle_radius_m)
+        self.pickup_wiggle_cycles = int(pickup_wiggle_cycles)
+        if not 0.0 <= self.pickup_wiggle_radius_m <= 0.0015:
+            raise ValueError("pickup wiggle radius must be between 0 and 0.0015 m")
+        if not 0 <= self.pickup_wiggle_cycles <= 2:
+            raise ValueError("pickup wiggle cycles must be between 0 and 2")
         self.reset()
 
     def _add_inspection(self, closed=False):
@@ -331,8 +338,14 @@ class RemediationController:
             spare_pos = np.asarray(spare["base_pos_m"], dtype=float)
             self._add([spare_pos[0], spare_pos[1], height], False)
             self._add(spare_pos + [0, 0, 0.025], False)
-            self._add(spare_pos + [0, 0, self.tool.pick_offset_m], False)
-            self._add(spare_pos + [0, 0, self.tool.pick_offset_m], True)
+            pick = spare_pos + [0, 0, self.tool.pick_offset_m]
+            self._add(pick, False)
+            radius = self.pickup_wiggle_radius_m
+            for _ in range(self.pickup_wiggle_cycles):
+                for dx, dy in ((radius, 0), (0, radius), (-radius, 0),
+                               (0, -radius), (0, 0)):
+                    self._add(pick + [dx, dy, 0], False)
+            self._add(pick, True)
             self._add([spare_pos[0], spare_pos[1], height], True)
             self._add_inspection(True)
             self.state = "pickup"

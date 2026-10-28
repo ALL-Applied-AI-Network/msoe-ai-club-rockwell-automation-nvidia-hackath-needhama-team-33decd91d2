@@ -328,6 +328,8 @@ over the vial. The controls have distinct effects:
 - `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
 - `--crooked-wiggle-radius-m`: open-shoulder XY orbit radius at each of three incremental press depths; default is `0.00075` m.
 - `--crooked-wiggle-cycles`: square orbits per press depth; default is `1`, and `0` disables the wiggle.
+- `--pickup-wiggle-radius-m`: optional open-claw square centering orbit at the loose-cap pickup height; default `0` disables it. Start experiments at `0.0005` m.
+- `--pickup-wiggle-cycles`: pickup centering orbits before closing; default `0`, with `1` recommended for the first comparison.
 - `--crooked-action shoulder|shoulder-close|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
 
 Before physical execution, jog the robot to the approved vertical home with the

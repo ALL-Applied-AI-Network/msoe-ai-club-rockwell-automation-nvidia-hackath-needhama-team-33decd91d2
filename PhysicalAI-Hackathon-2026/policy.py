@@ -63,6 +63,7 @@ class Policy:
                  crooked_action="shoulder",
                  crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1,
+                 pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
                  work_surface_z_m=-0.0051, vial_rim_z_m=None,
                  trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
@@ -92,6 +93,8 @@ class Policy:
             crooked_action=crooked_action,
             crooked_wiggle_radius_m=crooked_wiggle_radius_m,
             crooked_wiggle_cycles=crooked_wiggle_cycles,
+            pickup_wiggle_radius_m=pickup_wiggle_radius_m,
+            pickup_wiggle_cycles=pickup_wiggle_cycles,
             vial_rim_z_m=self.vial_rim_z)
             if self.full_remediation else None)
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")

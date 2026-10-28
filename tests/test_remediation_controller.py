@@ -87,6 +87,10 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, crooked_wiggle_radius_m=0.0021)
         with self.assertRaises(ValueError):
             RemediationController(tool, crooked_wiggle_cycles=4)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, pickup_wiggle_radius_m=0.0016)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, pickup_wiggle_cycles=3)
 
     def test_closed_tip_action_closes_only_above_cap_and_reopens_above_cap(self):
         controller = RemediationController(
@@ -198,6 +202,22 @@ class RemediationControllerTests(unittest.TestCase):
             actions.append(self.controller.act(self.obs, []))
         np.testing.assert_allclose(actions[-1][:3], base_to_uf0(inspection_base_position()))
         self.assertEqual(actions[-1][6], 1.0)
+
+    def test_pickup_wiggles_open_then_centers_before_closing(self):
+        controller = RemediationController(
+            ContactTool(-0.002, 0.0, 0.0, validated=True),
+            pickup_wiggle_radius_m=0.0005, pickup_wiggle_cycles=1)
+        missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
+        spare = self.detection("table_cap", [0.34, -0.20, 0.02])
+        actions = [controller.act(self.obs, [missing, spare])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, []))
+        first_closed = next(i for i, action in enumerate(actions) if action[6] == 1.0)
+        wiggle = actions[first_closed - 6:first_closed]
+        self.assertTrue(all(action[6] == 0.0 for action in wiggle))
+        self.assertAlmostEqual(max(action[0] for action in wiggle)
+                               - min(action[0] for action in wiggle), 1.0, places=5)
+        np.testing.assert_allclose(wiggle[0][:3], wiggle[-1][:3])
 
     def test_missing_cap_uses_calibrated_rim_without_good_cap(self):
         detections = [self.detection("missing_cap", [0.31, 0.02, 0.01]),

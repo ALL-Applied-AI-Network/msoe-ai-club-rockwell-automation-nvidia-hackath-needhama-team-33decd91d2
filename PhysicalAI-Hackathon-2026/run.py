@@ -231,6 +231,8 @@ def main() -> None:
                    default="shoulder")
     p.add_argument("--crooked-wiggle-radius-m", type=float, default=0.00075)
     p.add_argument("--crooked-wiggle-cycles", type=int, default=1)
+    p.add_argument("--pickup-wiggle-radius-m", type=float, default=0.0)
+    p.add_argument("--pickup-wiggle-cycles", type=int, default=0)
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -260,6 +262,8 @@ def main() -> None:
                                  crooked_action=args.crooked_action,
                                  crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
                                  crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                                 pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                                 pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                                  work_surface_z_m=args.work_surface_z_m,
                                  vial_rim_z_m=args.vial_rim_z_m,
                                  trace_dir=args.trace_dir))
@@ -290,6 +294,8 @@ def main() -> None:
                    crooked_action=args.crooked_action,
                    crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
                    crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                   pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                   pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                    work_surface_z_m=args.work_surface_z_m,
                    vial_rim_z_m=args.vial_rim_z_m,
                    trace_dir=args.trace_dir))

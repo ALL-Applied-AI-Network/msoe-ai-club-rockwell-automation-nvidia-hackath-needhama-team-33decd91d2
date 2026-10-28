@@ -1143,6 +1143,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         crooked_action=args.crooked_action,
         crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
         crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+        pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+        pickup_wiggle_cycles=args.pickup_wiggle_cycles,
         vial_rim_z_m=vial_rim_z)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
@@ -1344,6 +1346,10 @@ def main():
                         help='open-shoulder XY orbit radius at each press depth (default: 0.00075 m)')
     parser.add_argument('--crooked-wiggle-cycles', type=int, default=1,
                         help='square shoulder orbits per press depth; 0 disables (default: 1)')
+    parser.add_argument('--pickup-wiggle-radius-m', type=float, default=0.0,
+                        help='open-claw centering orbit at loose-cap pickup height; default disabled')
+    parser.add_argument('--pickup-wiggle-cycles', type=int, default=0,
+                        help='pickup centering orbits before jaw closure; default 0')
     parser.add_argument('--crooked-action', choices=('shoulder', 'shoulder-close', 'closed-tip', 'regrip'), default='shoulder',
                         help='shared-controller crooked-cap action (default: shoulder)')
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
