@@ -1298,7 +1298,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         cone_wrist_wpr_deg=mount.get('cone_wrist_wpr_deg',
                                      (-180.0, 0.0, -90.0)),
         cone_press_wpr_deg=mount.get('cone_press_wpr_deg',
-                                     (-180.0, 45.0, -90.0)),
+                                     (135.0, 0.0, -90.0)),
         cone_press_below_rim_m=args.cone_press_below_rim_m,
         crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
         crooked_wiggle_cycles=args.crooked_wiggle_cycles,
@@ -1650,7 +1650,7 @@ def main():
             mount['cone_tip_from_tcp_m'] = list(
                 cone_tip_from_fingertip_tcp(jaw_hold, jaw_grip, side=-1))
             mount['cone_wrist_wpr_deg'] = [-180.0, 0.0, -90.0]
-            mount['cone_press_wpr_deg'] = [-180.0, 45.0, -90.0]
+            mount['cone_press_wpr_deg'] = [135.0, 0.0, -90.0]
         press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
         transit_z = transit_base_z()
         spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom

@@ -347,6 +347,17 @@ next target. Missing-cap pickup retains one intermediate inspection-pose snapsho
 to verify that the loose cap left the table before placement. YOLO is not rerun
 between ordinary motion waypoints.
 
+The physical cone handoff remains vertical for the clockwise wrist roll
+`(-180, 0, 0) -> (-180, 0, -90)`, then leans through FANUC W to
+`(135, 0, -90)`. The shortest W motion is -45 degrees. Do not express this lean
+as `P=45`: that bends the real arm across the wrong axis and invalidates the
+cone-tip position compensation.
+
+Loose `table_cap` depth is optional because the real depth camera may not return
+pixels from the cap material. In that case pickup uses the YOLO box-centre ray
+intersected with the calibrated cap plane. Depth remains required for missing and
+crooked defect contact.
+
 The physical adapter subdivides every Cartesian goal into a single queued chunk
 of 0.1-second rows no longer than 9 mm (and no more than 5 degrees of W/P/R
 change). Queuing the complete chunk allows continuous cell-side playback instead

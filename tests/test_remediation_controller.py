@@ -192,6 +192,7 @@ class RemediationControllerTests(unittest.TestCase):
         # leaving the cone nose and negative-Y (TableCam-left) jaw low during
         # a press.
         command_rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
+        self.assertEqual(DEFAULT_CONE_PRESS_WPR_DEG, (135.0, 0.0, -90.0))
         j6_rotation = command_rotation_to_j6(command_rotation)
         cone_axis_j6 = np.array([-np.sqrt(0.5), np.sqrt(0.5), 0.0])
         np.testing.assert_allclose(j6_rotation @ cone_axis_j6, [0, 0, 1], atol=1e-8)
@@ -292,12 +293,12 @@ class RemediationControllerTests(unittest.TestCase):
         second_route = list(controller.queue)
 
         self.assertTrue(controller.cone_oriented)
-        cable_safe_down = [-180.0, 0.0, -180.0]
-        self.assertEqual(sum(np.allclose(action[3:6], cable_safe_down)
+        home_down = [-180.0, 0.0, 0.0]
+        self.assertEqual(sum(np.allclose(action[3:6], home_down)
                              for action in first_route), 1)
         self.assertEqual(sum(np.allclose(action[3:6], DEFAULT_CONE_WRIST_WPR_DEG)
                              for action in first_route), 1)
-        np.testing.assert_allclose(first_route[0][3:6], cable_safe_down)
+        np.testing.assert_allclose(first_route[0][3:6], home_down)
         np.testing.assert_allclose(first_route[1][3:6], DEFAULT_CONE_WRIST_WPR_DEG)
         self.assertTrue(all(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
                             for action in first_route[2:]))
@@ -348,6 +349,21 @@ class RemediationControllerTests(unittest.TestCase):
         action = self.controller.act(self.obs, detections)
         self.assertEqual(self.controller.state, "pickup")
         self.assertEqual(len(action), 7)
+
+    def test_missing_cap_with_depthless_spare_starts_rgb_plane_pickup(self):
+        detections = [self.detection("missing_cap", [0.31, 0.02, 0.01]),
+                      self.detection("table_cap", [0.34, -0.20, 0.02], depth=False)]
+        action = self.controller.act(self.obs, detections)
+        self.assertEqual(self.controller.state, "pickup")
+        self.assertEqual(len(action), 7)
+        self.assertIs(self.controller.pending["spare"]["depth_available"], False)
+
+    def test_depthless_missing_cap_remains_ineligible(self):
+        detections = [self.detection("missing_cap", [0.31, 0.02, 0.01], depth=False),
+                      self.detection("table_cap", [0.34, -0.20, 0.02], depth=False)]
+        action = self.controller.act(self.obs, detections)
+        np.testing.assert_allclose(action[:6], self.tcp)
+        self.assertEqual(self.controller.state, "inspect")
 
     def test_missing_is_first_and_replacement_induced_crooked_is_added(self):
         missing = self.detection("missing_cap", [0.31, 0.02, 0.21])

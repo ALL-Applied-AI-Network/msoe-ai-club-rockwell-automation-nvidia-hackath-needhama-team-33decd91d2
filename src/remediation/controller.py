@@ -23,7 +23,11 @@ DEFECT_TRACK_GATE_M = 0.100
 # (TableCam-left) jaw below the positive-Y jaw with its cone axis vertical.
 DEFAULT_CONE_TIP_FROM_TCP_M = (0.0, -0.0360660669237695, -0.0107523335762304)
 DEFAULT_CONE_WRIST_WPR_DEG = (-180.0, 0.0, -90.0)
-DEFAULT_CONE_PRESS_WPR_DEG = (-180.0, 45.0, -90.0)
+# FANUC composes W/P/R as Rz(R) Ry(P) Rx(W).  After the clockwise R=-90
+# wrist roll, continue the 45-degree lean through W (shortest move from
+# W=-180 to W=135 is -45 degrees).  Changing P instead bends about the
+# unrolled base pitch axis and sweeps the real arm sideways across the cell.
+DEFAULT_CONE_PRESS_WPR_DEG = (135.0, 0.0, -90.0)
 # The rigid-cap PhysX proxy can remain balanced on the clear vial rim even after
 # the useful impact.  Continue the TPU cone nose through the documented rim
 # plane far enough that the real half-inch cap cannot stay hooked on the lip.
@@ -95,8 +99,8 @@ def checked_pose_action(base_position, wpr_deg, closed):
 def axis_to_wpr(axis_base):
     """Fanuc W/P/R whose tool +Z points down the observed cap axis.
 
-    The roll-pitch-yaw convention is the same fixed XYZ convention for which
-    the physical-cell normal vertical tool pose is (-180, 0, 0) degrees.
+    FANUC applies W/P/R as Rz(R) Ry(P) Rx(W); the physical-cell normal
+    vertical tool pose is (-180, 0, 0) degrees.
     """
     axis = np.asarray(axis_base, dtype=float)
     if axis.shape != (3,) or not np.isfinite(axis).all() or np.linalg.norm(axis) < 1e-9:
@@ -114,21 +118,24 @@ def axis_to_wpr(axis_base):
     x = np.cross(y, z)
     x /= np.linalg.norm(x)
     R = np.column_stack([x, y, z])
-    # R = Rx(w) Ry(p) Rz(r), including the gimbal-lock-safe branch.
-    p = np.arcsin(np.clip(R[0, 2], -1.0, 1.0))
+    # R = Rz(r) Ry(p) Rx(w), including the gimbal-lock-safe branch.
+    p = np.arcsin(np.clip(-R[2, 0], -1.0, 1.0))
     cp = np.cos(p)
     if abs(cp) > 1e-8:
-        w = np.arctan2(-R[1, 2], R[2, 2])
-        r = np.arctan2(-R[0, 1], R[0, 0])
+        w = np.arctan2(R[2, 1], R[2, 2])
+        r = np.arctan2(R[1, 0], R[0, 0])
+    elif p > 0:
+        w = np.arctan2(R[0, 1], R[0, 2])
+        r = 0.0
     else:
-        w = np.arctan2(R[2, 1], R[1, 1])
+        w = np.arctan2(-R[0, 1], -R[0, 2])
         r = 0.0
     degrees = (np.degrees([w, p, r]) + 180.0) % 360.0 - 180.0
     return tuple(degrees)
 
 
 def wpr_to_rotation(wpr_deg):
-    """Fixed XYZ Fanuc W/P/R rotation matrix used by the shared adapters."""
+    """FANUC W/P/R matrix, applied as Rz(R) Ry(P) Rx(W)."""
     w, p, r = np.radians(np.asarray(wpr_deg, dtype=float))
     cw, sw = np.cos(w), np.sin(w)
     cp, sp = np.cos(p), np.sin(p)
@@ -136,7 +143,7 @@ def wpr_to_rotation(wpr_deg):
     Rx = np.array([[1, 0, 0], [0, cw, -sw], [0, sw, cw]])
     Ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
     Rz = np.array([[cr, -sr, 0], [sr, cr, 0], [0, 0, 1]])
-    return Rx @ Ry @ Rz
+    return Rz @ Ry @ Rx
 
 
 def command_rotation_to_j6(rotation):
@@ -554,13 +561,18 @@ class RemediationController:
                 self.state, self.pending = "inspect", None
             return self.hold(obs)
 
-        eligible = [d for d in detections if d.get("contact_qualified")
-                    and d.get("depth_available") is True
-                    and d["confidence"] >= self.min_confidence]
-        defects = sorted((d for d in eligible if d["class_name"] in ("crooked_cap", "missing_cap")
+        qualified = [d for d in detections if d.get("contact_qualified")
+                     and d["confidence"] >= self.min_confidence]
+        # Clear/yellow loose caps can return no usable TableCam depth. Their
+        # RGB box centre is already ray/plane-backprojected onto the calibrated
+        # cap plane, so depth is an optional XY refinement for pickup. Defect
+        # contact remains depth-qualified: missing/crooked targets use depth to
+        # confirm slot state and crooked-cap surface geometry.
+        defects = sorted((d for d in qualified if d.get("depth_available") is True
+                          and d["class_name"] in ("crooked_cap", "missing_cap")
                           and self._valid_defect(d)),
                          key=lambda d: d["class_name"] != "missing_cap")
-        spares = [d for d in eligible if d["class_name"] == "table_cap"]
+        spares = [d for d in qualified if d["class_name"] == "table_cap"]
         for track, target, _distance in self._tracked_defects(defects):
             if track["attempts"] >= self.max_attempts:
                 continue
