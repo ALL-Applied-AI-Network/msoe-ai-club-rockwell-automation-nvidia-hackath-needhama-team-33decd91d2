@@ -34,6 +34,22 @@ else
     exit 2
 fi
 remediation_args=("$@")
+perception_plane_args=()
+for ((i=0; i<${#remediation_args[@]}; i++)); do
+    case "${remediation_args[$i]}" in
+        --work-surface-z-m|--vial-rim-z-m)
+            if (( i + 1 >= ${#remediation_args[@]} )); then
+                echo "Missing value for ${remediation_args[$i]}" >&2
+                exit 2
+            fi
+            perception_plane_args+=("${remediation_args[$i]}" "${remediation_args[$((i+1))]}")
+            ((i+=1))
+            ;;
+        --work-surface-z-m=*|--vial-rim-z-m=*)
+            perception_plane_args+=("${remediation_args[$i]}")
+            ;;
+    esac
+done
 
 # All outputs live under shared/runs/ (bare names are placed there).
 case "$out" in
@@ -61,7 +77,8 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --image "$perception/current_scene_tablecam.png" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" \
     --capture-report "$perception/capture_report.json" \
-    --out "$perception/current_scene_detections.json" --device 0
+    --out "$perception/current_scene_detections.json" --device 0 \
+    "${perception_plane_args[@]}"
 
 echo "[pipeline] 3/4: Running physics-based remediation with the selected shared crooked-cap action..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \

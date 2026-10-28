@@ -12,7 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.remediation.geometry import CLASS_NAMES, SPEC, base_to_uf0, rim_base_z
+from src.remediation.geometry import CLASS_NAMES, SPEC, base_to_uf0, resolve_height_planes
 
 ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_DIR = ROOT / 'PhysicalAI-Hackathon-2026/calibration'
@@ -95,7 +95,7 @@ def camera_from_usd_capture(metadata):
 
 class RemediationVisionDetector:
     def __init__(self, checkpoint, calib_dir=CALIBRATION_DIR, *, camera=None, model=None,
-                 confidence=.6, device='cpu', rim_z=None, imgsz=1280):
+                 confidence=.6, device='cpu', work_surface_z_m=None, rim_z=None, imgsz=1280):
         if model is None:
             if not checkpoint or not Path(checkpoint).is_file():
                 raise FileNotFoundError('A validated remediation detector checkpoint is required')
@@ -116,7 +116,8 @@ class RemediationVisionDetector:
             raise ValueError('confidence must be between 0 and 1')
         if self.imgsz <= 0:
             raise ValueError('imgsz must be positive')
-        self.rim_z = rim_base_z() if rim_z is None else float(rim_z)
+        self.work_surface_z, self.rim_z, self.derived_rim_z = resolve_height_planes(
+            work_surface_z_m, rim_z)
 
     def detect(self, rgb, timestamp=None, depth_m=None):
         if not isinstance(rgb, np.ndarray) or rgb.ndim != 3 or rgb.shape[2] != 3:
@@ -136,9 +137,10 @@ class RemediationVisionDetector:
                 name = self.class_map.get(int(cls_id), CLASS_NAMES[int(cls_id)] if int(cls_id) < len(CLASS_NAMES) else 'unknown')
                 center = (xyxy[:2]+xyxy[2:])/2
                 # Object origins differ: spare caps rest on the plug, seated caps on the rim.
-                plane = (SPEC.surface_base_z + SPEC.plug_depth + SPEC.flange_thickness
+                plane = (self.work_surface_z + SPEC.plug_depth + SPEC.flange_thickness
                          if name == 'table_cap' else self.rim_z + (0 if name == 'missing_cap' else SPEC.flange_thickness))
                 position = pixel_to_base(self.table_cam, center, plane, (w, h))
+                plane_position = position.copy()
                 depth_value=None
                 surface_top=None
                 cap_axis=None
@@ -157,7 +159,20 @@ class RemediationVisionDetector:
                         pc=np.column_stack([((uu[valid]*su-native_w/2)/self.table_cam['fx'])*z,
                                             ((vv[valid]*sv-native_h/2)/self.table_cam['fx'])*z,z])
                         points=pc@self.table_cam['T'][:3,:3].T+self.table_cam['T'][:3,3]
-                        position=np.median(points,axis=0)
+                        depth_position=np.median(points,axis=0)
+                        # A loose cap is planar and its RGB box centre and depth
+                        # median have opposite perspective biases. Their fused
+                        # XY is substantially more stable for finger-pocket pickup.
+                        if name == 'table_cap':
+                            position = plane_position.copy()
+                            position[:2] = 0.5 * (plane_position[:2] + depth_position[:2])
+                        else:
+                            # Vial mouths share a measured, fixed-height plane.
+                            # Keep the commanded XYZ on the RGB bounding-box ray
+                            # intersection instead of allowing noisy/transparent-
+                            # plastic depth to move the robot target.  Depth remains
+                            # observation-only for surface validation and cap axis.
+                            position = plane_position.copy()
                         depth_value=float(np.median(z))
                         surface_top=float(np.percentile(points[:,2],90))
                         if name == 'crooked_cap':
@@ -171,5 +186,7 @@ class RemediationVisionDetector:
                                 'cap_axis_base':None if cap_axis is None else cap_axis.tolist(),
                                 'depth_available':depth_value is not None,
                                 'contact_qualified': False,
-                                'localization_note': 'RGB box-center and optional aligned depth observation; feature refinement and contact error budget remain unvalidated'})
+                                'localization_note': ('RGB box-center ray intersected with the calibrated object plane; '
+                                                      'aligned depth is observation-only except loose-cap XY fusion; '
+                                                      'feature refinement and contact error budget remain unvalidated')})
         return targets

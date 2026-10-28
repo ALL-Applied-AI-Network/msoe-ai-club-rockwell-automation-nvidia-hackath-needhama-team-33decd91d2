@@ -315,11 +315,20 @@ Test one operation at a time over a clear work area. Suggested progression is
 over the vial. The controls have distinct effects:
 
 - `--pick-offset-m`: loose-cap gripper closing height.
+- `--work-surface-z-m`: work-surface Z in robot-base metres (default `-0.0051`).
+  The default vial-rim plane is derived from this as work surface + 10 mm tray
+  base + 203.2 mm vial height.
+- `--vial-rim-z-m`: optional direct vial-rim Z override. Prefer setting only the
+  work-surface value unless a rim measurement is more trustworthy. Both effective
+  planes are written to the run artifacts. This is independent of the pickup,
+  placement, and press offsets.
 - `--place-offset-m`: release height above a missing-cap target.
 - `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
 - `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
-- `--crooked-action shoulder|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
+- `--crooked-wiggle-radius-m`: open-shoulder XY orbit radius at each of three incremental press depths; default is `0.00075` m.
+- `--crooked-wiggle-cycles`: square orbits per press depth; default is `1`, and `0` disables the wiggle.
+- `--crooked-action shoulder|shoulder-close|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
 
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and

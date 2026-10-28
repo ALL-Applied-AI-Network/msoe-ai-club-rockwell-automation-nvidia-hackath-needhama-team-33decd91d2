@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.remediation.geometry import base_to_uf0, rim_base_z, transit_base_z, uf0_to_base
+from src.remediation.geometry import SPEC, base_to_uf0, rim_base_z, transit_base_z, uf0_to_base
 
 
 # Camera-derived cap surfaces outside this generous band cannot belong to a
@@ -129,12 +129,14 @@ def wpr_to_rotation(wpr_deg):
 class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
                  crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
-                 crooked_action="shoulder"):
+                 crooked_action="shoulder", crooked_wiggle_radius_m=0.00075,
+                 crooked_wiggle_cycles=1, vial_rim_z_m=None):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
         self.max_attempts = max_attempts
         self.min_confidence = float(min_confidence)
+        self.vial_rim_z_m = rim_base_z() if vial_rim_z_m is None else float(vial_rim_z_m)
         if not 0.0 < self.min_confidence < 1.0:
             raise ValueError("min_confidence must be between 0 and 1")
         self.crooked_shoulder_depth_m = float(crooked_shoulder_depth_m)
@@ -143,9 +145,15 @@ class RemediationController:
         self.crooked_tap_depth_m = float(crooked_tap_depth_m)
         if not 0.0 < self.crooked_tap_depth_m <= 0.010:
             raise ValueError("crooked tap depth must be greater than 0 and at most 0.010 m")
-        if crooked_action not in ("shoulder", "closed-tip", "regrip"):
-            raise ValueError("crooked_action must be shoulder, closed-tip, or regrip")
+        if crooked_action not in ("shoulder", "shoulder-close", "closed-tip", "regrip"):
+            raise ValueError("crooked_action must be shoulder, shoulder-close, closed-tip, or regrip")
         self.crooked_action = crooked_action
+        self.crooked_wiggle_radius_m = float(crooked_wiggle_radius_m)
+        self.crooked_wiggle_cycles = int(crooked_wiggle_cycles)
+        if not 0.0 <= self.crooked_wiggle_radius_m <= 0.002:
+            raise ValueError("crooked wiggle radius must be between 0 and 0.002 m")
+        if not 0 <= self.crooked_wiggle_cycles <= 3:
+            raise ValueError("crooked wiggle cycles must be between 0 and 3")
         self.reset()
 
     def reset(self):
@@ -238,13 +246,34 @@ class RemediationController:
             if not np.isfinite(surface_top):
                 raise ValueError("crooked cap requires an RGB-D surface-top height")
             self._add([target_pos[0], target_pos[1], height], False)
-            if self.crooked_action == "shoulder":
+            if self.crooked_action in ("shoulder", "shoulder-close"):
                 # Open fingers surround the vial; the CAD-measured internal
                 # shoulder taps from the observed cap-surface height.
                 contact = np.array([target_pos[0], target_pos[1],
                                     surface_top - self.crooked_shoulder_depth_m])
                 self._add(contact + [0, 0, 0.025], False)
-                self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], False)
+                press_closed = self.crooked_action == "shoulder-close"
+                if press_closed:
+                    # Close with the internal shoulder still clear of the cap.
+                    # Opening at the bottom releases any flange captured by the
+                    # pockets before the vertical retreat.
+                    preclose = contact + [0, 0, self.tool.press_offset_m + 0.003]
+                    self._add(preclose, False)
+                    self._add(preclose, True)
+                # The physical cap balances at four rim contacts. Descend in
+                # bounded increments and use a tiny square orbit to break that
+                # static-friction balance without estimating the cap axis.
+                for fraction in (1.0 / 3.0, 2.0 / 3.0, 1.0):
+                    low = contact + [0, 0, self.tool.press_offset_m
+                                     - fraction * self.crooked_tap_depth_m]
+                    self._add(low, press_closed)
+                    radius = self.crooked_wiggle_radius_m
+                    for _ in range(self.crooked_wiggle_cycles):
+                        for dx, dy in ((radius, 0), (0, radius), (-radius, 0),
+                                       (0, -radius), (0, 0)):
+                            self._add(low + [dx, dy, 0], press_closed)
+                if press_closed:
+                    self._add(low, False)
                 self._add(contact + [0, 0, 0.025], False)
             elif self.crooked_action == "closed-tip":
                 # Close in free space and use the two fingertip end faces as a
@@ -368,6 +397,12 @@ class RemediationController:
             if target["class_name"] == "missing_cap":
                 if not spares:
                     continue
+                # The bbox centre is backprojected onto the calibrated vial-rim
+                # plane by both adapters. Do not derive placement Z from hollow-
+                # vial depth or require a neighbouring good cap.
+                target = dict(target)
+                target["base_pos_m"] = list(target["base_pos_m"])
+                target["base_pos_m"][2] = self.vial_rim_z_m
                 spare = min(spares, key=lambda s: np.linalg.norm(
                     np.asarray(s["base_pos_m"]) - np.asarray(target["base_pos_m"])))
             try:

@@ -7,6 +7,7 @@ from src.remediation.run_compliant_breakable_remediation import (
     POLICY_MAX_ANGULAR_STEP_DEG,
     POLICY_MAX_JOINT_STEP_DEG,
     POLICY_MAX_LINEAR_STEP_M,
+    Planner,
     joint_step_deg,
     pose_interpolation,
     speed_limited_joints,
@@ -14,6 +15,17 @@ from src.remediation.run_compliant_breakable_remediation import (
 
 
 class PolicyMotionInterpolationTests(unittest.TestCase):
+    def test_robot_local_x_down_converts_to_logical_tcp_z_down(self):
+        planner = Planner.__new__(Planner)
+        planner.tool_axis = np.array([1.0, 0.0, 0.0])
+        planner.spread_axis = np.array([0.0, 1.0, 0.0])
+        robot_rotation = np.column_stack(([0.0, 0.0, -1.0],
+                                          [0.0, -1.0, 0.0],
+                                          [-1.0, 0.0, 0.0]))
+        logical = planner.logical_tcp_rotation(robot_rotation)
+        expected = Rotation.from_euler("xyz", [-180, 0, 0], degrees=True).as_matrix()
+        np.testing.assert_allclose(logical, expected, atol=1e-12)
+
     def test_joint_step_uses_shortest_angle(self):
         q0 = np.radians([179, 0, 0, 0, 0, 0])
         q1 = np.radians([-179, 0, 0, 0, 0, 0])

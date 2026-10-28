@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from src.remediation.geometry import SPEC, base_to_uf0, cap_vertices, load_layout, rotation, spawn_height, transit_base_z, rim_base_z, uf0_to_base
+from src.remediation.geometry import SPEC, base_to_uf0, cap_vertices, load_layout, resolve_height_planes, rotation, spawn_height, transit_base_z, rim_base_z, uf0_to_base
 from src.inspection.vision_pipeline import pixel_to_base, load_cameras
 from src.remediation.validate_tablecam_tcp import validate as validate_tablecam_tcp
 
@@ -23,6 +23,14 @@ class GeometryTests(unittest.TestCase):
         table=np.array([.4,-.2,SPEC.surface_base_z])
         self.assertAlmostEqual(base_to_uf0(table)[2],-335.1)
         np.testing.assert_allclose(uf0_to_base(base_to_uf0(table)),table)
+
+    def test_height_planes_derive_rim_and_allow_explicit_override(self):
+        surface, rim, derived = resolve_height_planes(-0.004)
+        self.assertAlmostEqual(derived, -0.004 + 0.010 + 0.2032)
+        self.assertEqual(rim, derived)
+        surface, rim, derived = resolve_height_planes(-0.004, 0.215)
+        self.assertEqual(rim, 0.215)
+        self.assertNotEqual(rim, derived)
 
     def test_resized_camera_projection(self):
         cam=load_cameras()['table']; p=np.array([.385,.015,rim_base_z()])

@@ -64,6 +64,10 @@ class RemediationControllerTests(unittest.TestCase):
         target_uf0_z = base_to_uf0([0.31, 0.02, 0.21])[2]
         self.assertAlmostEqual(min(action[2] for action in actions),
                                target_uf0_z - 32.6838 - 5.0 + 0.5, places=4)
+        low = min(action[2] for action in actions)
+        low_actions = [action for action in actions if abs(action[2] - low) < 1e-6]
+        self.assertGreater(max(action[0] for action in low_actions)
+                           - min(action[0] for action in low_actions), 1.49)
 
     def test_crooked_shoulder_depth_limits_are_rejected(self):
         tool = ContactTool(0.0, 0.0, 0.0, validated=True)
@@ -77,6 +81,10 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, crooked_tap_depth_m=0.011)
         with self.assertRaises(ValueError):
             RemediationController(tool, crooked_action="unknown")
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_wiggle_radius_m=0.0021)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_wiggle_cycles=4)
 
     def test_closed_tip_action_closes_only_above_cap_and_reopens_above_cap(self):
         controller = RemediationController(
@@ -92,6 +100,26 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertAlmostEqual(min(action[2] for action in closed),
                                base_to_uf0([0.31, 0.02, 0.21])[2] - 5.0 + 0.5,
                                places=4)
+
+    def test_shoulder_close_closes_clear_presses_opens_then_retreats(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="shoulder-close", crooked_wiggle_cycles=0)
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        jaw = [action[6] for action in actions]
+        first_closed = jaw.index(1.0)
+        last_closed = len(jaw) - 1 - jaw[::-1].index(1.0)
+        self.assertEqual(jaw[first_closed - 1], 0.0)
+        self.assertEqual(jaw[last_closed + 1], 0.0)
+        self.assertTrue(all(value == 1.0 for value in jaw[first_closed:last_closed + 1]))
+        contact_z_mm = base_to_uf0([0.31, 0.02, 0.21 - 0.0326838])[2]
+        self.assertAlmostEqual(actions[first_closed][2], contact_z_mm + 3.5, places=4)
+        self.assertLess(min(action[2] for action in actions[first_closed:last_closed + 1]),
+                        contact_z_mm)
+        self.assertGreater(actions[last_closed + 2][2], actions[last_closed + 1][2])
 
     def test_regrip_action_grips_lifts_releases_and_taps(self):
         controller = RemediationController(
@@ -154,20 +182,31 @@ class RemediationControllerTests(unittest.TestCase):
 
     def test_missing_cap_with_spare_starts_pickup(self):
         detections = [self.detection("missing_cap", [0.31, 0.02, 0.01]),
-                      self.detection("table_cap", [0.34, -0.20, 0.02])]
+                      self.detection("table_cap", [0.34, -0.20, 0.02]),
+                      self.detection("good_cap", [0.28, 0.01, 0.210132])]
         action = self.controller.act(self.obs, detections)
         self.assertEqual(self.controller.state, "pickup")
         self.assertEqual(len(action), 7)
 
+    def test_missing_cap_uses_calibrated_rim_without_good_cap(self):
+        detections = [self.detection("missing_cap", [0.31, 0.02, 0.01]),
+                      self.detection("table_cap", [0.34, -0.20, 0.02])]
+        self.controller.act(self.obs, detections)
+        self.assertEqual(self.controller.state, "pickup")
+        self.assertAlmostEqual(self.controller.pending["target"]["base_pos_m"][2],
+                               0.2081, places=4)
+
     def test_verified_pickup_starts_place_and_press_route(self):
         missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
         spare = self.detection("table_cap", [0.34, -0.20, 0.02])
-        self.controller.act(self.obs, [missing, spare])
+        good = self.detection("good_cap", [0.28, 0.01, 0.210132])
+        self.controller.act(self.obs, [missing, spare, good])
         while self.controller.queue:
             self.controller.act(self.obs, [missing, spare])
         action = self.controller.act({**self.obs, "grasp_verified": True}, [missing])
         self.assertEqual(self.controller.state, "repair")
         self.assertEqual(len(action), 7)
+        self.assertAlmostEqual(self.controller.pending["target"]["base_pos_m"][2], 0.2081, places=4)
 
     def test_unaccepted_tool_is_rejected(self):
         with self.assertRaises(ValueError):

@@ -196,6 +196,18 @@ def rim_base_z(spec=SPEC):
     return spec.surface_base_z + spec.tray_base_thickness + spec.vial_height
 
 
+def resolve_height_planes(work_surface_z_m=None, vial_rim_z_m=None, spec=SPEC):
+    """Return effective base-frame work-surface and vial-rim Z planes."""
+    surface = spec.surface_base_z if work_surface_z_m is None else float(work_surface_z_m)
+    derived_rim = surface + spec.tray_base_thickness + spec.vial_height
+    rim = derived_rim if vial_rim_z_m is None else float(vial_rim_z_m)
+    if not (-0.20 <= surface <= 0.20):
+        raise ValueError("work-surface Z must be between -0.20 and 0.20 m in robot-base coordinates")
+    if not (0.05 <= rim <= 0.45):
+        raise ValueError("vial-rim Z must be between 0.05 and 0.45 m in robot-base coordinates")
+    return surface, rim, derived_rim
+
+
 def transit_base_z():
     # Clearance height across the tray must be > 0.203 m (minimum 0.26 m) to clear all 8-inch vials
     return max(0.285, rim_base_z() + 0.03 + SPEC.plug_depth)

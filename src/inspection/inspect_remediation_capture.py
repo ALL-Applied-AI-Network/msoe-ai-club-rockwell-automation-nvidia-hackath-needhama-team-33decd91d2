@@ -28,6 +28,9 @@ def main():
     )
     p.add_argument("--out", required=True)
     p.add_argument("--device", default="cpu")
+    p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
+    p.add_argument("--vial-rim-z-m", type=float,
+                   help="explicit robot-base vial-rim Z; default derives from work surface + 10 mm + 203.2 mm")
     args = p.parse_args()
     camera = None
     capture = None
@@ -38,7 +41,8 @@ def main():
     if image is None:
         raise ValueError("Cannot read input image")
     detector = RemediationVisionDetector(
-        args.checkpoint, camera=camera, device=args.device
+        args.checkpoint, camera=camera, device=args.device,
+        work_surface_z_m=args.work_surface_z_m, rim_z=args.vial_rim_z_m
     )
     depth = None
     if args.depth:
@@ -61,6 +65,12 @@ def main():
                 "targets": targets,
                 "motion_enabled": False,
                 "contact_localization_validated": False,
+                "height_planes_base_m": {
+                    "work_surface_z": detector.work_surface_z,
+                    "vial_rim_z": detector.rim_z,
+                    "derived_vial_rim_z": detector.derived_rim_z,
+                    "vial_rim_overridden": args.vial_rim_z_m is not None,
+                },
             },
             indent=2,
         )

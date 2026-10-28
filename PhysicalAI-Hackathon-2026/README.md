@@ -91,15 +91,22 @@ For supervised provisional contact, use CLI options rather than environment vari
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
+  --work-surface-z-m -0.0051 \
   --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action shoulder \
   --crooked-shoulder-depth-m 0.0326838 --crooked-tap-depth-m 0.005
 ```
 
 `--crooked-action` selects `shoulder` (open-claw internal-shoulder tap),
+`shoulder-close` (close 3 mm above shoulder contact, press, open before retreat),
 `closed-tip` (closed fingertip-face tap), or `regrip` (camera-positioned pickup,
 lift, same-vial replacement, release, and closed-tip tap). All three use the
 same shared controller in simulation and physical execution.
+
+`--work-surface-z-m` is expressed in robot-base metres. The vial-rim plane is
+derived by adding the known 10 mm tray base and 203.2 mm vial height. Use
+`--vial-rim-z-m` only when directly overriding that derived rim measurement;
+the policy records both effective planes in `height_planes.json`.
 
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
 then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press

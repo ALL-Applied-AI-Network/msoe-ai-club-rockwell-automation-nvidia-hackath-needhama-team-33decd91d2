@@ -24,6 +24,9 @@ class PolicyDriverTests(unittest.TestCase):
              "depth_available": True, "contact_qualified": True},
             {"class_name": "table_cap", "confidence": .9, "base_pos_m": [.34, -.20, .02],
              "depth_available": True, "contact_qualified": True},
+            {"class_name": "good_cap", "confidence": .9, "base_pos_m": [.28, .01, .210132],
+             "surface_top_base_z_m": .210132,
+             "depth_available": True, "contact_qualified": True},
         ]
         state = {"tcp": tcp, "grasp": False}
 

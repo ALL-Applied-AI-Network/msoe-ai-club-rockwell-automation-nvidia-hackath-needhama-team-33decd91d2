@@ -221,11 +221,16 @@ def main() -> None:
     p.add_argument("--pick-offset-m", type=float, default=0.0)
     p.add_argument("--place-offset-m", type=float, default=0.0)
     p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
+    p.add_argument("--vial-rim-z-m", type=float,
+                   help="explicit vial-rim Z override; default derives from work surface and known dimensions")
     p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
                    help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
-    p.add_argument("--crooked-action", choices=("shoulder", "closed-tip", "regrip"),
+    p.add_argument("--crooked-action", choices=("shoulder", "shoulder-close", "closed-tip", "regrip"),
                    default="shoulder")
+    p.add_argument("--crooked-wiggle-radius-m", type=float, default=0.00075)
+    p.add_argument("--crooked-wiggle-cycles", type=int, default=1)
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -253,6 +258,10 @@ def main() -> None:
                                  crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                                  crooked_tap_depth_m=args.crooked_tap_depth_m,
                                  crooked_action=args.crooked_action,
+                                 crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                                 crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                                 work_surface_z_m=args.work_surface_z_m,
+                                 vial_rim_z_m=args.vial_rim_z_m,
                                  trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
@@ -279,6 +288,10 @@ def main() -> None:
                    crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                    crooked_tap_depth_m=args.crooked_tap_depth_m,
                    crooked_action=args.crooked_action,
+                   crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                   crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                   work_surface_z_m=args.work_surface_z_m,
+                   vial_rim_z_m=args.vial_rim_z_m,
                    trace_dir=args.trace_dir))
 
 
