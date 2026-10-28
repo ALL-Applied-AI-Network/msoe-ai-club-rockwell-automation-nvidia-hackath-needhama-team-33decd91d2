@@ -330,6 +330,11 @@ over the vial. The controls have distinct effects:
 - `--crooked-wiggle-cycles`: square orbits per press depth; default is `1`, and `0` disables the wiggle.
 - `--crooked-action shoulder|shoulder-close|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
 
+Before physical execution, jog the robot to the approved vertical home with the
+wrist camera facing away from the robot base. The cable-safe shared-policy pose is
+W/P/R `(-180, 0, -180)` degrees. The physical policy refuses to start more than
+20 degrees from this orientation rather than commanding an automatic wrist unwind.
+
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and
 leaves the shoulder 10 mm above nominal contact. A zero or negative press offset

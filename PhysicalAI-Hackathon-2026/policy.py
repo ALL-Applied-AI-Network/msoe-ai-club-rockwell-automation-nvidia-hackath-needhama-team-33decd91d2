@@ -19,12 +19,12 @@ sys.path.insert(0, str(ROOT))
 
 from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
 from src.remediation.geometry import base_to_uf0, resolve_height_planes, transit_base_z
-from src.remediation.controller import ContactTool, RemediationController
+from src.remediation.controller import ContactTool, RemediationController, wpr_to_rotation
 from calibration.geometry import depth_to_base, load as load_cameras, project
 
 
 DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
-DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
+DOWN_WPR_DEG = (-180.0, 0.0, -180.0)
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
 HOVER_ABOVE_CAP_M = 0.075
@@ -117,6 +117,7 @@ class Policy:
         self.target = None
         self.last_observation_time = None
         self.events = []
+        self.start_orientation_checked = False
         if self.controller is not None:
             self.controller.reset()
 
@@ -140,6 +141,19 @@ class Policy:
 
     def _hold(self, obs):
         return self._command(self._tcp(obs)[:3])
+
+    def _validate_start_orientation(self, obs):
+        if self.start_orientation_checked:
+            return
+        current = self._tcp(obs)
+        relative = wpr_to_rotation(current[3:6]).T @ wpr_to_rotation(DOWN_WPR_DEG)
+        angle = np.degrees(np.arccos(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0)))
+        if angle > 20.0:
+            raise RuntimeError(
+                f"starting tool orientation is {angle:.1f} deg from the outward-facing wrist-camera "
+                f"home {DOWN_WPR_DEG}; jog to the approved home pose instead of allowing an automatic wrist turn"
+            )
+        self.start_orientation_checked = True
 
     def _choose_table_cap(self, image, stamp):
         detections = self.detector.detect(image, timestamp=stamp)
@@ -305,6 +319,7 @@ class Policy:
         return action
 
     def act(self, obs):
+        self._validate_start_orientation(obs)
         image = obs.get("images", {}).get("table")
         stamp = obs.get("t")
         fresh = stamp is None or self.last_observation_time is None or stamp > self.last_observation_time

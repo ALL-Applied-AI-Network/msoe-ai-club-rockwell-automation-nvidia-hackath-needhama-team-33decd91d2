@@ -65,7 +65,9 @@ class ContactTool:
 
 
 def checked_action(base_position, closed):
-    return checked_pose_action(base_position, (-180.0, 0.0, 0.0), closed)
+    # Equivalent downward-tool roll chosen so the wrist camera faces away from
+    # the robot base, reducing cable wrap on the physical wrist.
+    return checked_pose_action(base_position, (-180.0, 0.0, -180.0), closed)
 
 
 def checked_pose_action(base_position, wpr_deg, closed):
@@ -83,7 +85,7 @@ def axis_to_wpr(axis_base):
     """Fanuc W/P/R whose tool +Z points down the observed cap axis.
 
     The roll-pitch-yaw convention is the same fixed XYZ convention for which
-    the normal vertical tool pose is (-180, 0, 0) degrees.
+    the cable-safe normal vertical tool pose is (-180, 0, -180) degrees.
     """
     axis = np.asarray(axis_base, dtype=float)
     if axis.shape != (3,) or not np.isfinite(axis).all() or np.linalg.norm(axis) < 1e-9:
@@ -95,7 +97,7 @@ def axis_to_wpr(axis_base):
     reference = np.array([0.0, 0.0, 1.0])
     y = np.cross(reference, axis)
     if np.linalg.norm(y) < 1e-6:
-        y = np.array([0.0, -1.0, 0.0])
+        y = np.array([0.0, 1.0, 0.0])
     else:
         y /= np.linalg.norm(y)
     x = np.cross(y, z)

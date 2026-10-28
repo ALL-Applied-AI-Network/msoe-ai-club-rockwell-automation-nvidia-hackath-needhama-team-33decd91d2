@@ -108,6 +108,10 @@ derived by adding the known 10 mm tray base and 203.2 mm vial height. Use
 `--vial-rim-z-m` only when directly overriding that derived rim measurement;
 the policy records both effective planes in `height_planes.json`.
 
+Start from the approved vertical home with the wrist camera facing away from the
+robot base (W/P/R `-180, 0, -180` degrees). To protect the wrist-camera wiring,
+the policy refuses to start more than 20 degrees from this orientation.
+
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
 then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press
 offsets may create contact with glass.
