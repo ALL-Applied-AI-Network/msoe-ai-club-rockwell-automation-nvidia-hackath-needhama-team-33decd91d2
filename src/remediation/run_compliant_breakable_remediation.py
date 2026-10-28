@@ -1352,11 +1352,11 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         inference_env.pop('PYTHONPATH', None)
         subprocess.run(command, cwd=ROOT, check=True, env=inference_env)
         raw = json.loads(result_path.read_text())['targets']
-        refined = refine_caps_with_depth(raw, depth, capture, work_surface_z, vial_rim_z)
-        fitted = choose_targets(refined, load_layout(), depth_refined=True,
-                                depth=depth, capture_report=capture)
         detections = []
-        for item in align_policy_defects_to_grid(refined, fitted):
+        # Preserve the detector's calibrated RGB box-centre ray/plane targets.
+        # Depth and tray fits are evaluation evidence only; changing commanded
+        # XYZ here would make simulation differ from the physical policy.
+        for item in raw:
             clean = dict(item)
             clean['contact_qualified'] = True
             clean['depth_available'] = bool(item.get('depth_available', True))

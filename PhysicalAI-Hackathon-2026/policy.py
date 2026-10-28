@@ -17,8 +17,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.inspection.vision_pipeline import (RemediationVisionDetector, cap_axis_from_rgbd_points,
-                                            refine_defect_centres_from_grid)
+from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
 from src.inspection.depth_visualization import render_depth_heatmap
 from src.remediation.geometry import (base_to_uf0, inspection_base_position,
                                       resolve_height_planes, transit_base_z)
@@ -282,8 +281,8 @@ class Policy:
                      localization_note=item["localization_note"] + "; supervised full-remediation test mode")
                 for item in detections]
 
-    def _fuse_table_depth(self, detections, depth_mm):
-        """Attach the calibrated RGB-D point inside each current YOLO box.
+    def _attach_table_depth_observations(self, detections, depth_mm):
+        """Attach RGB-D diagnostics without changing commanded target XYZ.
 
         The RGB and depth streams have different resolutions and optical
         centres. Depth pixels are first transformed into robot-base points,
@@ -315,18 +314,6 @@ class Policy:
             if inside.sum() >= 8:
                 selected = points[inside]
                 selected_depth = depth_mm[pixels[inside, 1], pixels[inside, 0]].astype(float) / 1000.0
-                point = np.median(selected, axis=0)
-                if updated["class_name"] == "table_cap":
-                    plane_point = np.asarray(item["base_pos_m"], dtype=float)
-                    point[:2] = 0.5 * (point[:2] + plane_point[:2])
-                    point[2] = plane_point[2]
-                else:
-                    # The measured vial-rim plane is more reliable than depth on
-                    # clear plastic. Keep the RGB bounding-box ray/plane target;
-                    # retain RGB-D only for validation and crooked-cap shape.
-                    point = np.asarray(item["base_pos_m"], dtype=float)
-                updated["base_pos_m"] = point.tolist()
-                updated["tcp_pos_mm"] = base_to_uf0(point).tolist()
                 updated["depth_median_m"] = float(np.median(selected_depth))
                 updated["surface_top_base_z_m"] = float(np.percentile(selected[:, 2], 90))
                 if updated["class_name"] == "crooked_cap":
@@ -334,18 +321,12 @@ class Policy:
                     updated["cap_axis_base"] = None if axis is None else axis.tolist()
                 updated["depth_available"] = True
                 updated["depth_rgbd_point_count"] = int(inside.sum())
-                updated["localization_note"] += ("; fused RGB plane centre and calibrated RGB-D median"
-                                                  if updated["class_name"] == "table_cap"
-                                                  else "; commanded on calibrated vial plane; RGB-D observation only")
+                updated["localization_note"] += "; RGB-D observation only; commanded XYZ unchanged"
             else:
                 updated["depth_available"] = False
                 updated["localization_note"] += "; no valid projected depth points in box"
             fused.append(updated)
-        # Depth is intentionally a refinement, not an alternative coordinate
-        # system. Refit defects to the camera-derived 6x5 aperture lattice so
-        # missing-vial depth holes and crooked-cap flange centres cannot move a
-        # contact target away from its visible tray aperture.
-        return refine_defect_centres_from_grid(fused, rim_z_m=self.vial_rim_z)
+        return fused
 
     def _full_act(self, obs, image, stamp, fresh):
         """Pick a spare for a missing vial or press a crooked cap vertically.
@@ -378,7 +359,8 @@ class Policy:
             self._record_snapshot(observed, image, [], action)
             return action
         detections = self._snapshot_detections(image, stamp)
-        detections = self._fuse_table_depth(detections, observed.get("depth", {}).get("table"))
+        detections = self._attach_table_depth_observations(
+            detections, observed.get("depth", {}).get("table"))
         if self.controller.state == "pickup" and self.controller.pending is not None:
             spare = np.asarray(self.controller.pending["spare"]["base_pos_m"], dtype=float)
             still_on_table = any(

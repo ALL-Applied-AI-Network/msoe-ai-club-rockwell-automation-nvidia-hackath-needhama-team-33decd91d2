@@ -25,7 +25,7 @@ class RemediationControllerTests(unittest.TestCase):
                 "surface_top_base_z_m": float(xyz[2]),
                 "confidence": confidence, "contact_qualified": qualified,
                 "depth_available": depth,
-                "localization_note": "Contact XY refined by affine tray-grid fit"}
+                "localization_note": "RGB box-center ray intersected with the calibrated object plane"}
 
     def test_unqualified_detection_holds(self):
         action = self.controller.act(

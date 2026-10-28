@@ -241,9 +241,14 @@ class RemediationController:
     def _valid_defect(self, detection):
         """Reject contact targets whose camera geometry is physically impossible."""
         localization_note = detection.get("localization_note", "")
-        if localization_note and "tray-grid fit" not in localization_note:
+        # Contact targets now come directly from the calibrated TableCam RGB
+        # box-centre ray/plane intersection.  Do not require the retired tray-
+        # grid refinement, but still reject detections with unknown provenance.
+        known_localization = ("RGB box-center ray intersected with the calibrated object plane" in
+                              localization_note)
+        if localization_note and not known_localization:
             self.events.append({"event": "target_rejected",
-                                "reason": "defect is not assigned to the perception-fitted tray grid"})
+                                "reason": "defect does not have calibrated RGB ray/plane localization"})
             return False
         if detection.get("class_name") != "crooked_cap":
             return True
