@@ -336,8 +336,8 @@ over the vial. The controls have distinct effects:
 - `--crooked-action shoulder|shoulder-close|closed-tip|regrip|cone-press`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `shoulder-close` descends open, closes 3 mm above predicted shoulder contact, presses incrementally, opens at the bottom, and retreats open. Deployment of the side-mounted TPU cone must explicitly select `cone-press`.
 
 Before physical execution, jog the robot to the approved vertical home with the
-wrist camera facing away from the robot base. The cable-safe shared-policy pose is
-W/P/R `(-180, 0, -180)` degrees. The physical policy refuses to start more than
+wrist camera in its verified physical-cell starting roll. The cable-safe shared-policy pose is
+W/P/R `(-180, 0, 0)` degrees. The physical policy refuses to start more than
 20 degrees from this orientation rather than commanding an automatic wrist unwind.
 
 Full remediation observes and replans only from the shared camera-clear inspection
@@ -346,6 +346,14 @@ executes one complete repair, returns to inspection, verifies, and then selects 
 next target. Missing-cap pickup retains one intermediate inspection-pose snapshot
 to verify that the loose cap left the table before placement. YOLO is not rerun
 between ordinary motion waypoints.
+
+The physical adapter subdivides every Cartesian goal into a single queued chunk
+of 0.1-second rows no longer than 9 mm (and no more than 5 degrees of W/P/R
+change). Queuing the complete chunk allows continuous cell-side playback instead
+of stopping for a network round trip after every row. It retains the goal and
+does not advance the policy state after the chunk until measured `tcp_pose` is
+within 1.5 mm and 2 degrees, with the requested jaw state reached. `trace.jsonl`
+records the planned goal, chunk row count, and any correction chunk.
 
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and
