@@ -17,7 +17,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.inspection.vision_pipeline import RemediationVisionDetector
+from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
 from src.remediation.geometry import base_to_uf0, transit_base_z
 from src.remediation.controller import ContactTool, RemediationController
 from calibration.geometry import depth_to_base, load as load_cameras, project
@@ -58,6 +58,7 @@ class Policy:
                  pick_offset_m=0.0, place_offset_m=0.0, press_offset_m=0.0,
                  crooked_shoulder_depth_m=0.0326838,
                  crooked_tap_depth_m=0.005,
+                 crooked_action="shoulder",
                  trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
         if str(device).lower() != "cpu":
@@ -79,7 +80,8 @@ class Policy:
             allow_provisional_contact, pick_offset_m, place_offset_m, press_offset_m),
             min_confidence=self.confidence,
             crooked_shoulder_depth_m=crooked_shoulder_depth_m,
-            crooked_tap_depth_m=crooked_tap_depth_m)
+            crooked_tap_depth_m=crooked_tap_depth_m,
+            crooked_action=crooked_action)
             if self.full_remediation else None)
         label = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_physical_policy")
         # Physical-policy traces are team artifacts, so share them by default.
@@ -232,6 +234,9 @@ class Policy:
                 updated["tcp_pos_mm"] = base_to_uf0(point).tolist()
                 updated["depth_median_m"] = float(np.median(selected_depth))
                 updated["surface_top_base_z_m"] = float(np.percentile(selected[:, 2], 90))
+                if updated["class_name"] == "crooked_cap":
+                    axis = cap_axis_from_rgbd_points(selected)
+                    updated["cap_axis_base"] = None if axis is None else axis.tolist()
                 updated["depth_available"] = True
                 updated["depth_rgbd_point_count"] = int(inside.sum())
                 updated["localization_note"] += "; calibrated RGB-D box median"

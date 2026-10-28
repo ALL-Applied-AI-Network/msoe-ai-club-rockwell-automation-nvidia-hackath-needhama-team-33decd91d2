@@ -1099,7 +1099,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         ContactTool(args.pick_offset_m, args.place_offset_m, args.press_offset_m, validated=True),
         max_attempts=1, min_confidence=args.confidence,
         crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
-        crooked_tap_depth_m=args.crooked_tap_depth_m)
+        crooked_tap_depth_m=args.crooked_tap_depth_m,
+        crooked_action=args.crooked_action)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
     checkpoint = Path(args.checkpoint).resolve()
@@ -1192,6 +1193,15 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 # intermediate pose: interpolate the reachable joint endpoints
                 # with the same bounded angular step and retain physics collision
                 # checking throughout the executed path.
+                clearance = transit_base_z()
+                upward_clearance_retreat = (
+                    float(target[2]) >= clearance - 1e-6
+                    and float(target[2]) > float(start[2])
+                    and np.linalg.norm(np.asarray(target[:2]) - np.asarray(start[:2])) < 1e-4)
+                if min(float(start[2]), float(target[2])) < clearance and not upward_clearance_retreat:
+                    raise RuntimeError(
+                        'refusing joint-space fallback below tray clearance; '
+                        'the Cartesian contact route is not safely executable') from cartesian_error
                 q_target = P.solve(ex.q, target, rotation[:, 2], rotation[:, 1], tip)
                 path = speed_limited_joints(ex.q, q_target, min_steps=60)
                 phase += '_joint_fallback'
@@ -1262,6 +1272,8 @@ def main():
     parser.add_argument('--crooked-shoulder-depth-m', type=float, default=0.0326838)
     parser.add_argument('--crooked-tap-depth-m', type=float, default=0.005,
                         help='descent beyond RGB-D-measured shoulder contact (default: 0.005 m)')
+    parser.add_argument('--crooked-action', choices=('shoulder', 'closed-tip', 'regrip'), default='shoulder',
+                        help='shared-controller crooked-cap action (default: shoulder)')
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
                         help='regrip: wrist-camera servo onto the cap axis, coaxial grip, lift, turn upright and '
                              're-place; vertical: closed fingertips pressed straight down; tilted: PRESS_TILT_DEG '

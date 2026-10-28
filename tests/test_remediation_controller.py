@@ -75,6 +75,76 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, crooked_tap_depth_m=0.0)
         with self.assertRaises(ValueError):
             RemediationController(tool, crooked_tap_depth_m=0.011)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, crooked_action="unknown")
+
+    def test_closed_tip_action_closes_only_above_cap_and_reopens_above_cap(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="closed-tip")
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.21])
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        closed = [action for action in actions if action[6] == 1.0]
+        self.assertGreaterEqual(len(closed), 3)
+        self.assertEqual(actions[-1][6], 0.0)
+        self.assertAlmostEqual(min(action[2] for action in closed),
+                               base_to_uf0([0.31, 0.02, 0.21])[2] - 5.0 + 0.5,
+                               places=4)
+
+    def test_regrip_action_grips_lifts_releases_and_taps(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="regrip")
+        axis = np.array([0.30, -0.10, 0.9486833])
+        detection = {**self.detection("crooked_cap", [0.31, 0.02, 0.21]),
+                     "cap_axis_base": axis.tolist()}
+        actions = [controller.act(self.obs, [detection])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, [detection]))
+        jaw = [action[6] for action in actions]
+        self.assertIn([0.0, 1.0, 1.0], [jaw[i:i + 3] for i in range(len(jaw) - 2)])
+        self.assertGreaterEqual(sum(value == 1.0 for value in jaw), 5)
+        self.assertEqual(jaw[-1], 0.0)
+        tilted = [action for action in actions if not np.allclose(action[3:6], [-180, 0, 0])]
+        self.assertGreaterEqual(len(tilted), 4)
+        np.testing.assert_allclose(
+            wpr_to_rotation(tilted[0][3:6])[:, 2], -axis / np.linalg.norm(axis), atol=1e-7)
+        first_tilted = next(i for i, action in enumerate(actions)
+                            if not np.allclose(action[3:6], [-180, 0, 0]))
+        self.assertAlmostEqual(actions[first_tilted][2], actions[first_tilted - 1][2])
+        self.assertAlmostEqual(actions[first_tilted][0], actions[first_tilted - 1][0])
+        self.assertAlmostEqual(actions[first_tilted][1], actions[first_tilted - 1][1])
+
+    def test_regrip_rejects_missing_camera_axis(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True), crooked_action="regrip")
+        action = controller.act(self.obs, [self.detection("crooked_cap", [0.31, 0.02, 0.21])])
+        np.testing.assert_allclose(action[:6], self.tcp)
+        self.assertTrue(any("RGB-D cap axis" in event.get("reason", "")
+                            for event in controller.events))
+
+    def test_impossible_crooked_surface_height_is_rejected(self):
+        detection = self.detection("crooked_cap", [0.31, 0.02, 0.35])
+        action = self.controller.act(self.obs, [detection])
+        np.testing.assert_allclose(action[:6], self.tcp)
+        self.assertTrue(any(event.get("event") == "target_rejected"
+                            for event in self.controller.events))
+
+    def test_shifted_attempt_is_not_retried_as_a_new_cap(self):
+        first = self.detection("crooked_cap", [0.31, 0.02, 0.21])
+        self.controller.act(self.obs, [first])
+        while self.controller.queue:
+            self.controller.act(self.obs, [first])
+        for _ in range(5):
+            self.controller.act(self.obs, [first])
+        self.assertEqual(self.controller.state, "inspect")
+        shifted = self.detection("crooked_cap", [0.38, 0.08, 0.21])
+        action = self.controller.act(self.obs, [shifted])
+        np.testing.assert_allclose(action[:6], self.tcp)
+        self.assertEqual(self.controller.state, "inspect")
+        self.assertEqual(self.controller.defect_tracks[0]["attempts"], 1)
 
     def test_missing_cap_requires_spare(self):
         action = self.controller.act(

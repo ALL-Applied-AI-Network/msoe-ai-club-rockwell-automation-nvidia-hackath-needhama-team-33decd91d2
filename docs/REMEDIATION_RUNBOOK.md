@@ -319,6 +319,7 @@ over the vial. The controls have distinct effects:
 - `--press-offset-m`: upward clearance applied to the crooked-cap shoulder contact position.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.
 - `--crooked-tap-depth-m`: position-controlled travel beyond the RGB-D-measured first shoulder contact; default is `0.005` m.
+- `--crooked-action shoulder|closed-tip|regrip`: choose the shared camera-only crooked-cap sequence; default is `shoulder`. `regrip` fits the cap axis from the current TableCam RGB-D box, approaches and lifts along that axis, turns upright above the vial, and immediately replaces it over the same camera-localized position. It does not use a wrist camera or an intermediate table set-down.
 
 Use a positive press offset for alignment-only trials. With the 32.6838 mm shoulder
 depth, `+0.010` m commands 22.6838 mm of descent past the observed cap surface and

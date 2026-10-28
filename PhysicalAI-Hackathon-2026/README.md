@@ -92,8 +92,14 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --crooked-action shoulder \
   --crooked-shoulder-depth-m 0.0326838 --crooked-tap-depth-m 0.005
 ```
+
+`--crooked-action` selects `shoulder` (open-claw internal-shoulder tap),
+`closed-tip` (closed fingertip-face tap), or `regrip` (camera-positioned pickup,
+lift, same-vial replacement, release, and closed-tip tap). All three use the
+same shared controller in simulation and physical execution.
 
 Positive offsets move the TCP upward. Start at +10 mm for non-contact alignment,
 then test +5 mm, +2 mm, and +1 mm one operation at a time. Zero or negative press

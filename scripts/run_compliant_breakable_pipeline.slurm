@@ -18,19 +18,22 @@ set -euo pipefail
 cd "${SLURM_SUBMIT_DIR:-$PWD}"
 
 canonical_scene="shared/scenes/tablecam_right_pink_spares_qualified_v2.usda"
-if [[ $# -eq 2 ]]; then
-    scene="$canonical_scene"
-    checkpoint="$1"
-    out="$2"
-elif [[ $# -eq 3 ]]; then
+if [[ $# -ge 3 && "$1" == *.usd* ]]; then
     scene="$1"
     checkpoint="$2"
     out="$3"
+    shift 3
+elif [[ $# -ge 2 ]]; then
+    scene="$canonical_scene"
+    checkpoint="$1"
+    out="$2"
+    shift 2
 else
-    echo "Usage: sbatch $0 [scene.usda] <yolo_checkpoint.pt> <output_directory>" >&2
+    echo "Usage: sbatch $0 [scene.usda] <yolo_checkpoint.pt> <output_directory> [remediation options]" >&2
     echo "  With no scene argument, uses $canonical_scene" >&2
     exit 2
 fi
+remediation_args=("$@")
 
 # All outputs live under shared/runs/ (bare names are placed there).
 case "$out" in
@@ -60,11 +63,12 @@ echo "[pipeline] 2/4: Running YOLO perception and 3D localization..."
     --capture-report "$perception/capture_report.json" \
     --out "$perception/current_scene_detections.json" --device 0
 
-echo "[pipeline] 3/4: Running physics-based remediation (contact placement, open-claw crooked-cap shoulder press)..."
+echo "[pipeline] 3/4: Running physics-based remediation with the selected shared crooked-cap action..."
 ./scripts/run_isaac.sh src/remediation/run_compliant_breakable_remediation.py \
     --scene "$scene" --detections "$perception/current_scene_detections.json" --out "$action" \
     --depth "$perception/current_scene_tablecam_depth_m.npy" --capture-report "$perception/capture_report.json" \
-    --controller-policy shared --checkpoint "$checkpoint" --confidence 0.70 --inference-device 0
+    --controller-policy shared --checkpoint "$checkpoint" --confidence 0.70 --inference-device 0 \
+    "${remediation_args[@]}"
 
 for required in attempt_report.json trace.json policy_decisions.json oracle_evaluation_trace.json; do
     if [[ ! -s "$action/$required" ]]; then

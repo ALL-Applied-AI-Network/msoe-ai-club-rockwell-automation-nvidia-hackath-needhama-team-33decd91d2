@@ -72,6 +72,7 @@ class PolicyParityContractTests(unittest.TestCase):
         self.assertIn("POLICY_MAX_FOLLOWING_ERROR_DEG", runner)
         self.assertIn("POLICY_RESUME_ERROR_DEG", runner)
         self.assertIn("EOAT detached from flange", runner)
+        self.assertIn("refusing joint-space fallback below tray clearance", runner)
 
     def test_identical_observation_replay_produces_identical_action(self):
         tool = ContactTool(.005, .005, .005, validated=True)

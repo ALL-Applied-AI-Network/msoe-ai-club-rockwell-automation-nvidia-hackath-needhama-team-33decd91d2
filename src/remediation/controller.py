@@ -8,7 +8,14 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.remediation.geometry import base_to_uf0, transit_base_z, uf0_to_base
+from src.remediation.geometry import base_to_uf0, rim_base_z, transit_base_z, uf0_to_base
+
+
+# Camera-derived cap surfaces outside this generous band cannot belong to a
+# vial cap.  The band is relative to the calibrated vial rim, not an XY slot.
+CROOKED_SURFACE_MIN_M = rim_base_z() - 0.020
+CROOKED_SURFACE_MAX_M = rim_base_z() + 0.055
+DEFECT_TRACK_GATE_M = 0.100
 
 
 # The shared policy boundary.  Adapters may own richer observations, but only
@@ -20,7 +27,7 @@ ALLOWED_OBSERVATION_FIELDS = frozenset({
 })
 ALLOWED_DETECTION_FIELDS = frozenset({
     "class_name", "confidence", "base_pos_m", "bbox_xyxy", "pixel",
-    "depth_available", "surface_top_base_z_m", "contact_qualified",
+    "depth_available", "surface_top_base_z_m", "cap_axis_base", "contact_qualified",
     "localization_note", "timestamp",
 })
 FORBIDDEN_ORACLE_FIELDS = frozenset({
@@ -121,7 +128,8 @@ def wpr_to_rotation(wpr_deg):
 
 class RemediationController:
     def __init__(self, tool, max_attempts=1, min_confidence=0.70,
-                 crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005):
+                 crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
+                 crooked_action="shoulder"):
         if not tool.validated:
             raise ValueError("Contact tool offsets have not been explicitly accepted")
         self.tool = tool
@@ -135,17 +143,67 @@ class RemediationController:
         self.crooked_tap_depth_m = float(crooked_tap_depth_m)
         if not 0.0 < self.crooked_tap_depth_m <= 0.010:
             raise ValueError("crooked tap depth must be greater than 0 and at most 0.010 m")
+        if crooked_action not in ("shoulder", "closed-tip", "regrip"):
+            raise ValueError("crooked_action must be shoulder, closed-tip, or regrip")
+        self.crooked_action = crooked_action
         self.reset()
 
     def reset(self):
         self.queue = deque()
         self.pending = None
         self.attempts = {}
+        self.defect_tracks = None
         self.events = []
         self.decision_records = []
         self.state = "inspect"
         self.confirmations = 0
         self.verify_frames = 0
+
+    def _valid_defect(self, detection):
+        """Reject contact targets whose camera geometry is physically impossible."""
+        if detection.get("class_name") != "crooked_cap":
+            return True
+        top = float(detection.get("surface_top_base_z_m", np.nan))
+        if not CROOKED_SURFACE_MIN_M <= top <= CROOKED_SURFACE_MAX_M:
+            self.events.append({"event": "target_rejected",
+                                "reason": "crooked RGB-D surface height outside physical range",
+                                "surface_top_base_z_m": top})
+            return False
+        return True
+
+    def _tracked_defects(self, defects):
+        """Match fresh camera defects to the initial defect set.
+
+        Tracks are controller memory derived only from camera detections.  A cap
+        that moves after contact remains the same attempted track instead of
+        gaining a new attempt because its quantized XY coordinate changed.
+        """
+        if self.defect_tracks is None and defects:
+            self.defect_tracks = [{"class_name": d["class_name"],
+                                   "anchor_xy": np.asarray(d["base_pos_m"][:2], float),
+                                   "last_xy": np.asarray(d["base_pos_m"][:2], float),
+                                   "attempts": 0}
+                                  for d in defects]
+        if self.defect_tracks is None:
+            return []
+        pairs = []
+        for ti, track in enumerate(self.defect_tracks):
+            for di, detection in enumerate(defects):
+                if detection["class_name"] != track["class_name"]:
+                    continue
+                distance = float(np.linalg.norm(
+                    np.asarray(detection["base_pos_m"][:2], float) - track["last_xy"]))
+                if distance <= DEFECT_TRACK_GATE_M:
+                    pairs.append((distance, ti, di))
+        assigned_tracks, assigned_detections, matches = set(), set(), []
+        for distance, ti, di in sorted(pairs):
+            if ti in assigned_tracks or di in assigned_detections:
+                continue
+            assigned_tracks.add(ti); assigned_detections.add(di)
+            track = self.defect_tracks[ti]
+            track["last_xy"] = np.asarray(defects[di]["base_pos_m"][:2], float)
+            matches.append((track, defects[di], distance))
+        return matches
 
     def hold(self, obs):
         tcp = np.asarray(obs.get("tcp_pose"), dtype=float)
@@ -176,21 +234,61 @@ class RemediationController:
         target_pos = np.asarray(target["base_pos_m"], dtype=float)
         self._add([current[0], current[1], height], False)
         if spare is None:
-            # Crooked-cap remediation treats the open claw like a whole-vial
-            # pickup: the conformal pockets descend around the cap and vial until
-            # the solid internal mount shoulder reaches the cap top.  The depth is
-            # measured from the fingertip TCP in the finger CAD, not inferred from
-            # the finger's overall 50.8 mm length.
             surface_top = float(target.get("surface_top_base_z_m", np.nan))
             if not np.isfinite(surface_top):
                 raise ValueError("crooked cap requires an RGB-D surface-top height")
-            contact = np.array([target_pos[0], target_pos[1],
-                                surface_top - self.crooked_shoulder_depth_m])
             self._add([target_pos[0], target_pos[1], height], False)
-            self._add(contact + [0, 0, 0.025], False)
-            low = contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m]
-            self._add(low, False)
-            self._add(contact + [0, 0, 0.025], False)
+            if self.crooked_action == "shoulder":
+                # Open fingers surround the vial; the CAD-measured internal
+                # shoulder taps from the observed cap-surface height.
+                contact = np.array([target_pos[0], target_pos[1],
+                                    surface_top - self.crooked_shoulder_depth_m])
+                self._add(contact + [0, 0, 0.025], False)
+                self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], False)
+                self._add(contact + [0, 0, 0.025], False)
+            elif self.crooked_action == "closed-tip":
+                # Close in free space and use the two fingertip end faces as a
+                # compact press. Never change jaw state while touching the cap.
+                contact = np.array([target_pos[0], target_pos[1], surface_top])
+                self._add(contact + [0, 0, 0.025], False)
+                self._add(contact + [0, 0, 0.025], True)
+                self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], True)
+                self._add(contact + [0, 0, 0.025], True)
+                self._add(contact + [0, 0, 0.025], False)
+            else:
+                # Reproduce the useful part of the original regrip: approach
+                # and capture coaxially with the observed crooked cap, lift
+                # along that axis, then turn upright at clearance.  Unlike the
+                # old wrist-camera/table sequence, the axis comes from the same
+                # TableCam RGB-D crop on both systems and the cap is replaced
+                # immediately over its vial.
+                axis = np.asarray(target.get("cap_axis_base"), dtype=float)
+                if axis.shape != (3,) or not np.isfinite(axis).all() or np.linalg.norm(axis) < 1e-9:
+                    raise ValueError("regrip requires a TableCam RGB-D cap axis")
+                axis /= np.linalg.norm(axis)
+                if axis[2] < 0:
+                    axis = -axis
+                tilted_wpr = axis_to_wpr(axis)
+                pick = target_pos + [0, 0, self.tool.pick_offset_m]
+                contact = np.array([target_pos[0], target_pos[1], surface_top])
+                # Establish the tilted wrist pose above the vial before any
+                # descent.  Do not combine a branch-sensitive wrist rotation
+                # with the low cap approach.
+                self._add_pose([target_pos[0], target_pos[1], height], tilted_wpr, False)
+                self._add_pose(pick + axis * 0.025, tilted_wpr, False)
+                self._add_pose(pick, tilted_wpr, False)
+                self._add_pose(pick, tilted_wpr, True)
+                self._add_pose(pick + axis * 0.050, tilted_wpr, True)
+                self._add_pose([target_pos[0], target_pos[1], height], tilted_wpr, True)
+                self._add([target_pos[0], target_pos[1], height], True)
+                self._add(target_pos + [0, 0, 0.025], True)
+                self._add(target_pos + [0, 0, self.tool.place_offset_m], True)
+                self._add(target_pos + [0, 0, self.tool.place_offset_m], False)
+                self._add(contact + [0, 0, 0.025], False)
+                self._add(contact + [0, 0, 0.025], True)
+                self._add(contact + [0, 0, self.tool.press_offset_m - self.crooked_tap_depth_m], True)
+                self._add(contact + [0, 0, 0.025], True)
+                self._add(contact + [0, 0, 0.025], False)
             self._add([target_pos[0], target_pos[1], height], False)
             self.state = "repair"
         else:
@@ -259,12 +357,12 @@ class RemediationController:
         eligible = [d for d in detections if d.get("contact_qualified")
                     and d.get("depth_available") is True
                     and d["confidence"] >= self.min_confidence]
-        defects = sorted((d for d in eligible if d["class_name"] in ("crooked_cap", "missing_cap")),
+        defects = sorted((d for d in eligible if d["class_name"] in ("crooked_cap", "missing_cap")
+                          and self._valid_defect(d)),
                          key=lambda d: d["class_name"] != "missing_cap")
         spares = [d for d in eligible if d["class_name"] == "table_cap"]
-        for target in defects:
-            key = tuple(np.round(np.asarray(target["base_pos_m"])[:2] / 0.005).astype(int))
-            if self.attempts.get(key, 0) >= self.max_attempts:
+        for track, target, _distance in self._tracked_defects(defects):
+            if track["attempts"] >= self.max_attempts:
                 continue
             spare = None
             if target["class_name"] == "missing_cap":
@@ -275,11 +373,11 @@ class RemediationController:
             try:
                 self._route(obs, target, spare)
             except ValueError as exc:
-                self.attempts[key] = self.max_attempts
+                track["attempts"] = self.max_attempts
                 self.events.append({"event": "target_rejected", "reason": str(exc),
                                     "target": np.asarray(target["base_pos_m"]).tolist()})
                 continue
-            self.attempts[key] = self.attempts.get(key, 0) + 1
+            track["attempts"] += 1
             return self.queue.popleft()
         self.events.append({"event": "hold", "reason": "no_qualified_repair_target"})
         return self.hold(obs)

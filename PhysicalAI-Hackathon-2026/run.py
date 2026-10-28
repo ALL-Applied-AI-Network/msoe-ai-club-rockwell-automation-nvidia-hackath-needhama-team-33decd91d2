@@ -224,6 +224,8 @@ def main() -> None:
     p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
                    help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
+    p.add_argument("--crooked-action", choices=("shoulder", "closed-tip", "regrip"),
+                   default="shoulder")
     p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
     p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
     args = p.parse_args()
@@ -250,6 +252,7 @@ def main() -> None:
                                  press_offset_m=args.press_offset_m,
                                  crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                                  crooked_tap_depth_m=args.crooked_tap_depth_m,
+                                 crooked_action=args.crooked_action,
                                  trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
@@ -275,6 +278,7 @@ def main() -> None:
                    press_offset_m=args.press_offset_m,
                    crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
                    crooked_tap_depth_m=args.crooked_tap_depth_m,
+                   crooked_action=args.crooked_action,
                    trace_dir=args.trace_dir))
 
 

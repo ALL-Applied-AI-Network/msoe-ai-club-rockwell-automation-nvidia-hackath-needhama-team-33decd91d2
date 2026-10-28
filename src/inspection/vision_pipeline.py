@@ -18,6 +18,37 @@ ROOT = Path(__file__).resolve().parents[2]
 CALIBRATION_DIR = ROOT / 'PhysicalAI-Hackathon-2026/calibration'
 
 
+def cap_axis_from_rgbd_points(points, *, min_points=12):
+    """Estimate an upward cap axis from a TableCam RGB-D box point cloud.
+
+    A crooked cap's flange is locally planar, so its least-variance PCA axis is
+    the cap axis.  This is camera evidence only and is shared by simulation and
+    the physical adapter.
+    """
+    points = np.asarray(points, dtype=float)
+    points = points[np.isfinite(points).all(axis=1)]
+    if len(points) < min_points:
+        return None
+    # Suppress vial/body and background points below the cap surface.
+    points = points[points[:, 2] >= np.percentile(points[:, 2], 40)]
+    if len(points) < min_points:
+        return None
+    # The arithmetic centroid remains on an affine plane.  A coordinate-wise
+    # median need not, and can bias the fitted normal after percentile clipping.
+    centred = points - np.mean(points, axis=0)
+    _, singular, vectors = np.linalg.svd(centred, full_matrices=False)
+    if singular[1] < 1e-6:
+        return None
+    axis = vectors[-1]
+    if axis[2] < 0:
+        axis = -axis
+    axis /= np.linalg.norm(axis)
+    # Reject side walls and ill-conditioned fits rather than inventing a pose.
+    if axis[2] < 0.50:
+        return None
+    return axis
+
+
 def load_cameras(calib_dir=CALIBRATION_DIR):
     raw = json.loads((Path(calib_dir) / 'cameras.json').read_text())
     return {name: {'T': np.array(c.get('T_base_cam', c.get('T_flange_cam'))),
@@ -110,6 +141,7 @@ class RemediationVisionDetector:
                 position = pixel_to_base(self.table_cam, center, plane, (w, h))
                 depth_value=None
                 surface_top=None
+                cap_axis=None
                 if depth_m is not None:
                     x0,y0,x1,y1=np.round(xyxy).astype(int)
                     x0,x1=max(x0,0),min(x1,w); y0,y1=max(y0,0),min(y1,h)
@@ -128,12 +160,15 @@ class RemediationVisionDetector:
                         position=np.median(points,axis=0)
                         depth_value=float(np.median(z))
                         surface_top=float(np.percentile(points[:,2],90))
+                        if name == 'crooked_cap':
+                            cap_axis = cap_axis_from_rgbd_points(points)
                 targets.append({'class_name': name, 'confidence': float(confidence),
                                 'bbox_xyxy': xyxy.tolist(), 'pixel': center.tolist(),
                                 'base_pos_m': position.tolist(), 'tcp_pos_mm': base_to_uf0(position).tolist(),
                                 'timestamp': timestamp, 'plane_base_z_m': plane,
                                 'depth_median_m':depth_value,
                                 'surface_top_base_z_m':surface_top,
+                                'cap_axis_base':None if cap_axis is None else cap_axis.tolist(),
                                 'depth_available':depth_value is not None,
                                 'contact_qualified': False,
                                 'localization_note': 'RGB box-center and optional aligned depth observation; feature refinement and contact error budget remain unvalidated'})
