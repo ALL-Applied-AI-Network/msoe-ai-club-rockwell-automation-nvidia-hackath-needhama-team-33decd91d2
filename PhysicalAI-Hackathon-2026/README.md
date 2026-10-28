@@ -196,6 +196,9 @@ Every rollout is recorded: the three cameras and the robot state, 10 times a sec
 results next to your scores, and on the leaderboard once it opens at the end of the event. Tell us when you book if
 your runs should stay off it.
 
+Local policy traces save outlined color depth visualizations under `depth/` and preserve the original uint16
+millimetre frames under `depth_raw/`.
+
 ---
 
 Organizers: UW-Milwaukee Connected Systems Institute and Milwaukee School of Engineering. Partners: NVIDIA and

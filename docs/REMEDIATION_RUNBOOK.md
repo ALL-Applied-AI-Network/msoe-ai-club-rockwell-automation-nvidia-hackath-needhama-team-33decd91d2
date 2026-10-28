@@ -372,7 +372,8 @@ The trace directory contains:
 
 - `tablecam_raw/` — the TableCam RGB image used for each saved decision.
 - `tablecam_annotated/` — the same image with YOLO boxes, classes, and confidence.
-- `depth/` — aligned TableCam depth PNGs.
+- `depth/` — viewable TableCam depth heatmaps: near surfaces are warm, far surfaces are cool, and depth discontinuities have white outlines.
+- `depth_raw/` — unchanged aligned uint16 TableCam depth in millimetres for calibration and numerical inspection.
 - `trace.jsonl` — one JSON record per TCP command: timestamp, controller state,
   current TCP pose, command, detections, and the corresponding frame name.
 

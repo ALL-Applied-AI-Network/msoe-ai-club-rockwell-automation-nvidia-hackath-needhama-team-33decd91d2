@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.inspection.vision_pipeline import (RemediationVisionDetector, cap_axis_from_rgbd_points,
                                             refine_defect_centres_from_grid)
+from src.inspection.depth_visualization import render_depth_heatmap
 from src.remediation.geometry import (base_to_uf0, inspection_base_position,
                                       resolve_height_planes, transit_base_z)
 from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
@@ -116,6 +117,7 @@ class Policy:
             "vial_rim_overridden": vial_rim_z_m is not None,
         }, indent=2) + "\n")
         (self.trace_dir / "depth").mkdir(exist_ok=True)
+        (self.trace_dir / "depth_raw").mkdir(exist_ok=True)
         config = {
             "checkpoint": str(weights.resolve()),
             "mode": mode,
@@ -256,7 +258,9 @@ class Policy:
         cv2.imwrite(str(self.trace_dir / "tablecam_annotated" / raw_name), annotated)
         depth = obs.get("depth", {}).get("table")
         if depth is not None:
-            cv2.imwrite(str(self.trace_dir / "depth" / raw_name), np.asarray(depth))
+            depth = np.asarray(depth)
+            cv2.imwrite(str(self.trace_dir / "depth_raw" / raw_name), depth)
+            cv2.imwrite(str(self.trace_dir / "depth" / raw_name), render_depth_heatmap(depth))
         self._write_trace({"t": stamp, "controller_state": state,
                            "action_tcp": action, "tcp_pose_before": obs.get("tcp_pose"),
                            "detections": detections, "events": self.events[-20:],
