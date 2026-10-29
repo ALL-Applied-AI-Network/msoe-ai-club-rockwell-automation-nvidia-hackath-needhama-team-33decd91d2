@@ -11,16 +11,16 @@ from PIL import Image
 BOX_RE = re.compile(r"<box><(\d+)><(\d+)><(\d+)><(\d+)></box>")
 PROMPTS = {
     "table_cap": "the single loose yellow vial cap near the center of this wrist camera image",
-    "missing_cap": "the single circular open mouth of the uncapped clear plastic vial near the center of this wrist camera image",
+    "missing_cap": "the dark circular opening near the center",
     "crooked_cap": "the single tilted yellow cap on a clear plastic vial near the center of this wrist camera image",
 }
 WRIST_ROI_SIZE_PX = 640
 WRIST_ROI_SIZE_BY_CLASS = {
     "table_cap": 640,
-    # A centred 320 px crop contains the uncapped mouth while excluding the
-    # adjacent capped vials at the calibrated working distance. The prior
-    # 640 px crop allowed a neighbouring cap opening 51 mm away to win.
-    "missing_cap": 320,
+    # At the calibrated working distance, 208 px retains the full supported
+    # TableCam XY-error window while excluding adjacent vial centres.  A 320 px
+    # crop still let a neighbouring yellow cap win on a poisoned-camera probe.
+    "missing_cap": 208,
     "crooked_cap": 640,
 }
 
@@ -92,7 +92,21 @@ class LocateAnythingRuntime:
         return min(boxes, key=lambda box: np.linalg.norm(
             np.array([(box[0] + box[2]) / 2, (box[1] + box[3]) / 2]) - expected))
 
-    def predict(self, image, class_name, expected_pixel):
+    @classmethod
+    def _select_box(cls, boxes, expected_pixel, class_name):
+        if class_name == "missing_cap":
+            # The tight ROI excludes adjacent vial centres. LocateAnything can
+            # still emit a second, smaller box around the rim nearest a biased
+            # TableCam prior; choosing the full opening by area prevents that
+            # bad prior from pulling the wrist refinement back toward itself.
+            return max(boxes, key=lambda box: (
+                (box[2] - box[0]) * (box[3] - box[1]),
+                -np.linalg.norm(
+                    np.array([(box[0] + box[2]) / 2,
+                              (box[1] + box[3]) / 2]) - expected_pixel)))
+        return cls._nearest(boxes, expected_pixel)
+
+    def predict(self, image, class_name, expected_pixel, prompt=None):
         if class_name not in PROMPTS:
             raise ValueError(f"unsupported wrist target class: {class_name}")
         full_image = self._image(image)
@@ -100,7 +114,8 @@ class LocateAnythingRuntime:
                          size_px=WRIST_ROI_SIZE_BY_CLASS[class_name])
         image = full_image.crop(roi)
         local_expected = np.asarray(expected_pixel, dtype=float) - np.asarray(roi[:2])
-        question = f"Locate all the instances that match the following description: {PROMPTS[class_name]}."
+        target_prompt = str(prompt or PROMPTS[class_name])
+        question = f"Locate all the instances that match the following description: {target_prompt}."
         messages = [{"role": "user", "content": [
             {"type": "image", "image": image}, {"type": "text", "text": question}]}]
         text = self.processor.py_apply_chat_template(
@@ -128,7 +143,7 @@ class LocateAnythingRuntime:
         boxes = parse_boxes(answer, image.width, image.height)
         if not boxes:
             raise RuntimeError(f"LocateAnything returned no {class_name} box: {answer}")
-        box = self._nearest(boxes, local_expected)
+        box = self._select_box(boxes, local_expected, class_name)
         full_boxes = [box_from_roi(item, roi) for item in boxes]
         full_box = box_from_roi(box, roi)
         return {
@@ -137,7 +152,7 @@ class LocateAnythingRuntime:
             "all_boxes_xyxy": [list(map(float, item)) for item in full_boxes],
             "roi_xyxy": list(map(int, roi)),
             "vlm_input_size": [image.width, image.height],
-            "prompt": PROMPTS[class_name],
+            "prompt": target_prompt,
             "answer": answer,
             "latency_s": time.perf_counter() - started,
         }

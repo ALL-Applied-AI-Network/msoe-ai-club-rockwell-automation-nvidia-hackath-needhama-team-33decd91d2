@@ -5,7 +5,10 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --gres=gpu:t4:1
+# Isaac/YOLO use GPU 0 while the isolated wrist LocateAnything worker uses
+# GPU 1.  Request both explicitly so --wrist-refinement works without an
+# sbatch command-line override and both devices are guaranteed Tesla T4s.
+#SBATCH --gres=gpu:t4:2
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/slurm-%j.out
@@ -92,7 +95,7 @@ perception="$out/perception"
 action="$out/action"
 
 mkdir -p "$out"
-rm -rf "$action/frames" "$action/yolo_frames"
+rm -rf "$action/frames" "$action/side_frames" "$action/yolo_frames"
 
 echo "[pipeline] 1/4: Capturing live TableCam observation..."
 ./scripts/run_isaac.sh src/remediation/capture_live_tablecam.py --scene "$scene" --out "$perception"
@@ -131,12 +134,42 @@ if ! find "$action/frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep
     exit 1
 fi
 
+if ! find "$action/side_frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
+    echo "[pipeline] compliant simulation produced no synchronized SideCam frames" >&2
+    exit 1
+fi
+
+# Encode the diagnostic side view before the slower per-frame YOLO overlay so
+# close gripper/cap contact can be reviewed as soon as remediation completes.
+FFMPEG_BIN=$(command -v ffmpeg || "$yolo_python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
+if [[ -x "$FFMPEG_BIN" ]]; then
+    "$FFMPEG_BIN" -y -framerate 60 -i "$action/side_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/sidecam_remediation.mp4"
+else
+    "$yolo_python" scripts/tools/encode_frames.py \
+        --frames "$action/side_frames" \
+        --out "$out/sidecam_remediation.mp4" \
+        --fps 60
+fi
+echo "[pipeline] SideCam video compiled at $out/sidecam_remediation.mp4"
+
 echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
+streaming_marker="$action/yolo_frames/.streaming"
+streaming_done="$action/yolo_frames/.complete"
+if [[ -e "$streaming_marker" && ! -e "$streaming_done" ]]; then
+    echo "[pipeline] Waiting for the concurrent YOLO overlay worker..."
+    for _ in $(seq 1 900); do
+        [[ -e "$streaming_done" ]] && break
+        sleep 2
+    done
+    if [[ ! -e "$streaming_done" ]]; then
+        echo "[pipeline] concurrent YOLO overlay did not finish within 30 minutes" >&2
+        exit 1
+    fi
+fi
 "$yolo_python" src/remediation/overlay_yolo_frames.py \
     --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0
 
 # No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
-FFMPEG_BIN=$(command -v ffmpeg || "$yolo_python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
 if [[ -x "$FFMPEG_BIN" ]]; then
     "$FFMPEG_BIN" -y -framerate 60 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
     echo "[pipeline] Video compiled successfully at $out/tablecam_yolo_compliant_remediation.mp4"

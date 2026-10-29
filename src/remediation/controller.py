@@ -24,17 +24,26 @@ DEFECT_TRACK_GATE_M = 0.100
 DEFAULT_CONE_TIP_FROM_TCP_M = (0.0, -0.0360660669237695, -0.0107523335762304)
 DEFAULT_CONE_WRIST_WPR_DEG = (-180.0, 0.0, -90.0)
 # FANUC composes W/P/R as Rz(R) Ry(P) Rx(W). After the clockwise R=-90 wrist
-# roll, decrease W through its wrapped equivalent from -180 to +155 so the
+# roll, decrease W through its wrapped equivalent from -180 to +135 so the
 # wrist leans backward and lowers the cone-side jaw. Changing P instead bends
-# across the arm and can sweep the wrist camera/cables through the work. The
-# 25-degree W lean is the largest reachable far-side pose; the cone itself
-# retains the supplied 45-degree CAD geometry.
-DEFAULT_CONE_PRESS_WPR_DEG = (155.0, 0.0, -90.0)
+# across the arm and can sweep the wrist camera/cables through the work. Keep
+# the physical cone axis vertical with the nominal 45-degree wrist lean.
+# Reach adaptation changes the global heading first; reducing this lean is only
+# a last resort after the complete heading sweep has failed.
+DEFAULT_CONE_PRESS_WPR_DEG = (135.0, 0.0, -90.0)
 # The rigid-cap PhysX proxy can remain balanced on the clear vial rim even after
 # the useful impact.  Continue the TPU cone nose through the documented rim
 # plane far enough that the real half-inch cap cannot stay hooked on the lip.
 DEFAULT_CONE_PRESS_BELOW_RIM_M = 0.003
+DEFAULT_CONE_PRESS_STROKE_M = 0.020
 DEFAULT_CONE_TABLE_PICK_OFFSET_M = -0.006
+
+# After a missing cap is released, move a few millimetres along the jaw spread
+# direction and retreat diagonally toward the opposite side. This clears either
+# flange lip from the compliant finger pockets without closing on the cap a
+# second time.
+DEFAULT_MISSING_RELEASE_SIDE_STEP_M = 0.001
+DEFAULT_MISSING_RELEASE_EXIT_STEP_M = 0.002
 
 
 # The shared policy boundary.  Adapters may own richer observations, but only
@@ -43,6 +52,7 @@ DEFAULT_CONE_TABLE_PICK_OFFSET_M = -0.006
 # this boundary.
 ALLOWED_OBSERVATION_FIELDS = frozenset({
     "tcp_pose", "joints", "grasp_verified", "timestamp", "wrist_refinement",
+    "wrist_refinement_batch",
 })
 ALLOWED_DETECTION_FIELDS = frozenset({
     "class_name", "confidence", "base_pos_m", "bbox_xyxy", "pixel",
@@ -65,6 +75,14 @@ def _reject_oracle(mapping, where):
 def policy_observation(obs, detections):
     """Return the only observation data the shared controller is allowed to use."""
     _reject_oracle(obs, "policy observations")
+    batch = obs.get("wrist_refinement_batch")
+    if batch is not None:
+        if not isinstance(batch, (list, tuple)):
+            raise ValueError("wrist refinement batch must be a list")
+        for index, item in enumerate(batch):
+            if not isinstance(item, dict):
+                raise ValueError(f"wrist refinement batch item {index} must be a mapping")
+            _reject_oracle(item, f"wrist refinement batch item {index}")
     clean_obs = {key: obs[key] for key in ALLOWED_OBSERVATION_FIELDS if key in obs}
     clean_detections = []
     for index, detection in enumerate(detections):
@@ -92,7 +110,9 @@ def checked_pose_action(base_position, wpr_deg, closed):
     p = base_to_uf0(base_position)
     limits = np.array([[150, 650], [-450, 450], [-334, 300]])
     if not np.isfinite(p).all() or np.any(p < limits[:, 0]) or np.any(p > limits[:, 1]):
-        raise ValueError("Target outside calibrated workspace; refusing to clip it")
+        raise ValueError(
+            "Target outside calibrated workspace; refusing to clip it: "
+            f"UF0 XYZ={np.asarray(p, dtype=float).round(3).tolist()} mm")
     wpr = np.asarray(wpr_deg, dtype=float)
     if wpr.shape != (3,) or not np.isfinite(wpr).all():
         raise ValueError("TCP orientation must contain three finite W/P/R angles")
@@ -180,9 +200,12 @@ class RemediationController:
                  cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
                  cone_wpr_selector=None,
                  cone_press_below_rim_m=DEFAULT_CONE_PRESS_BELOW_RIM_M,
+                 cone_press_stroke_m=DEFAULT_CONE_PRESS_STROKE_M,
                  table_cap_xy_offset_m=(0.0, 0.0),
                  missing_cap_xy_offset_m=(0.0, 0.0),
                  crooked_cap_xy_offset_m=(0.0, 0.0),
+                 missing_release_side_step_m=DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
+                 missing_release_exit_step_m=DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
                  wrist_refinement=False,
                  wrist_view_distance_m=0.300,
                  wrist_table_cap_xy_offset_m=(0.0, 0.0),
@@ -225,12 +248,23 @@ class RemediationController:
             raise ValueError("cone W/P/R selector must be callable")
         self.cone_wpr_selector = cone_wpr_selector
         self.cone_press_below_rim_m = float(cone_press_below_rim_m)
+        self.cone_press_stroke_m = float(cone_press_stroke_m)
         self.table_cap_xy_offset_m = self._checked_xy_offset(
             table_cap_xy_offset_m, "table-cap")
         self.missing_cap_xy_offset_m = self._checked_xy_offset(
             missing_cap_xy_offset_m, "missing-cap")
         self.crooked_cap_xy_offset_m = self._checked_xy_offset(
             crooked_cap_xy_offset_m, "crooked-cap")
+        self.missing_release_side_step_m = float(missing_release_side_step_m)
+        self.missing_release_exit_step_m = float(missing_release_exit_step_m)
+        if (not np.isfinite(self.missing_release_side_step_m) or
+                not 0.0 <= self.missing_release_side_step_m <= 0.010):
+            raise ValueError(
+                "missing release side step must be between 0 and 0.010 m")
+        if (not np.isfinite(self.missing_release_exit_step_m) or
+                not 0.0 <= self.missing_release_exit_step_m <= 0.015):
+            raise ValueError(
+                "missing release exit step must be between 0 and 0.015 m")
         self.wrist_refinement = bool(wrist_refinement)
         self.wrist_view_distance_m = float(wrist_view_distance_m)
         if not 0.120 <= self.wrist_view_distance_m <= 0.300:
@@ -252,6 +286,9 @@ class RemediationController:
         if (not np.isfinite(self.cone_press_below_rim_m) or
                 not -0.010 <= self.cone_press_below_rim_m <= 0.010):
             raise ValueError("cone press depth must be between -0.010 and 0.010 m")
+        if (not np.isfinite(self.cone_press_stroke_m) or
+                not 0.005 <= self.cone_press_stroke_m <= 0.040):
+            raise ValueError("cone press stroke must be between 0.005 and 0.040 m")
         self.reset()
 
     @staticmethod
@@ -265,6 +302,21 @@ class RemediationController:
     def _add_inspection(self, closed=False):
         self._add(inspection_base_position(), closed)
 
+    def _add_missing_release(self, target_position, transit_height):
+        """Release once, clear both flange lips, then retreat above the tray."""
+        p = np.asarray(target_position, dtype=float)
+        place = p + [0, 0, self.tool.place_offset_m]
+        spread = wpr_to_rotation((-180.0, 0.0, 0.0))[:, 1]
+        side = place + spread * self.missing_release_side_step_m
+        opposite = (place - spread * self.missing_release_exit_step_m +
+                    [0, 0, 0.025])
+        self._add(p + [0, 0, 0.025], True)
+        self._add(place, True)
+        self._add(place, False)
+        self._add(side, False)
+        self._add(opposite, False)
+        self._add([opposite[0], opposite[1], transit_height], False)
+
     def reset(self):
         self.queue = deque()
         self.pending = None
@@ -277,6 +329,17 @@ class RemediationController:
         self.verify_frames = 0
         self.cone_oriented = False
         self.active_cone_press_wpr_deg = self.cone_press_wpr_deg
+        self.crooked_refinement_cache = []
+        self.cone_batch_targets = []
+
+    def continuing_cone_batch(self):
+        """True while cached crooked targets remain after the current press."""
+        return bool(
+            self.crooked_action == "cone-press" and self.cone_oriented and
+            any(track.get("class_name") == "crooked_cap" and
+                track.get("attempts", 0) < self.max_attempts
+                for track in (self.defect_tracks or []))
+        )
 
     def _valid_defect(self, detection):
         """Reject contact targets whose camera geometry is physically impossible."""
@@ -424,16 +487,49 @@ class RemediationController:
         view = wrist_view_tcp(position, wpr_to_rotation(command_wpr),
                               self.wrist_view_distance_m, j6_rotation=j6_rotation,
                               centre_camera=centre_camera)
-        if not centre_camera:
-            # A coarse wrist view deliberately need not centre the camera.
-            # Keep its TCP just inside the calibrated robot workspace when a
-            # cap is near an edge; projection of the unchanged target XYZ
-            # supplies the correct off-centre VLM prompt and backprojection.
-            view[:2] = np.clip(view[:2], [0.155, -0.445], [0.645, 0.445])
+        # The camera hand-eye offset can place its ideal centred TCP outside
+        # the calibrated robot envelope even though the object itself is
+        # reachable (notably the near-X row).  Clamp only this non-contact
+        # camera staging pose.  Projection of the unchanged target XYZ then
+        # supplies the correct off-centre VLM prompt and backprojection; all
+        # pickup, placement, and press poses retain strict rejection in
+        # checked_pose_action.
+        view[:2] = np.clip(view[:2], [0.155, -0.445], [0.645, 0.445])
         return view
 
-    @staticmethod
-    def _refinement(obs, class_name, expected):
+    def _remember_crooked_refinement_batch(self, batch):
+        if batch is None:
+            return
+        for index, item in enumerate(batch):
+            if not isinstance(item, dict) or item.get("class_name") != "crooked_cap":
+                raise ValueError(
+                    f"wrist refinement batch item {index} is not a crooked_cap")
+            position = np.asarray(item.get("base_pos_m"), dtype=float)
+            if position.shape != (3,) or not np.isfinite(position).all():
+                raise ValueError(
+                    f"wrist refinement batch item {index} must contain finite base coordinates")
+            if not any(np.linalg.norm(position[:2] - np.asarray(cached["base_pos_m"])[:2])
+                       < 0.003 for cached in self.crooked_refinement_cache):
+                self.crooked_refinement_cache.append(dict(item))
+
+    def _consume_crooked_refinement(self, expected):
+        if not self.crooked_refinement_cache:
+            return None
+        expected = np.asarray(expected, dtype=float)
+        distances = [np.linalg.norm(np.asarray(item["base_pos_m"], dtype=float)[:2]
+                                    - expected[:2])
+                     for item in self.crooked_refinement_cache]
+        index = int(np.argmin(distances))
+        if distances[index] > 0.040:
+            return None
+        return np.asarray(self.crooked_refinement_cache.pop(index)["base_pos_m"], dtype=float)
+
+    def _refinement(self, obs, class_name, expected):
+        if class_name == "crooked_cap":
+            self._remember_crooked_refinement_batch(obs.get("wrist_refinement_batch"))
+            batched = self._consume_crooked_refinement(expected)
+            if batched is not None:
+                return batched
         item = obs.get("wrist_refinement")
         if item is None:
             return None
@@ -451,6 +547,18 @@ class RemediationController:
         current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
         height = max(transit_base_z(), current[2])
         raw_target_pos = np.asarray(target["base_pos_m"], dtype=float)
+        if (self.wrist_refinement and not wrist_refined and spare is None and
+                target.get("class_name") == "crooked_cap"):
+            cached = self._consume_crooked_refinement(raw_target_pos)
+            if cached is not None:
+                updated = dict(target)
+                updated["base_pos_m"] = cached.tolist()
+                updated["feature_base_pos_m"] = cached.tolist()
+                updated["localization_note"] = (
+                    str(updated.get("localization_note", "")) +
+                    "; cached wrist LocateAnything batch refinement")
+                return self._route_checked(
+                    obs, updated, spare, wrist_refined=True)
         target_pos = raw_target_pos.copy()
         crooked_xy_offset = (self.wrist_crooked_cap_xy_offset_m
                              if wrist_refined else self.crooked_cap_xy_offset_m)
@@ -472,6 +580,25 @@ class RemediationController:
             add_view([current[0], current[1], height])
             expected = (np.asarray(spare["base_pos_m"], dtype=float)
                         if spare is not None else raw_target_pos)
+            if cone_batch:
+                # One flat wrist image serves the complete crooked batch.
+                # Centre it on the perception-derived target cloud so every
+                # TableCam projection remains inside the calibrated 16:9 FOV;
+                # no tray/slot coordinate enters this calculation.
+                batch_points = [raw_target_pos]
+                for track in self.defect_tracks or []:
+                    remembered = track.get("last_detection")
+                    if (track.get("class_name") != "crooked_cap" or
+                            track.get("attempts", 0) >= self.max_attempts or
+                            not isinstance(remembered, dict)):
+                        continue
+                    point = np.asarray(remembered.get("base_pos_m"), dtype=float)
+                    if (point.shape != (3,) or not np.isfinite(point).all() or
+                            any(np.linalg.norm(point[:2] - known[:2]) < 0.003
+                                for known in batch_points)):
+                        continue
+                    batch_points.append(point)
+                expected = np.mean(np.asarray(batch_points), axis=0)
             view = self._wrist_view(
                 expected, obs, wpr=view_wpr,
                 use_measured_j6=not rolled_cone_view)
@@ -564,10 +691,6 @@ class RemediationController:
                 selected_wpr = self._cone_wpr_for_target(
                     [feature_xy[0], feature_xy[1], contact_surface_top], obs)
                 cone_high = self._cone_tcp_for_tip(vertical_high, selected_wpr)
-                cone_pre = self._cone_tcp_for_tip(
-                    [feature_xy[0], feature_xy[1], contact_surface_top + 0.025], selected_wpr)
-                cone_touch = self._cone_tcp_for_tip(
-                    [feature_xy[0], feature_xy[1], contact_surface_top + 0.001], selected_wpr)
                 # Advance only through the cone-led interval from the contact
                 # trace, retreat, and reacquire the cap surface before the next
                 # tap.  This prevents the broad finger proxy from continuing
@@ -580,6 +703,10 @@ class RemediationController:
                                   self.tool.press_offset_m)
                 cone_contact = self._cone_tcp_for_tip(
                     [feature_xy[0], feature_xy[1], cone_contact_z], selected_wpr)
+                cone_above_z = max(contact_surface_top + 0.005,
+                                   cone_contact_z + self.cone_press_stroke_m)
+                cone_above = self._cone_tcp_for_tip(
+                    [feature_xy[0], feature_xy[1], cone_above_z], selected_wpr)
                 if not self.cone_oriented:
                     current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
                     orientation_point = np.array([current[0], current[1], height])
@@ -605,18 +732,29 @@ class RemediationController:
                                                       float(contact_surface_top)],
                                     "wpr_deg": list(map(float, selected_wpr)),
                                     "selected_lean_deg": selected_lean_deg,
-                                    "nominal_lean_deg": 45.0})
+                                    "selected_heading_deg": float(selected_wpr[2]),
+                                    "nominal_lean_deg": 45.0,
+                                    "press_stroke_m": float(cone_above_z - cone_contact_z)})
+                aperture = np.asarray(
+                    target.get("aperture_base_pos_m", raw_target_pos), dtype=float)
+                self.cone_batch_targets.append(
+                    [float(aperture[0]), float(aperture[1]),
+                     float(self.vial_rim_z_m)])
+                remaining = sum(
+                    track.get("class_name") == "crooked_cap" and
+                    track.get("attempts", 0) < self.max_attempts
+                    for track in (self.defect_tracks or []))
+                final_cone_target = self.defect_tracks is None or remaining <= 1
                 self._add_pose(cone_high, selected_wpr, True)
-                self._add_pose(cone_pre, selected_wpr, True)
-                self._add_pose(cone_touch, selected_wpr, True)
+                self._add_pose(cone_above, selected_wpr, True)
                 self._add_pose(cone_contact, selected_wpr, True)
-                self._add_pose(cone_pre, selected_wpr, True)
+                self._add_pose(cone_above, selected_wpr, True)
                 self._add_pose(cone_high, selected_wpr, True)
-                # Reacquire the next camera-derived target from the qualified
-                # batch without leaving the arm over (and occluding) this vial.
-                # Keep the cable-safe roll and current reachable lean; the next
-                # wrist view removes only the lean at this clearance point.
-                self._add_pose(inspection_base_position(), selected_wpr, True)
+                if final_cone_target:
+                    # Clear TableCam exactly once after the complete cached
+                    # batch. Intermediate targets transfer directly from
+                    # cone-tip transit height with the same orientation.
+                    self._add_pose(inspection_base_position(), selected_wpr, True)
             else:
                 # Reproduce the useful part of the original regrip: approach
                 # and capture coaxially with the observed crooked cap, lift
@@ -654,7 +792,11 @@ class RemediationController:
             if not cone_batch:
                 self._add([target_pos[0], target_pos[1], height], False)
                 self._add_inspection(False)
-            self.state = "repair"
+            if self.crooked_action == "cone-press":
+                self.state = ("repair_cone_batch" if final_cone_target
+                              else "inspect")
+            else:
+                self.state = "repair"
         else:
             spare_pos = (np.asarray(spare["base_pos_m"], dtype=float) +
                          np.r_[self.table_cap_xy_offset_m, 0.0])
@@ -747,12 +889,7 @@ class RemediationController:
                 self.state = "refine_missing"
                 return self.queue.popleft()
             self._add([p[0], p[1], self.pending["height"]], True)
-            self._add(p + [0, 0, 0.025], True)
-            self._add(p + [0, 0, self.tool.place_offset_m], True)
-            self._add(p + [0, 0, self.tool.place_offset_m], False)
-            self._add(p + [0, 0, self.tool.press_offset_m], True)
-            self._add(p + [0, 0, self.tool.press_offset_m], False)
-            self._add([p[0], p[1], self.pending["height"]], False)
+            self._add_missing_release(p, self.pending["height"])
             self._add_inspection(False)
             self.state = "repair"
             return self.queue.popleft()
@@ -770,12 +907,7 @@ class RemediationController:
             if refined is None:
                 return self.hold(obs)
             p = refined + np.r_[self.wrist_missing_cap_xy_offset_m, 0.0]
-            self._add(p + [0, 0, 0.025], True)
-            self._add(p + [0, 0, self.tool.place_offset_m], True)
-            self._add(p + [0, 0, self.tool.place_offset_m], False)
-            self._add(p + [0, 0, self.tool.press_offset_m], True)
-            self._add(p + [0, 0, self.tool.press_offset_m], False)
-            self._add([p[0], p[1], self.pending["height"]], False)
+            self._add_missing_release(p, self.pending["height"])
             self._add_inspection(False)
             self.pending["target"] = dict(self.pending["target"], base_pos_m=refined.tolist())
             self.state = "repair"
@@ -783,19 +915,17 @@ class RemediationController:
         if self.state == "refine_crooked":
             # Use the VLM wait to perform the one-time cable-safe cone handoff.
             # This batch is emitted only once; later crooked caps reuse it.
-            # The wrist-colour hand-eye offset leaves the fingertip TCP about
-            # 95 mm above the normal clearance pose during a 300 mm camera
-            # view.  Tilting there, or directly over the far-side vial, is
-            # outside the ER-4iA wrist's reachable cone-down branch. Return
-            # straight to the central inspection XY at the already qualified
-            # clearance height, exactly where the non-wrist cone workflow
-            # stages its handoff, then roll and tilt.  The VLM still runs
-            # concurrently throughout this move and both orientation stages.
+            current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
+            raised = np.array([current[0], current[1], self.pending["height"]])
             inspection = inspection_base_position()
             point = np.array([inspection[0], inspection[1], self.pending["height"]])
             if not self.cone_oriented and self.crooked_action == "cone-press":
                 selected_wpr = self._cone_wpr_for_target(
                     self.pending["target"]["base_pos_m"], obs)
+                # First clear the vials vertically, then move laterally to the
+                # TableCam-clear inspection XY before rolling and leaning.
+                # No later crooked target repeats either orientation change.
+                self._add(raised, True)
                 self._add(point, True)
                 self._add_pose(point, self.cone_wrist_wpr_deg, True)
                 self._add_pose(point, selected_wpr, True)
@@ -810,6 +940,7 @@ class RemediationController:
             if refined is None:
                 return self.hold(obs)
             updated = dict(target)
+            updated["aperture_base_pos_m"] = list(target["base_pos_m"])
             updated["base_pos_m"] = refined.tolist()
             updated["feature_base_pos_m"] = refined.tolist()
             updated["localization_note"] = (
@@ -820,6 +951,28 @@ class RemediationController:
             self.pending["target"] = updated
             self._route_checked(obs, updated, None, wrist_refined=True)
             return self.queue.popleft()
+        if self.state == "repair_cone_batch":
+            self.state = "verify_cone_batch"
+        if self.state == "verify_cone_batch":
+            results = []
+            for target in self.cone_batch_targets:
+                good = any(
+                    d["class_name"] == "good_cap" and
+                    d["confidence"] >= self.min_confidence and
+                    np.linalg.norm(np.asarray(d["base_pos_m"])[:2] -
+                                   np.asarray(target)[:2]) < 0.003
+                    for d in detections)
+                results.append({"target_base_m": list(map(float, target)),
+                                "good_cap_detected": bool(good)})
+            self.events.append({
+                "event": "cone_batch_verification",
+                "all_fixed": bool(results and all(
+                    result["good_cap_detected"] for result in results)),
+                "targets": results,
+            })
+            self.state, self.pending = "inspect", None
+            self.cone_batch_targets = []
+            return self.hold(obs)
         if self.state == "repair":
             self.state = "verify"
             self.confirmations = 0

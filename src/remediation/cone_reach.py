@@ -1,9 +1,9 @@
 """Perception-coordinate cone lean selection for the calibrated ER-4iA.
 
-The cone CAD axis is exactly 45 degrees from the gripper axis.  We request the
-full 45-degree W lean first, then reduce it only when the observed base-frame
-contact coordinate is outside the arm's reachable envelope.  No tray slot or
-fixture label enters this calculation.
+The cone CAD axis is exactly 45 degrees from the gripper axis. We keep that
+full 45-degree W lean and search the gripper's global heading around the cone
+contact point before considering any reduced lean. No tray slot or fixture
+label enters this calculation.
 """
 from __future__ import annotations
 
@@ -27,6 +27,9 @@ import scene_config as C  # noqa: E402
 
 NOMINAL_CONE_LEAN_DEG = 45
 CONE_LEAN_CANDIDATES_DEG = tuple(range(NOMINAL_CONE_LEAN_DEG, -1, -5))
+CONE_HEADING_OFFSETS_DEG = (0, 15, -15, 30, -30, 45, -45, 60, -60,
+                            75, -75, 90, -90, 105, -105, 120, -120,
+                            135, -135, 150, -150, 165, -165, 180)
 
 
 class ConeReachSelector:
@@ -52,11 +55,16 @@ class ConeReachSelector:
         )]
 
     @staticmethod
-    def wpr_for_lean(lean_deg):
+    def wpr_for_lean(lean_deg, heading_deg=-90.0):
         w = 180.0 - float(lean_deg)
         if abs(w - 180.0) < 1e-9:
             w = -180.0
-        return (w, 0.0, -90.0)
+        heading = (float(heading_deg) + 180.0) % 360.0 - 180.0
+        return (w, 0.0, heading)
+
+    @staticmethod
+    def heading_candidates():
+        return tuple(-90.0 + offset for offset in CONE_HEADING_OFFSETS_DEG)
 
     def _reachable(self, cone_tip, wpr, seeds):
         rotation = wpr_to_rotation(wpr)
@@ -82,10 +90,13 @@ class ConeReachSelector:
         contact_tip = np.array([
             target[0], target[1],
             self.rim_z - self.press_below + self.press_offset])
+        # Preserve the cone's correct vertical geometry: exhaust the complete
+        # heading circle at 45 degrees before allowing any shallower fallback.
         for lean in CONE_LEAN_CANDIDATES_DEG:
-            wpr = self.wpr_for_lean(lean)
-            if (self._reachable(high_tip, wpr, seeds) and
-                    self._reachable(contact_tip, wpr, seeds)):
-                return wpr
+            for heading in self.heading_candidates():
+                wpr = self.wpr_for_lean(lean, heading)
+                if (self._reachable(high_tip, wpr, seeds) and
+                        self._reachable(contact_tip, wpr, seeds)):
+                    return wpr
         raise ValueError(
-            "no cable-safe R=-90 cone orientation reaches the observed base coordinate")
+            "no cone heading/lean orientation reaches the observed base coordinate")

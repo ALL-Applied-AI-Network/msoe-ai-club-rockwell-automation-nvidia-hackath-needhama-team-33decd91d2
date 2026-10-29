@@ -3,6 +3,7 @@
 import argparse
 from pathlib import Path
 import sys
+import time
 
 import cv2
 
@@ -20,24 +21,85 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='0')
     parser.add_argument('--confidence', type=float, default=.70)
+    parser.add_argument('--watch', action='store_true',
+                        help='continue annotating new frames until a stop file appears')
+    parser.add_argument('--stop-file', action='append', type=Path, default=[],
+                        help='with --watch, stop after this file appears and all frames are processed; repeatable')
+    parser.add_argument('--done-file', type=Path,
+                        help='write this marker after a watched frame directory is complete')
+    parser.add_argument('--poll-seconds', type=float, default=1.0)
+    parser.add_argument('--batch-size', type=int, default=1,
+                        help='number of frames per YOLO call (default: 1)')
     args = parser.parse_args(); args.out.mkdir(parents=True, exist_ok=True)
     if not 0.0 < args.confidence < 1.0:
         parser.error('--confidence must be between 0 and 1')
+    if args.watch and args.image:
+        parser.error('--watch requires --frames')
+    if args.watch and not args.stop_file:
+        parser.error('--watch requires at least one --stop-file')
+    if args.poll_seconds <= 0.0:
+        parser.error('--poll-seconds must be positive')
+    if args.batch_size < 1 or args.batch_size > 8:
+        parser.error('--batch-size must be between 1 and 8')
     from ultralytics import YOLO
     model = YOLO(str(args.checkpoint))
-    paths = [args.image] if args.image else sorted(args.frames.glob('*.png'))
-    if not paths: raise ValueError(f'No frames found in {args.frames}')
-    for i, path in enumerate(paths):
-        image = cv2.imread(str(path))
-        result = model.predict(image, conf=args.confidence, imgsz=1280, device=args.device, verbose=False)[0]
-        for box, confidence, class_id in zip(result.boxes.xyxy.cpu().numpy(), result.boxes.conf.cpu().numpy(), result.boxes.cls.cpu().numpy()):
-            name = model.names[int(class_id)]; color = COLORS.get(name, (200, 200, 200))
-            x0, y0, x1, y1 = box.round().astype(int)
-            cv2.rectangle(image, (x0,y0), (x1,y1), color, 2)
-            cv2.putText(image, f'{name} {confidence:.2f}', (x0, max(22,y0-6)), cv2.FONT_HERSHEY_SIMPLEX, .45, color, 2, cv2.LINE_AA)
-        cv2.putText(image, 'YOLO predictions on this TableCam frame', (20, image.shape[0]-20), cv2.FONT_HERSHEY_SIMPLEX, .58, (255,255,255), 2, cv2.LINE_AA)
-        if not cv2.imwrite(str(args.out / f'{i:04d}.png'), image): raise RuntimeError(f'Could not write frame {i}')
-        if i % 50 == 0: print(f'[yolo-overlay] {i + 1}/{len(paths)}', flush=True)
+    processed = 0
+    while True:
+        paths = [args.image] if args.image else sorted(args.frames.glob('*.png'))
+        if not paths and not args.watch:
+            raise ValueError(f'No frames found in {args.frames}')
+        pending = [path for path in paths
+                   if not (args.out / path.name).is_file()]
+        for offset in range(0, len(pending), args.batch_size):
+            batch = []
+            for path in pending[offset:offset + args.batch_size]:
+                image = cv2.imread(str(path))
+                # The renderer writes directly to the final PNG name. A
+                # watcher can see the directory entry before the image footer
+                # is visible over NFS, so retry it on the next poll.
+                if image is not None:
+                    batch.append((path, image))
+            if not batch:
+                continue
+            results = model.predict(
+                [image for _path, image in batch],
+                conf=args.confidence, imgsz=1280, device=args.device,
+                batch=len(batch), verbose=False)
+            for (path, image), result in zip(batch, results):
+                for box, confidence, class_id in zip(
+                        result.boxes.xyxy.cpu().numpy(),
+                        result.boxes.conf.cpu().numpy(),
+                        result.boxes.cls.cpu().numpy()):
+                    name = model.names[int(class_id)]
+                    color = COLORS.get(name, (200, 200, 200))
+                    x0, y0, x1, y1 = box.round().astype(int)
+                    cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
+                    cv2.putText(image, f'{name} {confidence:.2f}',
+                                (x0, max(22, y0 - 6)),
+                                cv2.FONT_HERSHEY_SIMPLEX, .45, color, 2,
+                                cv2.LINE_AA)
+                cv2.putText(image, 'YOLO predictions on this TableCam frame',
+                            (20, image.shape[0] - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, .58, (255, 255, 255), 2,
+                            cv2.LINE_AA)
+                if not cv2.imwrite(str(args.out / path.name), image):
+                    raise RuntimeError(f'Could not write frame {path.name}')
+                processed += 1
+                if processed == 1 or processed % 50 == 0:
+                    print(f'[yolo-overlay] processed {processed}; latest={path.name}',
+                          flush=True)
+        if not args.watch:
+            break
+        stopped = any(path.exists() for path in args.stop_file)
+        remaining = [path for path in args.frames.glob('*.png')
+                     if not (args.out / path.name).is_file()]
+        if stopped and not remaining:
+            break
+        time.sleep(args.poll_seconds)
+    if args.done_file is not None:
+        args.done_file.parent.mkdir(parents=True, exist_ok=True)
+        args.done_file.write_text(
+            f'annotated_frames={len(list(args.out.glob("*.png")))}\n')
 
 
 if __name__ == '__main__':

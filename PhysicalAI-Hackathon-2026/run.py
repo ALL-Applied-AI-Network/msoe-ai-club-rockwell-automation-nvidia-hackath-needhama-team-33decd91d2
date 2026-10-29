@@ -24,6 +24,8 @@ from pathlib import Path
 from cell_client import CellClient, run_all
 from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
                     DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
+                    DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
                     DEFAULT_MISSING_CAP_XY_OFFSET_M,
                     DEFAULT_PICKUP_Z_OFFSET_M,
                     DEFAULT_TABLE_CAP_XY_OFFSET_M,
@@ -237,6 +239,12 @@ def main() -> None:
                         "default uses --pick-offset-m")
     p.add_argument("--place-offset-m", type=float, default=0.0)
     p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--missing-release-side-step-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
+                   help="small jaw-axis clearance after opening on a placed cap")
+    p.add_argument("--missing-release-exit-step-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
+                   help="opposite jaw-axis component of the rising placement exit")
     p.add_argument("--table-cap-xy-offset-m", type=float, nargs=2,
                    metavar=("X", "Y"), default=DEFAULT_TABLE_CAP_XY_OFFSET_M,
                    help="base-frame XY correction for loose table-cap pickup")
@@ -270,6 +278,10 @@ def main() -> None:
                    help="measured cone-nose offset from UTOOL1 in metres (default: CAD value)")
     p.add_argument("--cone-press-below-rim-m", type=float, default=0.003,
                    help="cone endpoint below the calibrated rim; positive is lower, negative is clearance")
+    p.add_argument("--cone-press-stroke-m", type=float, default=0.020,
+                   help="vertical down/up cone stroke above the endpoint")
+    p.add_argument("--cone-heading-deg", type=float, default=-90.0,
+                   help="fixed heading retained for every 45-degree cone press")
     p.add_argument("--crooked-wiggle-radius-m", type=float, default=0.00075)
     p.add_argument("--crooked-wiggle-cycles", type=int, default=1)
     p.add_argument("--pickup-wiggle-radius-m", type=float, default=0.0)
@@ -311,6 +323,10 @@ def main() -> None:
                                                      if args.cone_tip_from_tcp_m is not None
                                                      else DEFAULT_CONE_TIP_FROM_TCP_M),
                                  cone_press_below_rim_m=args.cone_press_below_rim_m,
+                                 cone_press_stroke_m=args.cone_press_stroke_m,
+                                 cone_heading_deg=args.cone_heading_deg,
+                                 missing_release_side_step_m=args.missing_release_side_step_m,
+                                 missing_release_exit_step_m=args.missing_release_exit_step_m,
                                  crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
                                  crooked_wiggle_cycles=args.crooked_wiggle_cycles,
                                  pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
@@ -360,6 +376,10 @@ def main() -> None:
                                         if args.cone_tip_from_tcp_m is not None
                                         else DEFAULT_CONE_TIP_FROM_TCP_M),
                    cone_press_below_rim_m=args.cone_press_below_rim_m,
+                   cone_press_stroke_m=args.cone_press_stroke_m,
+                   cone_heading_deg=args.cone_heading_deg,
+                   missing_release_side_step_m=args.missing_release_side_step_m,
+                   missing_release_exit_step_m=args.missing_release_exit_step_m,
                    crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
                    crooked_wiggle_cycles=args.crooked_wiggle_cycles,
                    pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,

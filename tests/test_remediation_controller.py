@@ -112,6 +112,14 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, crooked_cap_xy_offset_m=(0.0, np.nan))
         with self.assertRaises(ValueError):
             RemediationController(tool, wrist_view_distance_m=0.10)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, missing_release_side_step_m=-0.001)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, missing_release_side_step_m=0.011)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, missing_release_exit_step_m=-0.001)
+        with self.assertRaises(ValueError):
+            RemediationController(tool, missing_release_exit_step_m=0.016)
 
     def test_wrist_refinement_stages_spare_then_corrects_before_pickup(self):
         controller = RemediationController(
@@ -143,6 +151,35 @@ class RemediationControllerTests(unittest.TestCase):
         pick_actions = [action for action in queued if action[6] == 0.0]
         self.assertTrue(any(np.allclose(action[:2], np.array(refined[:2]) * 1000)
                             for action in pick_actions))
+
+    def test_centred_wrist_view_clamps_only_camera_staging_pose_at_workspace_edge(self):
+        from src.remediation.wrist_refinement import fingertip_tcp_from_joints
+
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            wrist_refinement=True)
+        # The physical camera hand-eye translation puts the ideal centred
+        # fingertip TCP about 18 mm past the near-X workspace boundary for
+        # this otherwise reachable vial.  The wrist view may be off-centre;
+        # the subsequent perception-derived contact target may not be clipped.
+        target = np.array([0.228, 0.157, rim_base_z()])
+        # Measured inspection-pose joints from the two-missing/three-crooked
+        # regression run which exposed the edge case.  Use their matching FK
+        # TCP so the controller accepts the measured-J6 camera transform.
+        joints = np.array([0.80588, 0.22214, 0.05845, -0.00011,
+                           -1.40647, -0.80590, 0.0])
+        tcp_base = fingertip_tcp_from_joints(joints)
+        obs = {"joints": joints,
+               "tcp_pose": [*base_to_uf0(tcp_base), -180.0, 0.0, 0.0]}
+        view = controller._wrist_view(
+            target, obs, centre_camera=True, use_measured_j6=True)
+        self.assertAlmostEqual(view[0], 0.155)
+        self.assertGreaterEqual(view[1], -0.445)
+        self.assertLessEqual(view[1], 0.445)
+
+        # The original target is unchanged and remains the point refined by
+        # the image-space correction rather than a fabricated slot location.
+        np.testing.assert_allclose(target, [0.228, 0.157, rim_base_z()])
 
     def test_missing_wrist_workflow_stays_straight_until_crooked_phase(self):
         controller = RemediationController(
@@ -200,18 +237,23 @@ class RemediationControllerTests(unittest.TestCase):
             crooked_action="cone-press", wrist_refinement=True)
         crooked = self.detection("crooked_cap", [0.31, 0.02, 0.23])
         crooked["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
-        controller.act(self.obs, [crooked])
+        last_camera_action = controller.act(self.obs, [crooked])
         while controller.queue:
-            controller.act(self.obs, [])
+            last_camera_action = controller.act(self.obs, [])
         self.assertEqual(controller.state, "refine_crooked")
-        first_orientation = controller.act(self.obs, [])
+        camera_obs = {**self.obs, "tcp_pose": last_camera_action[:6]}
+        first_orientation = controller.act(camera_obs, [])
         self.assertTrue(controller.cone_oriented)
         self.assertEqual(controller.state, "await_refine_crooked")
         self.assertEqual(first_orientation[6], 1.0)
         staged = [first_orientation, *list(controller.queue)]
-        inspection = inspection_base_position()
+        current = uf0_to_base(last_camera_action[:3])
         np.testing.assert_allclose(
             uf0_to_base(first_orientation[:3]),
+            [current[0], current[1], controller.pending["height"]])
+        inspection = inspection_base_position()
+        np.testing.assert_allclose(
+            uf0_to_base(staged[1][:3]),
             [inspection[0], inspection[1], controller.pending["height"]])
         self.assertEqual(sum(np.allclose(action[3:6], DEFAULT_CONE_WRIST_WPR_DEG)
                              for action in staged), 1)
@@ -297,7 +339,7 @@ class RemediationControllerTests(unittest.TestCase):
 
         tilted = [action for action in actions
                   if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)]
-        self.assertGreaterEqual(len(tilted), 7)
+        self.assertGreaterEqual(len(tilted), 6)
         self.assertTrue(all(action[6] == 1.0 for action in tilted))
 
         # The selected outside cone is 45 degrees from J6 +X. The reachable
@@ -305,12 +347,12 @@ class RemediationControllerTests(unittest.TestCase):
         # camera/cables forward through the work area, and keeps the negative-Y
         # (TableCam-left) jaw low during a press.
         command_rotation = wpr_to_rotation(DEFAULT_CONE_PRESS_WPR_DEG)
-        self.assertEqual(DEFAULT_CONE_PRESS_WPR_DEG, (155.0, 0.0, -90.0))
+        self.assertEqual(DEFAULT_CONE_PRESS_WPR_DEG, (135.0, 0.0, -90.0))
         j6_rotation = command_rotation_to_j6(command_rotation)
         cone_axis_j6 = np.array([-np.sqrt(0.5), np.sqrt(0.5), 0.0])
         cone_axis_base = j6_rotation @ cone_axis_j6
-        self.assertGreater(cone_axis_base[2], np.cos(np.radians(20.1)))
-        self.assertLess(np.linalg.norm(cone_axis_base[:2]), np.sin(np.radians(20.1)))
+        self.assertGreater(cone_axis_base[2], np.cos(np.radians(0.1)))
+        self.assertLess(np.linalg.norm(cone_axis_base[:2]), np.sin(np.radians(0.1)))
         self.assertGreater(j6_rotation[2, 1], 0.0)
 
         nose_positions = []
@@ -348,7 +390,7 @@ class RemediationControllerTests(unittest.TestCase):
         ])
         expected_xy = np.asarray(detection["feature_base_pos_m"][:2])
         self.assertTrue(any(np.allclose(nose[:2], expected_xy)
-                            and abs(nose[2] - 0.236) < 1e-9 for nose in noses))
+                            and abs(nose[2] - 0.240) < 1e-9 for nose in noses))
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
         self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)
@@ -488,6 +530,8 @@ class RemediationControllerTests(unittest.TestCase):
                             for action in first_route[2:]))
         self.assertTrue(all(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
                             for action in second_route))
+        # Both routes clear TableCam at the inspection point but never change
+        # the fixed cone posture while doing so.
         np.testing.assert_allclose(
             uf0_to_base(first_route[-1][:3]), inspection_base_position())
         np.testing.assert_allclose(
@@ -512,6 +556,56 @@ class RemediationControllerTests(unittest.TestCase):
             remembered[0][1]["base_pos_m"], second["base_pos_m"])
         self.assertNotIn("slot", remembered[0][1])
 
+    def test_three_cone_presses_transfer_directly_then_verify_once(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press")
+        crooked = [
+            self.detection("crooked_cap", [0.28, 0.05, 0.23]),
+            self.detection("crooked_cap", [0.33, 0.00, 0.23]),
+            self.detection("crooked_cap", [0.38, -0.05, 0.23]),
+        ]
+        for detection in crooked:
+            detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+
+        routes = []
+        current_obs = dict(self.obs)
+        for index in range(3):
+            action = controller.act(current_obs, crooked if index == 0 else [])
+            route = [action]
+            current_obs = {**current_obs, "tcp_pose": action[:6]}
+            while controller.queue:
+                action = controller.act(current_obs, [])
+                route.append(action)
+                current_obs = {**current_obs, "tcp_pose": action[:6]}
+            routes.append(route)
+
+        inspection = inspection_base_position()
+        for route in routes[:2]:
+            self.assertFalse(any(np.allclose(
+                uf0_to_base(action[:3]), inspection) for action in route))
+            self.assertTrue(all(np.allclose(
+                action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+                for action in route[3:] if len(routes[0]) > 3))
+        np.testing.assert_allclose(
+            uf0_to_base(routes[-1][-1][:3]), inspection)
+        self.assertEqual(controller.state, "repair_cone_batch")
+        self.assertEqual(len(controller.cone_batch_targets), 3)
+        self.assertEqual(sum(np.allclose(
+            action[3:6], DEFAULT_CONE_WRIST_WPR_DEG)
+            for route in routes for action in route), 1)
+
+        good = [self.detection("good_cap", target, depth=True)
+                for target in controller.cone_batch_targets]
+        controller.act(current_obs, good)
+        self.assertEqual(controller.state, "inspect")
+        self.assertFalse(controller.cone_batch_targets)
+        verification = [event for event in controller.events
+                        if event["event"] == "cone_batch_verification"]
+        self.assertEqual(len(verification), 1)
+        self.assertTrue(verification[0]["all_fixed"])
+        self.assertEqual(len(verification[0]["targets"]), 3)
+
     def test_next_cone_wrist_view_keeps_roll_and_removes_only_lean(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
@@ -530,6 +624,61 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertTrue(all(action[6] == 1.0 for action in route))
         self.assertEqual(controller.active_cone_press_wpr_deg,
                          DEFAULT_CONE_WRIST_WPR_DEG)
+
+    def test_cached_crooked_batch_keeps_one_cone_orientation_between_targets(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", wrist_refinement=True)
+        first = self.detection("crooked_cap", [0.31, 0.02, 0.23])
+        second = self.detection("crooked_cap", [0.35, -0.04, 0.23])
+        for detection in (first, second):
+            detection["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+
+        batch = [
+            {"class_name": "crooked_cap", "base_pos_m": [0.312, 0.019, 0.23]},
+            {"class_name": "crooked_cap", "base_pos_m": [0.347, -0.038, 0.23]},
+        ]
+        refined_first = controller._refinement(
+            {"wrist_refinement_batch": batch}, "crooked_cap", first["base_pos_m"])
+        np.testing.assert_allclose(refined_first, batch[0]["base_pos_m"])
+        self.assertEqual(len(controller.crooked_refinement_cache), 1)
+
+        controller.cone_oriented = True
+        controller.active_cone_press_wpr_deg = DEFAULT_CONE_PRESS_WPR_DEG
+        controller._route(self.obs, second)
+        route = list(controller.queue)
+
+        self.assertFalse(controller.crooked_refinement_cache)
+        self.assertTrue(route)
+        self.assertTrue(all(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
+                            for action in route))
+        self.assertFalse(any(np.allclose(action[3:6], DEFAULT_CONE_WRIST_WPR_DEG)
+                             for action in route))
+        self.assertIn("cached wrist LocateAnything batch refinement",
+                      controller.pending["target"]["localization_note"])
+
+    def test_first_crooked_wrist_view_centres_perception_derived_batch(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", wrist_refinement=True)
+        targets = [
+            self.detection("crooked_cap", [0.273, 0.036, 0.229]),
+            self.detection("crooked_cap", [0.328, -0.090, 0.230]),
+            self.detection("crooked_cap", [0.226, -0.087, 0.228]),
+        ]
+        for target in targets:
+            target["cap_axis_base"] = [0.0, -0.5, np.sqrt(0.75)]
+        controller._tracked_defects(targets)
+
+        controller._route(self.obs, targets[0])
+        route = list(controller.queue)
+        centroid = np.mean([target["base_pos_m"] for target in targets], axis=0)
+
+        self.assertEqual(len(route), 3)
+        np.testing.assert_allclose(
+            uf0_to_base(route[1][:3])[:2], centroid[:2], atol=1e-12)
+        np.testing.assert_allclose(
+            uf0_to_base(route[2][:3])[:2], centroid[:2], atol=1e-12)
 
     def test_cone_press_rejects_missing_depth_axis(self):
         controller = RemediationController(
@@ -687,7 +836,7 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertAlmostEqual(self.controller.pending["target"]["base_pos_m"][2],
                                0.2081, places=4)
 
-    def test_verified_pickup_starts_place_and_press_route(self):
+    def test_verified_pickup_starts_single_release_and_side_exit_route(self):
         missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
         spare = self.detection("table_cap", [0.34, -0.20, 0.02])
         good = self.detection("good_cap", [0.28, 0.01, 0.210132])
@@ -698,6 +847,42 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertEqual(self.controller.state, "repair")
         self.assertEqual(len(action), 7)
         self.assertAlmostEqual(self.controller.pending["target"]["base_pos_m"][2], 0.2081, places=4)
+        actions = [action]
+        while self.controller.queue:
+            actions.append(self.controller.act(self.obs, []))
+        jaw = [item[6] for item in actions]
+        release = next(index for index in range(1, len(jaw))
+                       if jaw[index - 1] == 1.0 and jaw[index] == 0.0)
+        self.assertTrue(all(value == 0.0 for value in jaw[release:]))
+        base = np.asarray([uf0_to_base(item[:3]) for item in actions])
+        # The conservative defaults use one 1 mm jaw-axis clearing step, then
+        # a 3 mm crossing toward the opposite side while rising 25 mm.
+        self.assertAlmostEqual(np.linalg.norm(base[release + 1, :2] - base[release, :2]),
+                               0.001, places=9)
+        self.assertAlmostEqual(np.linalg.norm(base[release + 2, :2] - base[release + 1, :2]),
+                               0.003, places=9)
+        self.assertAlmostEqual(base[release + 2, 2] - base[release, 2], 0.025, places=9)
+
+    def test_missing_release_motion_is_tunable(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            missing_release_side_step_m=0.0005,
+            missing_release_exit_step_m=0.0015)
+        controller.pending = {
+            "target": self.detection("missing_cap", [0.31, 0.02, rim_base_z()]),
+            "spare": None,
+            "height": 0.285,
+        }
+        controller._add_missing_release([0.31, 0.02, rim_base_z()], 0.285)
+        route = list(controller.queue)
+        base = np.asarray([uf0_to_base(item[:3]) for item in route])
+        release = 2
+        self.assertAlmostEqual(
+            np.linalg.norm(base[release + 1, :2] - base[release, :2]),
+            0.0005, places=9)
+        self.assertAlmostEqual(
+            np.linalg.norm(base[release + 2, :2] - base[release + 1, :2]),
+            0.0020, places=9)
 
     def test_unaccepted_tool_is_rejected(self):
         with self.assertRaises(ValueError):

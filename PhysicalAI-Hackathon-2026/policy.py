@@ -24,11 +24,9 @@ from src.remediation.geometry import (base_to_uf0, inspection_base_position,
                                       resolve_height_planes, SPEC, transit_base_z)
 from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
                                         RemediationController, wpr_to_rotation)
-from src.remediation.cone_reach import ConeReachSelector
 from src.remediation.wrist_refinement import (project_base_to_wrist,
                                                refine_from_vlm_box,
-                                               fit_local_support_plane,
-                                               FINGERTIP_TCP_J6_M)
+                                               fit_local_support_plane)
 from calibration.geometry import (depth_to_base, flange_pose,
                                   load as load_cameras, project)
 
@@ -38,6 +36,10 @@ OFFSETS_PATH = Path(__file__).resolve().parent / "config" / "remediation_offsets
 _OFFSETS = json.loads(OFFSETS_PATH.read_text())
 DEFAULT_PICKUP_Z_OFFSET_M = float(_OFFSETS["pickup_z_offset_m"])
 DEFAULT_TABLE_PLANE_OFFSET_M = float(_OFFSETS["table_plane_offset_m"])
+DEFAULT_MISSING_RELEASE_SIDE_STEP_M = float(
+    _OFFSETS["missing_release_side_step_m"])
+DEFAULT_MISSING_RELEASE_EXIT_STEP_M = float(
+    _OFFSETS["missing_release_exit_step_m"])
 # Empirical real-cell corrections expressed in robot-base XY.  TableCam image
 # right maps to base (-0.05027, +0.99874), and image down/toward the camera maps
 # to (+0.99983, +0.01820).  The observed loose-cap target was 20 mm too far
@@ -93,12 +95,16 @@ class Policy:
                  crooked_action="shoulder",
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_press_below_rim_m=0.003,
+                 cone_press_stroke_m=0.020,
+                 cone_heading_deg=-90.0,
                  cone_table_pick_offset_m=None,
                  pickup_z_offset_m=DEFAULT_PICKUP_Z_OFFSET_M,
                  table_plane_offset_m=DEFAULT_TABLE_PLANE_OFFSET_M,
                  table_cap_xy_offset_m=DEFAULT_TABLE_CAP_XY_OFFSET_M,
                  missing_cap_xy_offset_m=DEFAULT_MISSING_CAP_XY_OFFSET_M,
                  crooked_cap_xy_offset_m=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                 missing_release_side_step_m=DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
+                 missing_release_exit_step_m=DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
                  crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1,
                  pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
@@ -147,10 +153,9 @@ class Policy:
             raise ValueError("pickup_z_offset_m must be between 0 and 0.025 m")
         if abs(self.table_plane_offset_m) > 0.025:
             raise ValueError("table_plane_offset_m must be within +/-0.025 m")
-        cone_wpr_selector = (ConeReachSelector(
-            FINGERTIP_TCP_J6_M, cone_tip_from_tcp_m, self.vial_rim_z,
-            cone_press_below_rim_m, press_offset_m)
-            if crooked_action == "cone-press" else None)
+        cone_heading_deg = float(cone_heading_deg)
+        if not np.isfinite(cone_heading_deg) or not -180.0 <= cone_heading_deg <= 180.0:
+            raise ValueError("cone_heading_deg must be between -180 and 180 degrees")
         self.controller = (RemediationController(provisional_contact_tool(
             allow_provisional_contact, effective_pick_offset_m,
             place_offset_m, press_offset_m),
@@ -159,11 +164,15 @@ class Policy:
             crooked_tap_depth_m=crooked_tap_depth_m,
             crooked_action=crooked_action,
             cone_tip_from_tcp_m=cone_tip_from_tcp_m,
-            cone_wpr_selector=cone_wpr_selector,
+            cone_press_wpr_deg=(135.0, 0.0, cone_heading_deg),
+            cone_wpr_selector=None,
             cone_press_below_rim_m=cone_press_below_rim_m,
+            cone_press_stroke_m=cone_press_stroke_m,
             table_cap_xy_offset_m=table_cap_xy_offset_m,
             missing_cap_xy_offset_m=missing_cap_xy_offset_m,
             crooked_cap_xy_offset_m=crooked_cap_xy_offset_m,
+            missing_release_side_step_m=missing_release_side_step_m,
+            missing_release_exit_step_m=missing_release_exit_step_m,
             crooked_wiggle_radius_m=crooked_wiggle_radius_m,
             crooked_wiggle_cycles=crooked_wiggle_cycles,
             pickup_wiggle_radius_m=pickup_wiggle_radius_m,
@@ -233,6 +242,10 @@ class Policy:
             "vial_rim_z_m": self.vial_rim_z,
             "cone_tip_from_tcp_m": np.asarray(cone_tip_from_tcp_m, dtype=float).tolist(),
             "cone_press_below_rim_m": float(cone_press_below_rim_m),
+            "cone_press_stroke_m": float(cone_press_stroke_m),
+            "cone_heading_deg": cone_heading_deg,
+            "missing_release_side_step_m": float(missing_release_side_step_m),
+            "missing_release_exit_step_m": float(missing_release_exit_step_m),
             "wrist_refinement": self.wrist_refinement,
             "wrist_colour_size": list(self.IMAGE_SIZE),
             "wrist_view_distance_m": float(wrist_view_distance_m),
@@ -432,12 +445,14 @@ class Policy:
         return fused
 
     def _attach_wrist_refinement(self, observed, wrist_image, wrist_depth):
-        """Start or poll one eye-in-hand VLM localization request.
+        """Start or poll eye-in-hand VLM localization requests.
 
         The first call at a refinement gate snapshots the camera and starts the
         GPU future.  The shared controller simultaneously emits a safe coarse
         pre-descent, or the one-time cone orientation.  A later call attaches
-        the bounded result before any contact waypoint can be produced.
+        the bounded result before any contact waypoint can be produced.  All
+        crooked TableCam candidates are prompted against the same flat wrist
+        snapshot so one cone orientation can be retained for the full batch.
         """
         states = {
             "refine_spare": "table_cap", "await_refine_spare": "table_cap",
@@ -451,87 +466,115 @@ class Policy:
             raise RuntimeError("wrist refinement requested but obs['images']['wrist'] is absent")
         expected_item = (self.controller.pending["spare"] if class_name == "table_cap"
                          else self.controller.pending["target"])
-        expected = np.asarray(expected_item["base_pos_m"], dtype=float)
-        if class_name == "missing_cap":
-            plane_z = self.vial_rim_z
-        elif class_name == "crooked_cap":
-            plane_z = float(expected_item.get("surface_top_base_z_m", expected[2]))
-        else:
-            plane_z = float(expected[2]) + self.table_plane_offset_m
-        expected_on_plane = expected.copy()
-        expected_on_plane[2] = plane_z
         if self.wrist_request is None:
             snapshot_joints = list(observed["joints"])
-            expected_pixel = project_base_to_wrist(
-                expected_on_plane, snapshot_joints, self.IMAGE_SIZE)
-            index = self.wrist_frame_count
-            self.wrist_frame_count += 1
-            name = f"{index:04d}_{class_name}.png"
             rgb = np.ascontiguousarray(wrist_image[:, :, :3]).copy()
-            cv2.imwrite(str(self.trace_dir / "wristcam_raw" / name),
-                        cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+            batch_items = [expected_item]
+            if class_name == "crooked_cap":
+                for track in self.controller.defect_tracks or []:
+                    item = track.get("last_detection")
+                    if (track.get("class_name") != "crooked_cap" or
+                            track.get("attempts", 0) >= self.controller.max_attempts or
+                            not isinstance(item, dict)):
+                        continue
+                    xy = np.asarray(item["base_pos_m"], dtype=float)[:2]
+                    if any(np.linalg.norm(
+                            xy - np.asarray(known["base_pos_m"], dtype=float)[:2]) < 0.003
+                           for known in batch_items):
+                        continue
+                    batch_items.append(item)
+            requests = []
+            depth_copy = (None if wrist_depth is None else
+                          np.ascontiguousarray(wrist_depth).copy())
+            for item in batch_items:
+                expected = np.asarray(item["base_pos_m"], dtype=float)
+                if class_name == "missing_cap":
+                    plane_z = self.vial_rim_z
+                elif class_name == "crooked_cap":
+                    plane_z = float(item.get("surface_top_base_z_m", expected[2]))
+                else:
+                    plane_z = float(expected[2]) + self.table_plane_offset_m
+                expected_on_plane = expected.copy()
+                expected_on_plane[2] = plane_z
+                expected_pixel = project_base_to_wrist(
+                    expected_on_plane, snapshot_joints, self.IMAGE_SIZE)
+                index = self.wrist_frame_count
+                self.wrist_frame_count += 1
+                name = f"{index:04d}_{class_name}.png"
+                cv2.imwrite(str(self.trace_dir / "wristcam_raw" / name),
+                            cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
+                requests.append({
+                    "future": self.wrist_pool.submit(
+                        self.wrist_vlm.predict, rgb, class_name, expected_pixel),
+                    "class_name": class_name, "image": name,
+                    "joints": snapshot_joints,
+                    "expected": expected_on_plane.tolist(),
+                    "expected_pixel": expected_pixel.tolist(),
+                    "plane_z_m": plane_z, "index": index,
+                    "depth": depth_copy,
+                })
             self.wrist_request = {
-                "future": self.wrist_pool.submit(
-                    self.wrist_vlm.predict, rgb, class_name, expected_pixel),
-                "class_name": class_name, "image": name,
-                "joints": snapshot_joints,
-                "expected": expected_on_plane.tolist(),
-                "expected_pixel": expected_pixel.tolist(),
-                "plane_z_m": plane_z, "index": index,
-                "depth": (None if wrist_depth is None else
-                          np.ascontiguousarray(wrist_depth).copy()),
-            }
-        request = self.wrist_request
-        if request["class_name"] != class_name:
+                "class_name": class_name, "requests": requests}
+        if self.wrist_request["class_name"] != class_name:
             raise RuntimeError(
-                f"stale wrist request for {request['class_name']} while awaiting {class_name}")
-        if not request["future"].done():
+                f"stale wrist request for {self.wrist_request['class_name']} "
+                f"while awaiting {class_name}")
+        requests = self.wrist_request["requests"]
+        if not all(request["future"].done() for request in requests):
             return
-        result = request["future"].result()
-        plane_z = request["plane_z_m"]
-        support_plane = None
-        support_plane_fallback = None
-        if class_name == "table_cap" and request["depth"] is not None:
-            try:
-                depth_cam = self.cameras["wrist_depth"]
-                depth = np.asarray(request["depth"])
-                if tuple(depth.shape[:2][::-1]) != tuple(depth_cam["size"]):
-                    raise ValueError(
-                        f"wrist depth has {depth.shape[:2]}, expected {depth_cam['size'][::-1]}")
-                points = depth_to_base(
-                    depth_cam, depth, stride=2, joints=request["joints"])
-                flange = flange_pose(request["joints"])
-                points_flange = ((points - flange[:3, 3]) @ flange[:3, :3])
-                colour_pixels = project(self.cameras["wrist"], points_flange)
-                native = np.asarray(self.cameras["wrist"]["size"], dtype=float)
-                served = np.asarray(self.IMAGE_SIZE, dtype=float)
-                colour_pixels *= served / native
-                support_plane = fit_local_support_plane(
-                    points, colour_pixels, result["bbox_xyxy"],
-                    np.asarray(request["expected"], dtype=float)[:2],
-                    self.work_surface_z)
-                plane_z = (support_plane["support_z_base_m"] +
-                           self.table_plane_offset_m + SPEC.plug_depth +
-                           SPEC.flange_thickness)
-            except ValueError as error:
-                support_plane_fallback = str(error)
-        refinement = refine_from_vlm_box(
-            result["bbox_xyxy"], request["expected"], plane_z,
-            request["joints"], self.IMAGE_SIZE, self.wrist_max_correction_m)
-        refinement.update({
-            "class_name": class_name, "vlm_latency_s": result["latency_s"],
-            "expected_pixel": request["expected_pixel"], "image": request["image"],
-            "support_plane": support_plane,
-            "support_plane_fallback": support_plane_fallback,
-        })
-        path = self.trace_dir / "wristcam_results" / f"{request['index']:04d}_{class_name}.json"
-        path.write_text(json.dumps({
-            "request": {key: value for key, value in request.items()
-                        if key not in ("future", "depth")},
-            "vlm": result, "refinement": refinement,
-        }, indent=2) + "\n")
-        observed["wrist_refinement"] = refinement
-        self.events.append({"event": "wrist_vlm_refinement", **refinement})
+        refinements = []
+        for request in requests:
+            result = request["future"].result()
+            plane_z = request["plane_z_m"]
+            support_plane = None
+            support_plane_fallback = None
+            if class_name == "table_cap" and request["depth"] is not None:
+                try:
+                    depth_cam = self.cameras["wrist_depth"]
+                    depth = np.asarray(request["depth"])
+                    if tuple(depth.shape[:2][::-1]) != tuple(depth_cam["size"]):
+                        raise ValueError(
+                            f"wrist depth has {depth.shape[:2]}, "
+                            f"expected {depth_cam['size'][::-1]}")
+                    points = depth_to_base(
+                        depth_cam, depth, stride=2, joints=request["joints"])
+                    flange = flange_pose(request["joints"])
+                    points_flange = ((points - flange[:3, 3]) @ flange[:3, :3])
+                    colour_pixels = project(self.cameras["wrist"], points_flange)
+                    native = np.asarray(self.cameras["wrist"]["size"], dtype=float)
+                    served = np.asarray(self.IMAGE_SIZE, dtype=float)
+                    colour_pixels *= served / native
+                    support_plane = fit_local_support_plane(
+                        points, colour_pixels, result["bbox_xyxy"],
+                        np.asarray(request["expected"], dtype=float)[:2],
+                        self.work_surface_z)
+                    plane_z = (support_plane["support_z_base_m"] +
+                               self.table_plane_offset_m + SPEC.plug_depth +
+                               SPEC.flange_thickness)
+                except ValueError as error:
+                    support_plane_fallback = str(error)
+            refinement = refine_from_vlm_box(
+                result["bbox_xyxy"], request["expected"], plane_z,
+                request["joints"], self.IMAGE_SIZE, self.wrist_max_correction_m)
+            refinement.update({
+                "class_name": class_name, "vlm_latency_s": result["latency_s"],
+                "expected_pixel": request["expected_pixel"],
+                "image": request["image"], "support_plane": support_plane,
+                "support_plane_fallback": support_plane_fallback,
+            })
+            path = (self.trace_dir / "wristcam_results" /
+                    f"{request['index']:04d}_{class_name}.json")
+            path.write_text(json.dumps({
+                "request": {key: value for key, value in request.items()
+                            if key not in ("future", "depth")},
+                "vlm": result, "refinement": refinement,
+            }, indent=2) + "\n")
+            self.events.append({"event": "wrist_vlm_refinement", **refinement})
+            refinements.append(refinement)
+        if class_name == "crooked_cap":
+            observed["wrist_refinement_batch"] = refinements
+        else:
+            observed["wrist_refinement"] = refinements[0]
         self.wrist_request = None
 
     def _full_act(self, obs, image, stamp, fresh):
@@ -565,6 +608,15 @@ class Policy:
                 obs.get("depth", {}).get("wrist"))
             action = self.controller.act(observed, [])
             self.events[:] = self.controller.events[-20:] + self.events[-1:]
+            self._record_snapshot(observed, image, [], action)
+            return action
+        if self.controller.continuing_cone_batch():
+            # The first wrist image already supplied bounded corrections for
+            # every crooked target. Continue directly without an occluded
+            # TableCam decision; the final route returns to inspection and
+            # verifies the complete batch from one fresh image.
+            action = self.controller.act(observed, [])
+            self.events[:] = self.controller.events[-20:]
             self._record_snapshot(observed, image, [], action)
             return action
         # Initial observation and every decision gate occur only from v47's

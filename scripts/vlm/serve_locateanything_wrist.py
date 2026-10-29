@@ -24,7 +24,8 @@ def main():
         try:
             image = Image.open(request["image"]).convert("RGB")
             result = runtime.predict(
-                image, request["class_name"], request["expected_pixel"])
+                image, request["class_name"], request["expected_pixel"],
+                prompt=request.get("prompt"))
             response = {"id": request.get("id"), "ok": True, **result}
         except BaseException as exc:
             response = {"id": request.get("id"), "ok": False,

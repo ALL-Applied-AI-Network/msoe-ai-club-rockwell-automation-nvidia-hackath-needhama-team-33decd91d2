@@ -51,16 +51,20 @@ class PolicyParityContractTests(unittest.TestCase):
             ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text())
         self.assertNotIn('self.state = "crooked_observe_axis"', controller)
 
-    def test_physical_pickup_z_defaults_are_operator_editable(self):
+    def test_physical_contact_defaults_are_operator_editable(self):
         config = json.loads((
             ROOT / "PhysicalAI-Hackathon-2026/config/remediation_offsets.json").read_text())
         self.assertEqual(config, {
             "pickup_z_offset_m": 0.003,
             "table_plane_offset_m": 0.0,
+            "missing_release_side_step_m": 0.001,
+            "missing_release_exit_step_m": 0.002,
         })
         physical = (ROOT / "PhysicalAI-Hackathon-2026/policy.py").read_text()
         self.assertIn("SPEC.plug_depth - SPEC.flange_thickness", physical)
         self.assertIn('"fingertip clearance above local table plane"', physical)
+        self.assertIn("DEFAULT_MISSING_RELEASE_SIDE_STEP_M", physical)
+        self.assertIn("DEFAULT_MISSING_RELEASE_EXIT_STEP_M", physical)
 
     def test_live_true_axis_is_not_passed_to_servo(self):
         runner = (ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text()

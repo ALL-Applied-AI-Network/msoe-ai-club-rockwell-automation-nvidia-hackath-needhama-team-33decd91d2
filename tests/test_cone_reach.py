@@ -19,11 +19,12 @@ class ConeReachSelectorTests(unittest.TestCase):
         self.assertEqual(self.selector((0.16, 0.0, 0.21)),
                          (135.0, 0.0, -90.0))
 
-    def test_lean_reduces_from_continuous_far_target_coordinate(self):
+    def test_heading_changes_before_lean_for_continuous_far_target(self):
         # This is an ordinary base-frame XYZ, not a tray/G-slot identifier.
-        # The calibrated far-side reach envelope supports 25 degrees here.
-        self.assertEqual(self.selector((0.38435, 0.03822, 0.21)),
-                         (155.0, 0.0, -90.0))
+        # Preserve the 45-degree cone geometry and search heading instead.
+        result = self.selector((0.38435, 0.03822, 0.21))
+        self.assertEqual(result[0], 135.0)
+        self.assertEqual(result[1], 0.0)
 
     def test_measured_joint_seed_is_optional(self):
         result = self.selector(

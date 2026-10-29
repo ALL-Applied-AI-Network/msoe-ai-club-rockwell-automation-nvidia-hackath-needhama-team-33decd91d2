@@ -9,6 +9,7 @@ from src.remediation.run_compliant_breakable_remediation import (
     POLICY_MAX_ANGULAR_STEP_DEG,
     POLICY_MAX_JOINT_STEP_DEG,
     POLICY_MAX_LINEAR_STEP_M,
+    apply_diagnostic_tablecam_xy_bias,
     joint_step_deg,
     is_cone_clearance_transfer,
     is_cone_prepare_action,
@@ -21,6 +22,32 @@ from src.remediation.run_compliant_breakable_remediation import (
 
 
 class PolicyMotionInterpolationTests(unittest.TestCase):
+    def test_diagnostic_tablecam_bias_moves_only_reported_base_xy(self):
+        detection = {
+            'class_name': 'crooked_cap',
+            'base_pos_m': [0.30, 0.10, 0.21],
+            'feature_base_pos_m': [0.302, 0.098, 0.22],
+            'cap_high_point_base_m': [0.304, 0.096, 0.23],
+            'cap_axis_base': [0.1, 0.2, 0.97],
+            'bbox_xyxy': [10, 20, 30, 40],
+            'localization_note': (
+                'RGB box-center ray intersected with the calibrated object plane'),
+        }
+        biased = apply_diagnostic_tablecam_xy_bias(
+            [detection], (0.018, -0.012))[0]
+
+        np.testing.assert_allclose(biased['base_pos_m'], [0.318, 0.088, 0.21])
+        np.testing.assert_allclose(
+            biased['feature_base_pos_m'], [0.320, 0.086, 0.22])
+        np.testing.assert_allclose(
+            biased['cap_high_point_base_m'], [0.322, 0.084, 0.23])
+        np.testing.assert_allclose(
+            biased['cap_axis_base'], detection['cap_axis_base'])
+        self.assertEqual(biased['bbox_xyxy'], detection['bbox_xyxy'])
+        np.testing.assert_allclose(detection['base_pos_m'], [0.30, 0.10, 0.21])
+        self.assertIn(
+            'diagnostic TableCam report bias', biased['localization_note'])
+
     def test_cone_table_pick_is_biased_low_but_within_cap_height(self):
         self.assertAlmostEqual(CONE_TABLE_CAP_PICK_OFFSET_M, -0.006)
         self.assertGreater(CONE_TABLE_CAP_PICK_OFFSET_M, -0.01346)
