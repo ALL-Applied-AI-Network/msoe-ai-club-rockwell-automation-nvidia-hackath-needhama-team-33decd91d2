@@ -307,7 +307,8 @@ TCP upward relative to the RGB-D point:
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
-  --cone-table-pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --pickup-z-offset-m 0.003 --table-plane-offset-m 0.000 \
+  --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m=-0.005
 ```
 
@@ -315,10 +316,14 @@ Test one operation at a time over a clear work area. Suggested progression is
 `0.010`, `0.005`, `0.002`, then `0.001` m. Do not move directly from +10 mm to zero
 over the vial. The controls have distinct effects:
 
-- `--pick-offset-m`: loose-cap gripper closing height.
-- `--cone-table-pick-offset-m`: cone-workflow loose-cap pickup height. It overrides
-  `--pick-offset-m` only when `--crooked-action cone-press` is selected. If omitted,
-  the physical policy preserves the supplied `--pick-offset-m`; the Isaac adapter's
+- `--pickup-z-offset-m`: fingertip/end clearance above the local table plane
+  during loose-cap pickup. Default `0.003` m from
+  `PhysicalAI-Hackathon-2026/config/remediation_offsets.json`.
+- `--table-plane-offset-m`: signed correction added to either a valid local
+  wrist-stereo table fit or the calibrated table fallback. Default `0` in the
+  same JSON file. It affects table-cap pickup only.
+- `--pick-offset-m` and `--cone-table-pick-offset-m`: retained positive-up
+  compatibility overrides for older launch commands. The Isaac adapter's
   STEP-derived default remains `-0.006` m.
 - `--table-cap-xy-offset-m X Y`: robot-base XY correction added only to loose-cap
   pickup targets. The physical policy defaults to `0.021002 -0.019611` m, the
@@ -364,11 +369,24 @@ next target. Missing-cap pickup retains one intermediate inspection-pose snapsho
 to verify that the loose cap left the table before placement. YOLO is not rerun
 between ordinary motion waypoints.
 
+At the unobstructed start of a cone batch, the controller also retains every
+qualified crooked-cap camera observation. If the leaned arm masks a farther cap
+from TableCam after the first press, that unattempted camera-derived XYZ, surface
+height, and cap axis remain eligible for its own wrist-camera refinement. This is
+short-lived perception memory; it does not look up a tray or G-slot coordinate.
+
 The physical cone handoff remains vertical for the clockwise wrist roll
 `(-180, 0, 0) -> (-180, 0, -90)`, then leans through FANUC W to
-`(135, 0, -90)`. The shortest W motion is -45 degrees. Do not express this lean
-as `P=45`: that bends the real arm across the wrong axis and invalidates the
-cone-tip position compensation.
+the steepest reachable posture. The nominal 45-degree lean is `(135, 0, -90)`;
+the controller tries 45, 40, ... 0 degrees using the observed base-frame XYZ,
+the current joints, the calibrated tool, and both clearance/contact endpoints.
+For example, the qualified scene's far-side target selects the reachable
+25-degree `(155, 0, -90)` pose. This is a continuous arm-relative calculation,
+not a lookup by tray/G-slot identity. The clockwise roll occurs once; a lean
+change for a closer or farther vial occurs only at clearance, and each cone-tip
+press remains vertically downward. Do not express this lean as `P=45`: that
+bends the real arm across the wrong axis and invalidates the cone-tip position
+compensation.
 
 Loose `table_cap` depth is optional because the real depth camera may not return
 pixels from the cap material. In that case pickup uses the YOLO box-centre ray

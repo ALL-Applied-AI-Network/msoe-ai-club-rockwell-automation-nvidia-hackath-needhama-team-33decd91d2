@@ -31,6 +31,17 @@ class WristCameraModelTest(unittest.TestCase):
         uv = np.array([[0., 0.], [1279., 719.], [333., 120.]])
         np.testing.assert_allclose(M.distort_px(M.undistort_px(uv)), uv, atol=1e-6)
 
+    def test_deployment_size_preserves_field_of_view(self):
+        deployment = (1920, 1080)
+        self.assertAlmostEqual(M.served_fx(deployment), M.FX * 1.5)
+        calibrated = np.array([[100., 80.], [640., 360.], [1150., 660.]])
+        scaled = calibrated * 1.5
+        np.testing.assert_allclose(
+            M.distort_px(M.undistort_px(scaled, deployment), deployment),
+            scaled, atol=1e-6)
+        K0, K1 = M.colour_K(), M.colour_K(deployment)
+        np.testing.assert_allclose(K1, np.diag([1.5, 1.5, 1.0]) @ K0)
+
     def test_depth_noise_reference_range(self):
         T = flange_pose(SOLVED_AT) @ M.T_FLANGE_DEPTH
         self.assertAlmostEqual((SURFACE_Z - T[2, 3]) / T[2, 2], M.DEPTH_RMS_RANGE_M, places=3)

@@ -83,7 +83,16 @@ Full mode uses the same simulator-independent controller as the supported Isaac
 pipeline. It requests native 1920x1080 TableCam RGB plus calibrated depth, handles
 missing caps before crooked caps, and supports the side-cone workflow validated in
 simulation. The cone wrist handoff occurs once after missing-cap work; every crooked
-cap then uses the same 45-degree, clockwise-rolled posture.
+cap then retains the clockwise roll. The cone remains the supplied 45-degree CAD
+geometry. Its nominal gripper lean is also 45 degrees; the controller tries 45,
+40, ... 0 degrees and selects the steepest pose reachable at both clearance and
+contact for that perception-derived base-frame XYZ. This does not use tray/G-slot
+identity. The lean may change at clearance between targets, while the cone-tip
+press itself always travels vertically downward.
+All qualified crooked candidates from the unobstructed batch view are retained,
+so the arm occluding a farther vial after its first press does not discard that
+camera-derived target. Each retained target is still locally wrist-refined before
+contact; no tray/G-slot coordinate is substituted.
 The controller rejects simulator-only fields; Isaac truth and contact
 loads exist only in separate evaluation output. Because the real cell provides no
 force measurement, shared-policy pressing is position-limited in both environments.
@@ -93,7 +102,8 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --work-surface-z-m -0.0051 \
-  --cone-table-pick-offset-m 0.010 --place-offset-m 0.010 --press-offset-m 0.010 \
+  --pickup-z-offset-m 0.003 --table-plane-offset-m 0.000 \
+  --place-offset-m 0.010 --press-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m -0.005
 ```
 
@@ -120,15 +130,61 @@ The physical defaults are respectively `(0.021002, -0.019611)` m,
 base-frame translations of the table-cap target being 20 mm too far away from the
 camera and 20 mm too far right, plus the 10 mm left missing-vial miss. Crooked-cap
 XY deliberately stays zero until the cone is tested.
-The optional `--cone-table-pick-offset-m` overrides `--pick-offset-m` only for the
-cone workflow; when omitted, the physical policy keeps the existing pick Z tuning.
+The two normal loose-cap Z tunings live in
+`config/remediation_offsets.json`: `pickup_z_offset_m` defaults to `0.003`
+(the fingertip/end target is 3 mm above the local table plane) and
+`table_plane_offset_m` defaults to `0.0` (signed base-Z correction). CLI flags
+with the same names override the file defaults.
+The older `--pick-offset-m` and `--cone-table-pick-offset-m` flags remain explicit
+positive-up compatibility overrides; do not mix their sign convention into the
+new settings.
 Each XYZ correction is recorded in `policy_config.json` for the run.
+
+Add `--wrist-refinement` to make TableCam/YOLO authoritative only for class,
+count, and coarse target identity. The arm moves to a target-centred wrist view,
+starts FP16 LocateAnything, then raises/translates/starts a safe pre-descent while
+the result is computed. The VLM box centre is ray/plane backprojected with the
+snapshot's measured joints and rejected if it is more than 40 mm from the YOLO
+candidate. No contact waypoint is emitted until that check passes. Missing-vial
+mouths and crooked caps follow the same contract; cone orientation overlaps the
+first crooked-cap inference. The clockwise roll is performed only once; any
+target-coordinate reach adjustment changes only the FANUC-W lean at clearance.
+
+The cell uses one requested RGB size for both cameras. With native TableCam capture,
+wrist RGB is therefore served at 1920x1080. Its calibrated 1280x720 focal length
+619.63996 px scales to 929.45995 px without changing field of view. The simulator
+models the physical 848x480 colour sensor before upscaling. Wrist depth remains a
+separate 848x480 stream. For a loose table cap, the physical policy registers it
+into wrist colour, excludes the VLM cap box, and robustly fits the surrounding
+paper/table plane. Pickup Z places the fingertip at the configured clearance
+above that support plane (3 mm by default). The documented 15.492 mm upright-cap
+geometry is used only to convert that absolute clearance into the controller's
+cap-reference convention. The fit
+requires at least 24 inliers, at most 4 mm RMS, at most 5 degrees tilt, and
+agreement within 15 mm of the calibrated work surface; otherwise pickup retains
+the calibrated plane. Placement Z is unchanged. Missing and crooked targets do
+not depend on wrist depth.
+
+Residual hand-eye/TCP corrections remain independently tunable with
+`--wrist-table-cap-xy-offset-m`, `--wrist-missing-cap-xy-offset-m`, and
+`--wrist-crooked-cap-xy-offset-m`. They default to zero and do not inherit the
+older TableCam empirical offsets.
 
 On this cluster, both mock and real-cell runs can use the T4-pinned launcher:
 
 ```bash
 sbatch scripts/run_physical_policy.slurm --mock --trials 1 --trial-s 8 \
   --mode full --allow-provisional-contact --crooked-action cone-press
+```
+
+The physical YOLO+FP16-VLM policy fits on the launcher's single requested T4.
+Isaac plus the VLM uses two isolated T4s:
+
+```bash
+sbatch --gres=gpu:t4:2 scripts/run_compliant_breakable_pipeline.slurm \
+  shared/scenes/tablecam_right_pink_spares_qualified_v2.usda \
+  shared/yolo26x/best.pt 2026-10-29_wrist_vlm_full_workflow \
+  --crooked-action cone-press --wrist-refinement --wrist-vlm-device 1
 ```
 
 If the operator provides a direct cell token, export it as

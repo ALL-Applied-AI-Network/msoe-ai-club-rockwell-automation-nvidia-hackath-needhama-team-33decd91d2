@@ -28,7 +28,12 @@ _RAW = json.loads(CALIBRATION.read_text())
 COLOUR, DEPTH = _RAW['wrist'], _RAW['wrist_depth']
 T_FLANGE_COLOUR = np.asarray(COLOUR['T_flange_cam'], float)
 T_FLANGE_DEPTH = np.asarray(DEPTH['T_flange_cam'], float)
-SERVED_SIZE = tuple(COLOUR['size'])      # (1280, 720)
+CALIBRATED_SIZE = tuple(COLOUR['size'])  # (1280, 720)
+# Backwards-compatible default used by the retained wrist-servo experiments.
+# The physical API serves wrist RGB at Policy.IMAGE_SIZE, however, so the active
+# deployment path passes (1920, 1080) to the functions below alongside native
+# TableCam capture.  Both sizes have the calibrated 16:9 field of view.
+SERVED_SIZE = CALIBRATED_SIZE
 SENSOR_SIZE = (848, 480)                 # FRAMES.md: colour captured at 848 x 480
 DEPTH_SIZE = tuple(DEPTH['size'])        # (848, 480)
 FX, K1 = float(COLOUR['fx']), float(COLOUR['k1'])
@@ -38,63 +43,83 @@ FX, K1 = float(COLOUR['fx']), float(COLOUR['k1'])
 DEPTH_RMS_M, DEPTH_RMS_RANGE_M = DEPTH['rms_plane_mm'] / 1000., 0.363
 
 
-def colour_K():
+def _served_size(served_size=None):
+    size = SERVED_SIZE if served_size is None else tuple(map(int, served_size))
+    if len(size) != 2 or min(size) <= 0:
+        raise ValueError("served wrist-colour size must be two positive integers")
+    if abs(size[0] / size[1] - CALIBRATED_SIZE[0] / CALIBRATED_SIZE[1]) > 1e-9:
+        raise ValueError("served wrist-colour image must retain the calibrated 16:9 aspect ratio")
+    return size
+
+
+def served_fx(served_size=None):
+    """Colour focal length scaled to the RGB size requested from the cell."""
+    W, _ = _served_size(served_size)
+    return FX * W / CALIBRATED_SIZE[0]
+
+
+def colour_K(served_size=None):
     """Pinhole intrinsics of the served colour image once undistorted (undistort_px)."""
-    W, H = SERVED_SIZE
-    return np.array([[FX, 0., W / 2.], [0., FX, H / 2.], [0., 0., 1.]])
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
+    return np.array([[fx, 0., W / 2.], [0., fx, H / 2.], [0., 0., 1.]])
 
 
-def distort_px(uv):
+def distort_px(uv, served_size=None):
     """(N, 2) pinhole pixels (colour_K) -> served colour pixels, with the lens's k1."""
-    W, H = SERVED_SIZE
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
     uv = np.asarray(uv, float).reshape(-1, 2)
-    x, y = (uv[:, 0] - W / 2.) / FX, (uv[:, 1] - H / 2.) / FX
+    x, y = (uv[:, 0] - W / 2.) / fx, (uv[:, 1] - H / 2.) / fx
     d = 1. + K1 * (x * x + y * y)
-    return np.stack([FX * x * d + W / 2., FX * y * d + H / 2.], -1)
+    return np.stack([fx * x * d + W / 2., fx * y * d + H / 2.], -1)
 
 
-def undistort_px(uv):
+def undistort_px(uv, served_size=None):
     """(N, 2) served colour pixels -> pinhole pixels (colour_K); inverse of distort_px."""
-    W, H = SERVED_SIZE
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
     uv = np.asarray(uv, float).reshape(-1, 2)
-    xd, yd = (uv[:, 0] - W / 2.) / FX, (uv[:, 1] - H / 2.) / FX
+    xd, yd = (uv[:, 0] - W / 2.) / fx, (uv[:, 1] - H / 2.) / fx
     x, y = xd, yd
     for _ in range(10):        # as calibration.geometry.pixel_to_base
         d = 1. + K1 * (x * x + y * y)
         x, y = xd / d, yd / d
-    return np.stack([FX * x + W / 2., FX * y + H / 2.], -1)
+    return np.stack([fx * x + W / 2., fx * y + H / 2.], -1)
 
 
-def render_spec():
+def render_spec(served_size=None):
     """Ideal centred pinhole renders, with margins covering the distorted colour image
     and the depth stream's off-centre principal point: {stream: (W, H, fx)}."""
-    W, H = SERVED_SIZE
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
     centre = np.array([W / 2., H / 2.])
-    scale = max((centre - undistort_px([[0., 0.]])[0]) / centre)   # barrel: the corners see further out
-    colour = (2 * int(np.ceil(scale * W / 2.)) + 8, 2 * int(np.ceil(scale * H / 2.)) + 8, FX)
+    scale = max((centre - undistort_px([[0., 0.]], (W, H))[0]) / centre)   # barrel: corners see further out
+    colour = (2 * int(np.ceil(scale * W / 2.)) + 8, 2 * int(np.ceil(scale * H / 2.)) + 8, fx)
     dw, dh = DEPTH_SIZE
     depth = (2 * int(np.ceil(max(DEPTH['cx'], dw - DEPTH['cx']))) + 4,
              2 * int(np.ceil(max(DEPTH['cy'], dh - DEPTH['cy']))) + 4, float(DEPTH['fx']))
     return {'colour': colour, 'depth': depth}
 
 
-def real_colour(ideal_rgb):
+def real_colour(ideal_rgb, served_size=None):
     """Ideal pinhole render (render_spec()['colour']) -> the served 1280 x 720 image:
     lens distortion and the 848 x 480 sensor, upscaled to the served size."""
-    Wr, Hr, fr = render_spec()['colour']
-    W, H = SERVED_SIZE
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
+    Wr, Hr, fr = render_spec((W, H))['colour']
     sw, sh = SENSOR_SIZE
     # Each sensor pixel's position in the served image (cv2.resize's centre alignment),
     # undistorted, then located in the ideal render.
     i, j = np.meshgrid(np.arange(sw), np.arange(sh))
     served = np.stack([(i + .5) * W / sw - .5, (j + .5) * H / sh - .5], -1).reshape(-1, 2)
-    pin = undistort_px(served)
-    mx = ((pin[:, 0] - W / 2.) * fr / FX + Wr / 2.).reshape(sh, sw).astype(np.float32)
-    my = ((pin[:, 1] - H / 2.) * fr / FX + Hr / 2.).reshape(sh, sw).astype(np.float32)
+    pin = undistort_px(served, (W, H))
+    mx = ((pin[:, 0] - W / 2.) * fr / fx + Wr / 2.).reshape(sh, sw).astype(np.float32)
+    my = ((pin[:, 1] - H / 2.) * fr / fx + Hr / 2.).reshape(sh, sw).astype(np.float32)
     # A sensor pixel is ~1.5 render pixels wide: integrate over it before sampling.
     blurred = cv2.GaussianBlur(np.ascontiguousarray(ideal_rgb), (0, 0), 0.5 * W / sw)
     sensor = cv2.remap(blurred, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    return cv2.resize(sensor, SERVED_SIZE, interpolation=cv2.INTER_LINEAR)
+    return cv2.resize(sensor, (W, H), interpolation=cv2.INTER_LINEAR)
 
 
 def real_depth(ideal_depth_m, rng=None):
@@ -114,7 +139,7 @@ def real_depth(ideal_depth_m, rng=None):
     return np.where(ok & (mm > 0) & (mm < 65536), mm, 0).astype(np.uint16)
 
 
-def register_depth(depth_mm):
+def register_depth(depth_mm, served_size=None):
     """Depth stream (uint16 mm) -> (720, 1280) float32 depth along the colour camera's
     axis (m) on the served colour pixels; NaN where no depth pixel lands."""
     dw, dh = DEPTH_SIZE
@@ -124,8 +149,9 @@ def register_depth(depth_mm):
     T = np.linalg.inv(T_FLANGE_COLOUR) @ T_FLANGE_DEPTH
     p_c = p_d @ T[:3, :3].T + T[:3, 3]
     p_c = p_c[p_c[:, 2] > 1e-3]
-    W, H = SERVED_SIZE
-    uv = np.rint(distort_px(FX * p_c[:, :2] / p_c[:, 2:] + [W / 2., H / 2.])).astype(int)
+    W, H = _served_size(served_size)
+    fx = served_fx((W, H))
+    uv = np.rint(distort_px(fx * p_c[:, :2] / p_c[:, 2:] + [W / 2., H / 2.], (W, H))).astype(int)
     out = np.full((H, W), np.inf, np.float32)
     # Depth pixels land ~1.5 colour pixels apart: splat each over 3 x 3, nearest wins, so
     # surfaces behind cannot show through the gaps between a near surface's samples.

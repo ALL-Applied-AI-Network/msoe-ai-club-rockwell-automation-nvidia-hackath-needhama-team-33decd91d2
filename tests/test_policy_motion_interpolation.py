@@ -10,6 +10,7 @@ from src.remediation.run_compliant_breakable_remediation import (
     POLICY_MAX_JOINT_STEP_DEG,
     POLICY_MAX_LINEAR_STEP_M,
     joint_step_deg,
+    is_cone_clearance_transfer,
     is_cone_prepare_action,
     nearest_periodic_joints,
     pose_interpolation,
@@ -49,11 +50,22 @@ class PolicyMotionInterpolationTests(unittest.TestCase):
     def test_missing_cap_preserves_yaw_and_cannot_trigger_cone_prepare(self):
         vertical = [-180.0, 0.0, 0.0]
         self.assertTrue(should_preserve_missing_wrist('missing_cap', vertical))
-        self.assertFalse(should_preserve_missing_wrist('crooked_cap', vertical))
+        self.assertTrue(should_preserve_missing_wrist('crooked_cap', vertical))
         self.assertFalse(is_cone_prepare_action(
             'missing_cap', False, 0.006, 0.002, vertical))
         self.assertTrue(is_cone_prepare_action(
             'crooked_cap', False, 0.006, 0.002, vertical))
+
+    def test_cone_joint_fallback_is_limited_to_clearance_transfer(self):
+        cone_wpr = [155.0, 0.0, -90.0]
+        self.assertTrue(is_cone_clearance_transfer(
+            'crooked_cap', cone_wpr, cone_wpr, 0.285, 0.285))
+        self.assertFalse(is_cone_clearance_transfer(
+            'crooked_cap', cone_wpr, cone_wpr, 0.260, 0.285))
+        self.assertFalse(is_cone_clearance_transfer(
+            'missing_cap', cone_wpr, cone_wpr, 0.285, 0.285))
+        self.assertFalse(is_cone_clearance_transfer(
+            'crooked_cap', [-180.0, 0.0, 0.0], cone_wpr, 0.285, 0.285))
 
     def test_robot_local_x_down_converts_to_logical_tcp_z_down(self):
         planner = Planner.__new__(Planner)

@@ -19,9 +19,11 @@ Missing cap (tool pointing straight down):
      cap drops under gravity.
   3. The closed fingertip face presses the flange down, force limited.
 
-The supported shared controller handles a crooked cap with a straight vertical,
-position-limited press while holding W/P/R at (-180, 0, 0). Its target comes
-from the current TableCam RGB-D detection and it does not request a wrist camera.
+The supported shared controller optionally refines TableCam/YOLO candidates
+with calibrated wrist RGB and LocateAnything before contact.  Missing caps are
+still replaced first.  With ``--crooked-action cone-press`` the cable-safe
+quarter-turn and reach-limited cone handoff happens once while the first crooked
+cap's wrist inference runs, then every crooked cap uses that same posture.
 
 Legacy crooked-cap comparison mode (`--controller-policy legacy`, with
 `--crooked-press regrip`) remains available for archived experiments:
@@ -64,6 +66,7 @@ from scipy.spatial.transform import Rotation as ScipyRot, Slerp
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [
     str(ROOT),
+    str(ROOT / 'PhysicalAI-Hackathon-2026'),
     str(ROOT / 'data/fanuc_er4ia_sim'),
     str(ROOT / 'shared/data/fanuc_er4ia_sim'),
 ]
@@ -256,8 +259,9 @@ def is_default_vertical_wpr(wpr):
 
 
 def should_preserve_missing_wrist(pending_class, wpr):
-    """Round missing-cap actions retain current yaw instead of swapping jaws."""
-    return pending_class == 'missing_cap' and is_default_vertical_wpr(wpr)
+    """Vertical wrist-camera/missing-cap actions retain the current J6 branch."""
+    return (pending_class in {'missing_cap', 'crooked_cap'} and
+            is_default_vertical_wpr(wpr))
 
 
 def is_cone_prepare_action(pending_class, cone_wrist_staged,
@@ -265,6 +269,20 @@ def is_cone_prepare_action(pending_class, cone_wrist_staged,
     """Identify only the jaw-close immediately before the crooked-cap handoff."""
     return (pending_class == 'crooked_cap' and not cone_wrist_staged and
             target_jaw != current_jaw and is_default_vertical_wpr(wpr))
+
+
+def is_cone_clearance_transfer(pending_class, wpr, cone_wpr,
+                               target_z, transit_z):
+    """True only for the cone-oriented move on the safe transit plane.
+
+    The tilted cone pose can put two otherwise reachable endpoints on opposite
+    sides of an ER-4iA wrist singularity. A bounded joint interpolation is safe
+    while the destination remains at the tray-clearance plane, but must never
+    be used for the subsequent approach or contact descent.
+    """
+    return (pending_class == 'crooked_cap' and
+            np.allclose(wpr, cone_wpr, atol=1e-8) and
+            float(target_z) >= float(transit_z) - 1e-6)
 
 
 def joint_step_deg(q0, q1):
@@ -1215,32 +1233,26 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     from src.remediation.controller import (ContactTool, RemediationController,
                                             command_rotation_to_j6,
                                             j6_rotation_to_command, wpr_to_rotation)
+    from src.remediation.cone_reach import ConeReachSelector
     from src.remediation.geometry import SPEC, base_to_uf0, resolve_height_planes, transit_base_z, uf0_to_base
     work_surface_z, vial_rim_z, derived_vial_rim_z = resolve_height_planes(
         args.work_surface_z_m, args.vial_rim_z_m)
     from src.remediation.geometry import load_layout
     from src.remediation.policy_driver import PolicyDriver
+    from src.remediation.servo_crooked_cap import read_wrist_colour, wrist_camera
+    from src.remediation.wrist_refinement import (calibrated_home_joints_deg,
+                                                   project_base_to_wrist,
+                                                   refine_from_vlm_box)
 
     P = Planner()
     tip = tuple(__import__('src.remediation.custom_gripper', fromlist=['finger_tip_tcp'])
                 .finger_tip_tcp(tuple(mount['cap_seat_tcp_j6_m'])))
-    home = np.deg2rad([C.HOME_POSE_DEG[f'J{i}'] for i in range(1, 7)])
+    # Use the home vector supplied with the physical wrist-camera calibration.
+    # Its J6 is approximately zero.  The previous simulator-only 180-degree
+    # jaw swap put the camera behind the arm and disagreed with that home.
+    home = np.deg2rad(calibrated_home_joints_deg())
     start_position = np.array([.24, .25, transit_base_z()])
-    # Match the physical cell's verified cable-safe vertical wrist roll. The
-    # simulator camera asset appears on the opposite side, so its visual mount
-    # must not be used to redefine the real robot's home orientation.
-    q_roll_reference = P.solve(home, start_position, DOWN, SPREAD_Y, tip)
-    q0 = None
-    for roll_shift in (np.pi, -np.pi):
-        seed = q_roll_reference.copy()
-        seed[5] = np.clip(seed[5] + roll_shift, *P.limits[5])
-        try:
-            q0 = P.solve(seed, start_position, DOWN, -SPREAD_Y, tip)
-            break
-        except RuntimeError:
-            continue
-    if q0 is None:
-        raise RuntimeError('physical-cell vertical wrist branch is unreachable')
+    q0 = P.solve(home, start_position, DOWN, SPREAD_Y, tip)
 
     # Oracle association is constructed for evaluator/tracing only and is never
     # included in the controller observation or detection dictionaries.
@@ -1265,6 +1277,9 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     table = Camera(cell.TABLE_CAM_PATH, resolution=(1920, 1080))
     table.initialize()
     table.add_distance_to_image_plane_to_frame()
+    wrist = (wrist_camera(stage, seed=args.wrist_vlm_seed,
+                          served_size=(1920, 1080))
+             if args.wrist_refinement else None)
     positions = set_jaw_separation(arm, names, C.JAW_OPEN)
     positions[arm_idx] = q0
     arm.set_joint_positions(positions)
@@ -1283,6 +1298,14 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     effective_pick_offset = (args.cone_table_pick_offset_m
                              if args.crooked_action == 'cone-press'
                              else args.pick_offset_m)
+    cone_tip_from_tcp_m = (args.cone_tip_from_tcp_m
+                           if args.cone_tip_from_tcp_m is not None
+                           else mount.get('cone_tip_from_tcp_m',
+                                          (0.0, -0.0369851212, -0.0098332793)))
+    cone_wpr_selector = (ConeReachSelector(
+        tip, cone_tip_from_tcp_m, vial_rim_z, args.cone_press_below_rim_m,
+        args.press_offset_m)
+        if args.crooked_action == 'cone-press' else None)
     controller = RemediationController(
         ContactTool(effective_pick_offset, args.place_offset_m,
                     args.press_offset_m, validated=True),
@@ -1293,14 +1316,12 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
         crooked_tap_depth_m=args.crooked_tap_depth_m,
         crooked_action=args.crooked_action,
-        cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
-                             if args.cone_tip_from_tcp_m is not None
-                             else mount.get('cone_tip_from_tcp_m',
-                                            (0.0, -0.0369851212, -0.0098332793))),
+        cone_tip_from_tcp_m=cone_tip_from_tcp_m,
         cone_wrist_wpr_deg=mount.get('cone_wrist_wpr_deg',
                                      (-180.0, 0.0, -90.0)),
         cone_press_wpr_deg=mount.get('cone_press_wpr_deg',
-                                     (135.0, 0.0, -90.0)),
+                                     (155.0, 0.0, -90.0)),
+        cone_wpr_selector=cone_wpr_selector,
         cone_press_below_rim_m=args.cone_press_below_rim_m,
         table_cap_xy_offset_m=args.table_cap_xy_offset_m,
         missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
@@ -1309,6 +1330,11 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         crooked_wiggle_cycles=args.crooked_wiggle_cycles,
         pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
         pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+        wrist_refinement=args.wrist_refinement,
+        wrist_view_distance_m=args.wrist_view_distance_m,
+        wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
+        wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
+        wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
         vial_rim_z_m=vial_rim_z)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
@@ -1320,13 +1346,25 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     if not conda_python.is_file():
         raise FileNotFoundError(
             f'YOLO Python not found at {conda_python}; set REMEDIATION_PYTHON')
+    vlm_client = None
+    if args.wrist_refinement:
+        from src.inspection.locateanything_client import LocateAnythingProcessClient
+        vlm_client = LocateAnythingProcessClient(
+            conda_python, ROOT / 'scripts/vlm/serve_locateanything_wrist.py',
+            cwd=ROOT, cuda_device=args.wrist_vlm_device,
+            hf_home=ROOT / 'shared/cache/locateanything_3b/huggingface')
     inspect_script = ROOT / 'src/inspection/inspect_remediation_capture.py'
     capture_report = Path(args.capture_report).resolve()
     last_action = [*base_to_uf0((np.array([.24, .25, transit_base_z()]))), -180., 0., 0.]
     current_jaw = C.JAW_OPEN
     cone_wrist_staged = False
+    cone_tilt_staged = False
+    cone_sim_rotation = None
+    cone_sim_lean_deg = 0.0
     inference_index = 0
     cached = {'detections': None, 'depth': None}
+    wrist_request = None
+    wrist_index = 0
 
     def fresh_perception():
         nonlocal inference_index
@@ -1362,6 +1400,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         # Depth and tray fits are evaluation evidence only; changing commanded
         # XYZ here would make simulation differ from the physical policy.
         for item in raw:
+            if args.diagnostic_skip_missing and item.get('class_name') == 'missing_cap':
+                continue
             clean = dict(item)
             clean['contact_qualified'] = True
             clean['depth_available'] = bool(item.get('depth_available', True))
@@ -1376,14 +1416,92 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                            1.0 if current_jaw != C.JAW_OPEN else 0.0],
                 'timestamp': len(controller.decision_records)}
 
+    def attach_wrist_refinement(ctrl, obs):
+        """Start/poll one bounded VLM request at a controller refinement gate."""
+        nonlocal wrist_request, wrist_index
+        states = {
+            'refine_spare': 'table_cap', 'await_refine_spare': 'table_cap',
+            'refine_missing': 'missing_cap', 'await_refine_missing': 'missing_cap',
+            'refine_crooked': 'crooked_cap', 'await_refine_crooked': 'crooked_cap',
+        }
+        class_name = states.get(ctrl.state)
+        if class_name is None:
+            return
+        expected_item = (ctrl.pending['spare'] if class_name == 'table_cap'
+                         else ctrl.pending['target'])
+        expected = np.asarray(expected_item['base_pos_m'], dtype=float)
+        if class_name == 'missing_cap':
+            plane_z = vial_rim_z
+        elif class_name == 'crooked_cap':
+            plane_z = float(expected_item.get('surface_top_base_z_m', expected[2]))
+        else:
+            plane_z = float(expected[2])
+        expected_on_plane = expected.copy()
+        expected_on_plane[2] = plane_z
+        if wrist_request is None:
+            for _ in range(3):
+                world.step(render=True)
+            rgb = read_wrist_colour(wrist)
+            if rgb is None or rgb.shape[:2] != (1080, 1920):
+                raise RuntimeError('calibrated 1920x1080 wrist RGB capture failed')
+            image_path = decision_dir / f'wrist_{wrist_index:04d}_{class_name}.png'
+            if not cv2.imwrite(str(image_path), cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)):
+                raise RuntimeError(f'could not write wrist image {image_path}')
+            snapshot_joints = list(obs['joints'])
+            expected_pixel = project_base_to_wrist(
+                expected_on_plane, snapshot_joints, (1920, 1080))
+            future = vlm_client.submit(image_path, class_name, expected_pixel)
+            wrist_request = {
+                'future': future, 'class_name': class_name,
+                'image': str(image_path), 'joints': snapshot_joints,
+                'expected': expected_on_plane.tolist(),
+                'expected_pixel': expected_pixel.tolist(),
+                'plane_z_m': plane_z, 'index': wrist_index,
+            }
+            wrist_index += 1
+        request = wrist_request
+        if request['class_name'] != class_name:
+            raise RuntimeError(
+                f"stale wrist request for {request['class_name']} while awaiting {class_name}")
+        if not request['future'].done():
+            return
+        result = request['future'].result()
+        result_path = decision_dir / f"wrist_{request['index']:04d}_{class_name}.json"
+        # Persist the model output before geometric validation so a rejected
+        # local correction remains diagnosable instead of disappearing with
+        # the exception.
+        result_path.write_text(json.dumps({
+            'request': {key: value for key, value in request.items() if key != 'future'},
+            'vlm': result,
+        }, indent=2) + '\n')
+        refinement = refine_from_vlm_box(
+            result['bbox_xyxy'], request['expected'], request['plane_z_m'],
+            request['joints'], (1920, 1080), args.wrist_max_correction_m)
+        refinement['class_name'] = class_name
+        refinement['vlm_latency_s'] = result['latency_s']
+        refinement['expected_pixel'] = request['expected_pixel']
+        refinement['image'] = request['image']
+        result_path.write_text(json.dumps({
+            'request': {key: value for key, value in request.items() if key != 'future'},
+            'vlm': result, 'refinement': refinement,
+        }, indent=2) + '\n')
+        obs['wrist_refinement'] = refinement
+        wrist_request = None
+
     def observe(ctrl):
         # Queue steps do not inspect detections; decision gates always receive a
         # fresh rendered RGB-D observation and real YOLO inference.
-        if ctrl.queue and cached['detections'] is not None:
+        wrist_gate = ctrl.state.startswith('refine_') or ctrl.state.startswith('await_refine_')
+        if (ctrl.queue or wrist_gate) and cached['detections'] is not None:
             detections, depth = cached['detections'], cached['depth']
         else:
             detections, depth = fresh_perception()
         obs = tcp_observation()
+        # A refinement state is entered before its camera-view waypoints have
+        # finished.  Capture only once that queue is empty, otherwise the VLM
+        # sees the preceding transit pose rather than the target-centred view.
+        if args.wrist_refinement and wrist_gate and not ctrl.queue:
+            attach_wrist_refinement(ctrl, obs)
         if ctrl.state == 'pickup' and not ctrl.queue and ctrl.pending is not None:
             spare = np.asarray(ctrl.pending['spare']['base_pos_m'], float)
             still_present = any(item['class_name'] == 'table_cap' and
@@ -1394,6 +1512,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
 
     def execute(action, state):
         nonlocal last_action, current_jaw, cone_wrist_staged
+        nonlocal cone_tilt_staged, cone_sim_rotation, cone_sim_lean_deg
         action = np.asarray(action, dtype=float)
         target = uf0_to_base(action[:3])
         Rj, pj = fk.fk(ex.q)
@@ -1404,8 +1523,27 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         # straight wrist orientation instead of asking IK for its 180-degree
         # jaw-swapped equivalent; this removes the otherwise unnecessary turn
         # before the table-cap pickup without changing any TCP position.
-        rotation = (j6_rotation_to_command(Rj) if preserve_missing_wrist
-                    else wpr_to_rotation(action[3:6]))
+        nominal_rotation = wpr_to_rotation(action[3:6])
+        cone_press_action = (
+            args.controller_policy == 'shared' and
+            args.crooked_action == 'cone-press' and
+            np.allclose(action[3:6], controller.active_cone_press_wpr_deg,
+                        atol=1e-8))
+        selected_cone_lean_deg = (180.0 - float(action[3])
+                                  if cone_press_action else cone_sim_lean_deg)
+        if selected_cone_lean_deg > 180.0:
+            selected_cone_lean_deg -= 360.0
+        if cone_tilt_staged and cone_press_action:
+            # The qualified simulator CAD is mounted on the opposite, but
+            # physically equivalent, round-tool roll branch. Preserve the
+            # measured backward-lean orientation and remap only the TCP offset
+            # so the controller's requested cone-nose point is unchanged.
+            rotation = np.asarray(cone_sim_rotation, dtype=float)
+            cone_offset = np.asarray(controller.cone_tip_from_tcp_m, dtype=float)
+            target = target + nominal_rotation @ cone_offset - rotation @ cone_offset
+        else:
+            rotation = (j6_rotation_to_command(Rj) if preserve_missing_wrist
+                        else nominal_rotation)
         target_j6_rotation = command_rotation_to_j6(rotation)
         start = pj + Rj @ np.asarray(tip)
         target_jaw = mount['cap_grip_jaw_m'] - JAW_CLAMP_M if action[6] >= .5 else C.JAW_OPEN
@@ -1423,7 +1561,9 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             args.crooked_action == 'cone-press' and
             is_cone_prepare_action(pending_class, cone_wrist_staged,
                                    current_jaw, target_jaw, action[3:6]))
-        if cone_prepare_stage:
+        cone_tilt_stage = (cone_wrist_staged and cone_press_action and
+                           abs(selected_cone_lean_deg - cone_sim_lean_deg) > 1e-8)
+        if cone_prepare_stage and same_position:
             # The arm is already at the straight clearance pose left by the
             # missing-cap workflow.  Re-solving this nominal TCP orientation
             # admits an equivalent 180-degree J6 representation before the
@@ -1440,6 +1580,32 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             path = speed_limited_joints(ex.q, q_target, min_steps=60)
             ex.run(f'policy_{state}_cone_wrist_90', path, target_jaw)
             cone_wrist_staged = True
+        elif cone_tilt_stage:
+            # Apply the target-coordinate-selected lean relative to the
+            # measured post-roll orientation. The selector requests the
+            # nominal 45 degrees first and reduces it only when the continuous
+            # base-frame target is outside the calibrated arm envelope.
+            # Asking IK for the nominal W/P/R directly selects the simulator's
+            # 180-degree jaw-swapped branch, which appears as an extra wrist
+            # turn and leans forward. A local negative W delta is the
+            # cable-safe backward motion.
+            current_rotation = j6_rotation_to_command(Rj)
+            lean_delta_deg = selected_cone_lean_deg - cone_sim_lean_deg
+            cone_sim_rotation = (current_rotation @
+                                 ScipyRot.from_euler(
+                                     'x', -lean_delta_deg, degrees=True).as_matrix())
+            path = []
+            q_path = ex.q.copy()
+            for position, sample_rotation in pose_interpolation(
+                    start, current_rotation, target, cone_sim_rotation, 120):
+                q_next = P.solve(q_path, position, sample_rotation[:, 2],
+                                 sample_rotation[:, 1], tip)
+                path.extend(speed_limited_joints(q_path, q_next, min_steps=1))
+                q_path = q_next
+            ex.run(f'policy_{state}_cone_tilt_back_{selected_cone_lean_deg:g}',
+                   path, target_jaw)
+            cone_tilt_staged = True
+            cone_sim_lean_deg = selected_cone_lean_deg
         elif same_position and same_orientation and target_jaw != current_jaw:
             ex.jaws(f'policy_{state}_gripper', current_jaw, target_jaw, n=20)
         else:
@@ -1450,7 +1616,9 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 # the measured flange orientation back into that frame before
                 # interpolating; mixing the two frames causes artificial 100+
                 # degree wrist branch jumps even on a no-op waypoint.
-                path = P.pose_line(ex.q, start, j6_rotation_to_command(Rj),
+                pose_start_rotation = Rj if (cone_tilt_staged and cone_press_action) \
+                    else j6_rotation_to_command(Rj)
+                path = P.pose_line(ex.q, start, pose_start_rotation,
                                    target, rotation, tip, min_steps=60)
             except RuntimeError as cartesian_error:
                 # Some reachable endpoint pairs straddle an ER-4iA wrist IK
@@ -1462,8 +1630,65 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 upward_clearance_retreat = (
                     float(target[2]) >= clearance - 1e-6
                     and float(target[2]) > float(start[2])
-                    and np.linalg.norm(np.asarray(target[:2]) - np.asarray(start[:2])) < 1e-4)
-                if min(float(start[2]), float(target[2])) < clearance and not upward_clearance_retreat:
+                    # A Cartesian solve can leave a millimetre-scale endpoint
+                    # residual.  It is still a vertical retreat, and retaining
+                    # the 0.1 mm comparison incorrectly rejected that safe
+                    # escape from a low wrist-camera view.
+                    and np.linalg.norm(np.asarray(target[:2]) - np.asarray(start[:2])) < 0.005)
+                spare = ((controller.pending or {}).get('spare')
+                         if state in {'refine_spare', 'await_refine_spare', 'pickup'} else None)
+                wrist_view_descent_over_spare = (
+                    args.wrist_refinement and spare is not None
+                    and float(target[2]) >= float(spare['base_pos_m'][2]) + 0.050
+                    and float(target[2]) < float(start[2]))
+                spare_position = (np.asarray(spare['base_pos_m'], dtype=float)
+                                  if spare is not None else None)
+                wrist_coarse_approach_over_paper = (
+                    args.wrist_refinement and state == 'await_refine_spare'
+                    and spare_position is not None
+                    and np.linalg.norm(np.asarray(target[:2]) - spare_position[:2]) < 0.005
+                    and float(target[2]) >= float(spare_position[2]) + 0.020)
+                wrist_corrected_pick_over_paper = (
+                    args.wrist_refinement and state == 'pickup'
+                    and spare_position is not None
+                    and np.linalg.norm(np.asarray(target[:2]) - spare_position[:2]) < 0.010
+                    and float(target[2]) >= (
+                        float(spare_position[2]) + controller.tool.pick_offset_m - 0.002))
+                pending_target = ((controller.pending or {}).get('target')
+                                  if state in {'refine_missing', 'await_refine_missing', 'repair'}
+                                  else None)
+                missing_position = (np.asarray(pending_target['base_pos_m'], dtype=float)
+                                    if pending_target is not None and
+                                    pending_target.get('class_name') == 'missing_cap'
+                                    else None)
+                wrist_missing_approach = (
+                    args.wrist_refinement and state == 'await_refine_missing'
+                    and missing_position is not None
+                    and np.linalg.norm(np.asarray(target[:2]) - missing_position[:2]) < 0.005
+                    and float(target[2]) >= float(missing_position[2]) + 0.020)
+                wrist_corrected_missing_place = (
+                    args.wrist_refinement and state == 'repair'
+                    and missing_position is not None
+                    and np.linalg.norm(np.asarray(target[:2]) - missing_position[:2]) < 0.010
+                    and float(target[2]) >= float(missing_position[2]) - 0.002)
+                # The commanded transit plane is 285 mm, already 25 mm above
+                # the repository's absolute 260 mm tray-clearance minimum.
+                # Allow a 5 mm IK/tracking residual around that nominal plane;
+                # treating 284.99 mm as "below clearance" rejected safe
+                # horizontal camera staging motions.
+                guarded_clearance = max(0.260, clearance - 0.005)
+                cone_clearance_transfer = is_cone_clearance_transfer(
+                    pending_class, action[3:6],
+                    controller.active_cone_press_wpr_deg,
+                    target[2], clearance)
+                if (min(float(start[2]), float(target[2])) < guarded_clearance
+                        and not upward_clearance_retreat
+                        and not wrist_view_descent_over_spare
+                        and not wrist_coarse_approach_over_paper
+                        and not wrist_corrected_pick_over_paper
+                        and not wrist_missing_approach
+                        and not wrist_corrected_missing_place
+                        and not cone_clearance_transfer):
                     raise RuntimeError(
                         'refusing joint-space fallback below tray clearance; '
                         'the Cartesian contact route is not safely executable') from cartesian_error
@@ -1480,6 +1705,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     try:
         driver.run()
     except BaseException:
+        if vlm_client is not None:
+            vlm_client.close()
         # Preserve the evidence needed to distinguish drive tracking, contact,
         # and policy failures. These evaluator values never enter a decision.
         (args.out / 'partial_trace.json').write_text(json.dumps(ex.trace) + '\n')
@@ -1488,6 +1715,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         (args.out / 'partial_vial_loads.json').write_text(
             json.dumps(monitor.vial_states, indent=2) + '\n')
         raise
+    if vlm_client is not None:
+        vlm_client.close()
     ex.hold('policy_settle', current_jaw, 30)
     for _ in range(120):
         world.step(render=False)
@@ -1506,6 +1735,14 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         'force_available_to_controller': False,
         'press_control': 'position-limited',
         'controller_input_contract': 'camera RGB-D, detections, joints, TCP and gripper only',
+        'wrist_refinement': {
+            'enabled': bool(args.wrist_refinement),
+            'model': 'nvidia/LocateAnything-3B FP16' if args.wrist_refinement else None,
+            'served_colour_size': [1920, 1080] if args.wrist_refinement else None,
+            'view_distance_m': args.wrist_view_distance_m,
+            'max_correction_m': args.wrist_max_correction_m,
+            'captures': wrist_index,
+        },
         'decision_provenance': controller.decision_records,
         'oracle_evaluator_only': True,
         'physical_robot_authorized': False,
@@ -1519,6 +1756,9 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             'table_cap_xy': list(args.table_cap_xy_offset_m),
             'missing_cap_xy': list(args.missing_cap_xy_offset_m),
             'crooked_cap_xy': list(args.crooked_cap_xy_offset_m),
+            'wrist_table_cap_xy': list(args.wrist_table_cap_xy_offset_m),
+            'wrist_missing_cap_xy': list(args.wrist_missing_cap_xy_offset_m),
+            'wrist_crooked_cap_xy': list(args.wrist_crooked_cap_xy_offset_m),
             'pick_z': effective_pick_offset,
             'place_z': args.place_offset_m,
             'press_z': args.press_offset_m,
@@ -1582,6 +1822,24 @@ def main():
     parser.add_argument('--crooked-cap-xy-offset-m', type=float, nargs=2,
                         metavar=('X', 'Y'), default=(0.0, 0.0),
                         help='base-frame XY correction added only to crooked-cap contact targets')
+    parser.add_argument('--wrist-refinement', action='store_true',
+                        help='enable target-centred LocateAnything wrist RGB refinement before contact')
+    parser.add_argument('--wrist-vlm-device', default='1',
+                        help='CUDA device exposed to the isolated VLM worker; use 1 for a two-T4 Isaac job')
+    parser.add_argument('--wrist-vlm-seed', type=int, default=2026)
+    parser.add_argument('--wrist-view-distance-m', type=float, default=0.300,
+                        help='colour-camera distance from each local target plane (default: 0.300 m)')
+    parser.add_argument('--wrist-max-correction-m', type=float, default=0.040,
+                        help='maximum accepted TableCam-to-wrist XY correction (default: 0.040 m)')
+    parser.add_argument('--wrist-table-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist table-cap localization')
+    parser.add_argument('--wrist-missing-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist missing-vial localization')
+    parser.add_argument('--wrist-crooked-cap-xy-offset-m', type=float, nargs=2,
+                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist crooked-cap localization')
     parser.add_argument('--work-surface-z-m', type=float, default=-0.0051,
                         help='work-surface plane Z in robot-base metres (default: -0.0051)')
     parser.add_argument('--vial-rim-z-m', type=float,
@@ -1602,6 +1860,8 @@ def main():
                         default='shoulder',
                         help='shared-controller crooked-cap action; cone-press selects the separate '
                              'side-cone CAD tool (default remains shoulder)')
+    parser.add_argument('--diagnostic-skip-missing', action='store_true',
+                        help='diagnostic only: leave missing vials untouched and exercise the crooked-cap loop')
     parser.add_argument('--crooked-press', choices=('regrip', 'vertical', 'tilted'), default='regrip',
                         help='regrip: wrist-camera servo onto the cap axis, coaxial grip, lift, turn upright and '
                              're-place; vertical: closed fingertips pressed straight down; tilted: PRESS_TILT_DEG '
@@ -1628,6 +1888,9 @@ def main():
     targets = choose_targets(observed, load_layout(), depth_refined=have_depth,
                              depth=depth_img if have_depth else None, capture_report=capture if have_depth else None,
                              vial_rim_z_m=vial_rim_z)
+    if args.diagnostic_skip_missing:
+        targets['missing'] = []
+        targets['unfilled_missing_slots'] = []
     missing, crooked = targets['missing'], targets['crooked']
     if not missing and not crooked:
         raise RuntimeError('no missing or crooked cap detected on the tray')
@@ -1644,7 +1907,13 @@ def main():
     # Prevent argparse flags being passed to Kit
     sys.argv = [sys.argv[0]]
     from isaacsim import SimulationApp
-    app = SimulationApp({'headless': True, 'renderer': 'RayTracedLighting'})
+    app_config = {'headless': True, 'renderer': 'RayTracedLighting'}
+    if args.wrist_refinement:
+        # Leave the second allocated T4 exclusively to the isolated FP16 VLM
+        # worker.  Isaac defaults to multi-GPU rendering even when physics is
+        # explicitly on device 0.
+        app_config.update({'multi_gpu': False, 'active_gpu': 0, 'physics_gpu': 0})
+    app = SimulationApp(app_config)
     try:
         app.update()
         import omni.usd
@@ -1658,7 +1927,10 @@ def main():
                                                     attach_visual_pair, cone_tip_from_fingertip_tcp,
                                                     finger_back_face_tcp, finger_tip_tcp)
         from src.remediation.geometry import SPEC, rim_base_z, transit_base_z
-        from src.remediation.servo_crooked_cap import read_wrist, servo_cap_axis, wrist_camera
+        from src.remediation.servo_crooked_cap import (read_wrist, read_wrist_colour,
+                                                       servo_cap_axis, wrist_camera)
+        from src.remediation.wrist_refinement import (project_base_to_wrist,
+                                                       refine_from_vlm_box)
 
         omni.usd.get_context().open_stage(str(args.scene))
         app.update()
@@ -1678,7 +1950,7 @@ def main():
             mount['cone_tip_from_tcp_m'] = list(
                 cone_tip_from_fingertip_tcp(jaw_hold, jaw_grip, side=-1))
             mount['cone_wrist_wpr_deg'] = [-180.0, 0.0, -90.0]
-            mount['cone_press_wpr_deg'] = [135.0, 0.0, -90.0]
+            mount['cone_press_wpr_deg'] = [155.0, 0.0, -90.0]
         press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
         transit_z = transit_base_z()
         spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom

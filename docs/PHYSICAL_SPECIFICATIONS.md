@@ -225,6 +225,37 @@ The closed-form estimate is accurate from an oblique view (0.3-2.2 deg from the 
 
 **Legacy real wrist-camera model (October 27, 2026).** The retained servo sees the wrist camera as the cell delivers it (`src/remediation/wrist_camera_model.py`, from `PhysicalAI-Hackathon-2026/calibration/cameras.json`). Colour: 848 x 480 sensor served at 1280 x 720, fx 619.6 px, radial k1 = -0.0196. Depth: a separate camera at its own calibrated pose (21 mm and 2.9 deg from the colour camera), 848 x 480, fx 416.9 px, principal point (421.35, 239.34), uint16 mm with 0 = no depth. Both poses are set from the calibration at runtime, not taken from the scene. The ellipse is fitted to the undistorted opening edge, and depth is registered onto the colour pixels before the ring's depth gradient is taken. Depth noise is an assumption, not a measurement: the calibration's 3.0 mm plane RMS at 0.363 m, scaled with range^2. No colour sensor noise is modelled. Ray-traced depth still returns transparent plastic as a surface.
 
+**Active wrist RGB refinement (October 29, 2026).** The physical client requests
+native 1920 x 1080 TableCam RGB, so its global RGB request also serves wrist colour
+at 1920 x 1080. `wrist_camera_model.py` now explicitly scales the calibrated wrist
+focal length to 929.45995 px while preserving the 16:9 field of view and the
+848 x 480 physical sensor/upscale model. The calibrated colour mount is unchanged.
+Colour-to-depth separation computed from the two calibration transforms is
+21.565 mm and 2.877 degrees; this path does not assume the streams are aligned.
+For loose-cap pickup only, registered wrist-depth points in an image annulus
+around (not inside) the VLM cap box fit the local table/paper support plane.
+Pickup Z places the fingertip/end at the configured clearance above that plane
+(3 mm by default); the known 13.46 mm plug depth and 2.032 mm flange thickness
+only convert this absolute clearance into the controller's cap-reference
+convention. Sparse or inconsistent stereo falls back to the calibrated
+work-surface plane; vial placement Z is not altered.
+
+With `--wrist-refinement`, TableCam YOLO supplies the candidate class and coarse
+location. A target-centred wrist image is sent to FP16 LocateAnything-3B, the
+nearest returned box to the predicted wrist pixel is selected, and its centre ray
+is intersected with the cap, vial-rim, or crooked-cap surface plane. Corrections
+larger than 40 mm are rejected. The old TableCam XY offsets are not added to a
+wrist-refined result; three zero-default wrist residual offsets are available for
+measured hand-eye/TCP error. Missing-cap pickup and placement use separate views.
+The first crooked-cap view overlaps the one-time clockwise roll and the initial
+backward gripper lean. The cone itself retains its supplied, measured 45-degree
+CAD geometry. The controller requests a nominal 45-degree FANUC-W lean, then
+reduces it in 5-degree increments only when IK at that perception-derived
+base-frame XYZ requires it; no tray/G-slot label enters the choice. The roll is
+retained for the batch, while lean can change at clearance for a closer or farther
+vial. Cone-tip contact always descends vertically. TableCam reinspection remains
+the completion/next-target gate.
+
 | Scene (cap, tilt) | Ideal camera error | Real-camera model error |
 |---|---|---|
 | seed 21 (G07, 53.0 deg) | 1.5 deg | 1.3 deg |

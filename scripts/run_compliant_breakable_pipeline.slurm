@@ -35,8 +35,12 @@ else
 fi
 remediation_args=("$@")
 perception_plane_args=()
+wrist_refinement=false
 for ((i=0; i<${#remediation_args[@]}; i++)); do
     case "${remediation_args[$i]}" in
+        --wrist-refinement)
+            wrist_refinement=true
+            ;;
         --work-surface-z-m|--vial-rim-z-m)
             if (( i + 1 >= ${#remediation_args[@]} )); then
                 echo "Missing value for ${remediation_args[$i]}" >&2
@@ -50,6 +54,15 @@ for ((i=0; i<${#remediation_args[@]}; i++)); do
             ;;
     esac
 done
+
+if [[ "$wrist_refinement" == true ]]; then
+    visible_gpu_count=$(nvidia-smi -L | wc -l)
+    if (( visible_gpu_count < 2 )); then
+        echo "Wrist-VLM Isaac runs isolate Isaac and LocateAnything on two T4s." >&2
+        echo "Submit with: sbatch --gres=gpu:t4:2 $0 ... --wrist-refinement" >&2
+        exit 2
+    fi
+fi
 
 # Keep the original project-local environment as the first choice, but support
 # the team HPC environment used by the current YOLO training/evaluation jobs.

@@ -31,7 +31,7 @@ MOVE_STEPS = 60
 UPRIGHT_ROUNDNESS = 0.95   # straight-down view of a standing cap (cos 18 deg)
 
 
-def wrist_camera(stage, seed=0):
+def wrist_camera(stage, seed=0, served_size=None):
     """The wrist camera as the real cell has it (wrist_camera_model): the colour camera
     and a separate depth camera on J6_link at their calibrated poses, rendering ideal
     pinhole images that read_wrist turns into the cell's colour and depth streams.
@@ -41,10 +41,11 @@ def wrist_camera(stage, seed=0):
     from pxr import Gf, UsdGeom
     import cell
     from src.remediation import wrist_camera_model as M
+    served_size = M.SERVED_SIZE if served_size is None else tuple(served_size)
     cams = {}
     for name, path, T in (('colour', cell.WRIST_CAM_PATH, M.T_FLANGE_COLOUR),
                           ('depth', cell.WRIST_CAM_PATH.rsplit('/', 1)[0] + '/WristDepthCam', M.T_FLANGE_DEPTH)):
-        W, H, fx = M.render_spec()[name]
+        W, H, fx = M.render_spec(served_size)[name]
         usd = UsdGeom.Camera.Define(stage, path)
         # USD cameras look down -z with +y up; rows of a USD matrix are the local axes.
         R_usd = T[:3, :3] @ np.diag([1., -1., -1.])
@@ -62,22 +63,31 @@ def wrist_camera(stage, seed=0):
             cam.add_distance_to_image_plane_to_frame()
         cams[name] = cam
     return {'camera': cams['colour'], 'depth_camera': cams['depth'], 'rng': np.random.default_rng(seed),
-            'K': M.colour_K(), 'R_cam_j6': M.T_FLANGE_COLOUR[:3, :3], 't_cam_j6': M.T_FLANGE_COLOUR[:3, 3]}
+            'served_size': served_size, 'K': M.colour_K(served_size),
+            'R_cam_j6': M.T_FLANGE_COLOUR[:3, :3], 't_cam_j6': M.T_FLANGE_COLOUR[:3, 3]}
 
 
 def read_wrist(cam):
     """(rgb, depth) as the cell serves them: 1280 x 720 colour and 848 x 480 uint16 mm depth."""
     from src.remediation import wrist_camera_model as M
-    rgb = M.real_colour(np.ascontiguousarray(cam['camera'].get_rgba()[:, :, :3]))
+    rgb = M.real_colour(np.ascontiguousarray(cam['camera'].get_rgba()[:, :, :3]), cam.get('served_size'))
     depth = M.real_depth(np.asarray(cam['depth_camera'].get_depth(device='cpu'), np.float32), cam['rng'])
     return rgb, depth
+
+
+def read_wrist_colour(cam):
+    """Read only calibrated wrist RGB, avoiding the unused stereo render."""
+    from src.remediation import wrist_camera_model as M
+    return M.real_colour(
+        np.ascontiguousarray(cam['camera'].get_rgba()[:, :, :3]),
+        cam.get('served_size'))
 
 
 def expected_px(cam, R_cam_w, eye_w, point):
     """Served colour pixel of a base-frame point."""
     from src.remediation.wrist_camera_model import distort_px
     p = cam['K'] @ (R_cam_w.T @ (point - eye_w))
-    return distort_px(p[:2] / p[2])[0]
+    return distort_px(p[:2] / p[2], cam.get('served_size'))[0]
 
 
 def draw_ellipse(img, ellipse, colour=(0, 255, 0)):

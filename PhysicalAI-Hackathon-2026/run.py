@@ -25,7 +25,9 @@ from cell_client import CellClient, run_all
 from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
                     DEFAULT_CROOKED_CAP_XY_OFFSET_M,
                     DEFAULT_MISSING_CAP_XY_OFFSET_M,
-                    DEFAULT_TABLE_CAP_XY_OFFSET_M, Policy)
+                    DEFAULT_PICKUP_Z_OFFSET_M,
+                    DEFAULT_TABLE_CAP_XY_OFFSET_M,
+                    DEFAULT_TABLE_PLANE_OFFSET_M, Policy)
 
 HERE = Path(__file__).resolve().parent
 SUBMISSION = HERE / "submission" / "submission.yaml"
@@ -221,7 +223,14 @@ def main() -> None:
     p.add_argument("--device", default="0", help="Ultralytics inference device; default 0 (first CUDA GPU)")
     p.add_argument("--allow-provisional-contact", action="store_true",
                    help="allow full mode with the currently unmeasured TCP (supervised trials only)")
-    p.add_argument("--pick-offset-m", type=float, default=0.0)
+    p.add_argument("--pickup-z-offset-m", type=float,
+                   default=DEFAULT_PICKUP_Z_OFFSET_M,
+                   help="fingertip clearance above the local table plane during table-cap pickup (default from config/remediation_offsets.json)")
+    p.add_argument("--table-plane-offset-m", type=float,
+                   default=DEFAULT_TABLE_PLANE_OFFSET_M,
+                   help="signed correction added to fitted or calibrated table Z (default from config/remediation_offsets.json)")
+    p.add_argument("--pick-offset-m", type=float, default=None,
+                   help="legacy signed pickup correction; positive raises and overrides --pickup-z-offset-m")
     p.add_argument("--cone-table-pick-offset-m", type=float,
                    default=None,
                    help="optional cone-workflow table-cap pickup Z correction; "
@@ -237,6 +246,16 @@ def main() -> None:
     p.add_argument("--crooked-cap-xy-offset-m", type=float, nargs=2,
                    metavar=("X", "Y"), default=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
                    help="base-frame XY correction for crooked-cap contact")
+    p.add_argument("--wrist-refinement", action="store_true",
+                   help="use bounded LocateAnything wrist RGB refinement before contact")
+    p.add_argument("--wrist-view-distance-m", type=float, default=0.300)
+    p.add_argument("--wrist-max-correction-m", type=float, default=0.040)
+    p.add_argument("--wrist-table-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=(0.0, 0.0))
+    p.add_argument("--wrist-missing-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=(0.0, 0.0))
+    p.add_argument("--wrist-crooked-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=(0.0, 0.0))
     p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
     p.add_argument("--vial-rim-z-m", type=float,
                    help="explicit vial-rim Z override; default derives from work surface and known dimensions")
@@ -280,6 +299,8 @@ def main() -> None:
                                  pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                                  press_offset_m=args.press_offset_m,
                                  cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                                 pickup_z_offset_m=args.pickup_z_offset_m,
+                                 table_plane_offset_m=args.table_plane_offset_m,
                                  table_cap_xy_offset_m=args.table_cap_xy_offset_m,
                                  missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
                                  crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
@@ -296,6 +317,12 @@ def main() -> None:
                                  pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                                  work_surface_z_m=args.work_surface_z_m,
                                  vial_rim_z_m=args.vial_rim_z_m,
+                                 wrist_refinement=args.wrist_refinement,
+                                 wrist_view_distance_m=args.wrist_view_distance_m,
+                                 wrist_max_correction_m=args.wrist_max_correction_m,
+                                 wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
+                                 wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
+                                 wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
                                  trace_dir=args.trace_dir))
         try:
             run_all(CellClient(url, "mock", args.ca), checked)
@@ -321,6 +348,8 @@ def main() -> None:
                    pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                    press_offset_m=args.press_offset_m,
                    cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                   pickup_z_offset_m=args.pickup_z_offset_m,
+                   table_plane_offset_m=args.table_plane_offset_m,
                    table_cap_xy_offset_m=args.table_cap_xy_offset_m,
                    missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
                    crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
@@ -337,6 +366,12 @@ def main() -> None:
                    pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                    work_surface_z_m=args.work_surface_z_m,
                    vial_rim_z_m=args.vial_rim_z_m,
+                   wrist_refinement=args.wrist_refinement,
+                   wrist_view_distance_m=args.wrist_view_distance_m,
+                   wrist_max_correction_m=args.wrist_max_correction_m,
+                   wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
+                   wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
+                   wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
                    trace_dir=args.trace_dir))
 
 
