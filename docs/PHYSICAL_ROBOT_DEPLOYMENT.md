@@ -11,6 +11,15 @@ for classification and coarse targets, then wrist RGB for local XY correction.
 TableCam depth fits one work-surface Z plane per rollout. Crooked caps are
 pressed as one cached batch: one flat wrist snapshot, one clockwise wrist roll,
 one 45-degree cone posture, all down/up presses, then one clear verification.
+The physical cone uses the opposite FANUC-W lean from the retained Isaac visual:
+the verified nominal physical posture is `(-135, 0, -90)`, while simulation
+continues to use `(135, 0, -90)`.
+Crooked-cap wrist inspection uses a 250 mm optical working distance by default,
+while loose-cap and missing-vial views retain 300 mm. The route translates at
+tray clearance before descending vertically to the lower camera view.
+Policy-side numeric bounds on pickup clearance and wrist XY correction are not
+enforced; the physical cell controller is the motion-limit authority. The policy
+still rejects non-finite values and records the requested values in its trace.
 
 ## 1. Before entering the cell
 
@@ -176,8 +185,8 @@ the explicitly supplied trace directory). Check:
 - `trace.jsonl`: state transitions and commanded TCP poses.
 
 Do not make contact if `height_planes.json` reports a nominal fallback without
-an understood cause, the work-surface correction jumps several millimetres, or
-the wrist correction exceeds the configured 40 mm bound.
+an understood cause or the work-surface correction jumps several millimetres.
+Review large wrist corrections even though the policy no longer rejects them.
 
 ## 6. Production launch
 

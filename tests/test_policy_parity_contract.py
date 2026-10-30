@@ -46,6 +46,10 @@ class PolicyParityContractTests(unittest.TestCase):
         controller = (ROOT / "src/remediation/controller.py").read_text()
         self.assertIn('CAMERAS = ["table", "wrist"]', physical)
         self.assertIn('DEPTH = ["table", "wrist"]', physical)
+        self.assertIn('PHYSICAL_CONE_PRESS_W_DEG = -135.0', physical)
+        self.assertIn(
+            'cone_press_wpr_deg=(PHYSICAL_CONE_PRESS_W_DEG, 0.0, cone_heading_deg)',
+            physical)
         self.assertNotIn('state == "crooked_observe_axis"', physical)
         self.assertNotIn("ctrl.state == 'crooked_observe_axis'", (
             ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text())

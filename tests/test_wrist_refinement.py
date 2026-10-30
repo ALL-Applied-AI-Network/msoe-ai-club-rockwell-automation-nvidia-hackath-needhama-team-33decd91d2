@@ -51,6 +51,15 @@ class WristRefinementTests(unittest.TestCase):
         np.testing.assert_allclose(result["base_pos_m"], expected, atol=1e-9)
         self.assertLess(result["correction_norm_m"], 1e-9)
 
+    def test_policy_does_not_reject_correction_above_legacy_40_mm_limit(self):
+        expected = np.array([0.34, -0.20, 0.006])
+        pixel = project_base_to_wrist(expected, self.joints, self.size)
+        shifted = pixel + np.array([100.0, 0.0])
+        result = refine_from_vlm_box(
+            [shifted[0] - 2, shifted[1] - 2, shifted[0] + 2, shifted[1] + 2],
+            expected, expected[2], self.joints, self.size, max_correction_m=0.001)
+        self.assertGreater(result["correction_norm_m"], 0.001)
+
     def test_view_tcp_places_target_on_optical_axis(self):
         target = np.array([0.34, -0.20, 0.006])
         command = wpr_to_rotation((-180.0, 0.0, 0.0))

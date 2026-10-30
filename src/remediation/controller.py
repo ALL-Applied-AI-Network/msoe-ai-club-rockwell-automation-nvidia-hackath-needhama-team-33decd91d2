@@ -208,6 +208,7 @@ class RemediationController:
                  missing_release_exit_step_m=DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
                  wrist_refinement=False,
                  wrist_view_distance_m=0.300,
+                 wrist_crooked_view_distance_m=0.250,
                  wrist_table_cap_xy_offset_m=(0.0, 0.0),
                  wrist_missing_cap_xy_offset_m=(0.0, 0.0),
                  wrist_crooked_cap_xy_offset_m=(0.0, 0.0)):
@@ -269,6 +270,10 @@ class RemediationController:
         self.wrist_view_distance_m = float(wrist_view_distance_m)
         if not 0.120 <= self.wrist_view_distance_m <= 0.300:
             raise ValueError("wrist view distance must be between 0.120 and 0.300 m")
+        self.wrist_crooked_view_distance_m = float(wrist_crooked_view_distance_m)
+        if not 0.120 <= self.wrist_crooked_view_distance_m <= 0.300:
+            raise ValueError(
+                "wrist crooked view distance must be between 0.120 and 0.300 m")
         self.wrist_table_cap_xy_offset_m = self._checked_xy_offset(
             wrist_table_cap_xy_offset_m, "wrist table-cap")
         self.wrist_missing_cap_xy_offset_m = self._checked_xy_offset(
@@ -481,7 +486,7 @@ class RemediationController:
             raise
 
     def _wrist_view(self, position, obs, centre_camera=False, wpr=None,
-                    use_measured_j6=True):
+                    use_measured_j6=True, distance_m=None):
         from src.remediation.wrist_refinement import (fingertip_tcp_from_joints,
                                                       flange_rotation,
                                                       wrist_view_tcp)
@@ -495,8 +500,10 @@ class RemediationController:
             if np.linalg.norm(fingertip_tcp_from_joints(joints) - observed_tcp) <= 0.030:
                 j6_rotation = flange_rotation(joints)
         command_wpr = (-180.0, 0.0, 0.0) if wpr is None else wpr
+        distance = (self.wrist_view_distance_m if distance_m is None
+                    else float(distance_m))
         view = wrist_view_tcp(position, wpr_to_rotation(command_wpr),
-                              self.wrist_view_distance_m, j6_rotation=j6_rotation,
+                              distance, j6_rotation=j6_rotation,
                               centre_camera=centre_camera)
         # The camera hand-eye offset can place its ideal centred TCP outside
         # the calibrated robot envelope even though the object itself is
@@ -531,8 +538,6 @@ class RemediationController:
                                     - expected[:2])
                      for item in self.crooked_refinement_cache]
         index = int(np.argmin(distances))
-        if distances[index] > 0.040:
-            return None
         return np.asarray(self.crooked_refinement_cache.pop(index)["base_pos_m"], dtype=float)
 
     def _refinement(self, obs, class_name, expected):
@@ -549,9 +554,6 @@ class RemediationController:
         position = np.asarray(item.get("base_pos_m"), dtype=float)
         if position.shape != (3,) or not np.isfinite(position).all():
             raise ValueError("wrist refinement must contain three finite base coordinates")
-        correction = np.linalg.norm(position[:2] - np.asarray(expected, dtype=float)[:2])
-        if correction > 0.040:
-            raise ValueError(f"wrist refinement correction {correction * 1000:.1f} mm exceeds 40 mm")
         return position
 
     def _route_checked(self, obs, target, spare=None, wrist_refined=False):
@@ -581,7 +583,7 @@ class RemediationController:
             # adapter starts LocateAnything here.  On the next decision the
             # arm can make a safe coarse pre-descent (or stage cone posture)
             # while inference runs, but no contact waypoint is emitted until
-            # a bounded wrist result has arrived.
+            # a finite wrist result has arrived.
             self.pending = {"target": target, "spare": spare, "height": height}
             rolled_cone_view = cone_batch and self.cone_oriented
             view_wpr = self.cone_wrist_wpr_deg if rolled_cone_view else None
@@ -612,7 +614,9 @@ class RemediationController:
                 expected = np.mean(np.asarray(batch_points), axis=0)
             view = self._wrist_view(
                 expected, obs, wpr=view_wpr,
-                use_measured_j6=not rolled_cone_view)
+                use_measured_j6=not rolled_cone_view,
+                distance_m=(self.wrist_crooked_view_distance_m
+                            if cone_batch else None))
             # The camera is about 130 mm above the fingertip, so a useful
             # close view can put the TCP below tray transit height.  Translate
             # at clearance first and make only the final camera approach

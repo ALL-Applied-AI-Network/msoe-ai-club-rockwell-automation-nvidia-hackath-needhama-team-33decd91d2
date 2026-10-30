@@ -220,16 +220,19 @@ def fit_local_support_plane(points_base_m, colour_pixels, target_box_xyxy,
 
 def refine_from_vlm_box(box_xyxy, expected_base_m, plane_z_m, snapshot_joints,
                         served_size=(1920, 1080), max_correction_m=MAX_WRIST_CORRECTION_M):
-    """Convert a VLM box into a bounded base-frame target correction."""
+    """Convert a VLM box into a finite base-frame target correction.
+
+    ``max_correction_m`` is retained for API compatibility and run metadata;
+    the physical cell controller, rather than this policy, enforces motion
+    limits.
+    """
     expected = np.asarray(expected_base_m, dtype=float).reshape(3)
     refined = wrist_pixel_to_plane(
         box_center(box_xyxy), plane_z_m, snapshot_joints, served_size)
     correction = refined[:2] - expected[:2]
     distance = float(np.linalg.norm(correction))
-    if not np.isfinite(distance) or distance > float(max_correction_m):
-        raise ValueError(
-            f"wrist refinement is {distance * 1000:.1f} mm from its TableCam candidate; "
-            f"limit is {float(max_correction_m) * 1000:.1f} mm")
+    if not np.isfinite(distance):
+        raise ValueError("wrist refinement correction must be finite")
     refined[2] = float(plane_z_m)
     return {
         "base_pos_m": refined.tolist(),
