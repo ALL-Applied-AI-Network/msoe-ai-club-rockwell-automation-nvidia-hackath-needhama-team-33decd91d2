@@ -27,7 +27,8 @@ from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool
                                         RemediationController, wpr_to_rotation)
 from src.remediation.wrist_refinement import (project_base_to_wrist,
                                                refine_from_vlm_box,
-                                               fit_local_support_plane)
+                                               fit_local_support_plane,
+                                               render_wrist_refinement_annotation)
 from calibration.geometry import (depth_to_base, flange_pose,
                                   load as load_cameras, project)
 
@@ -266,6 +267,7 @@ class Policy:
         (self.trace_dir / "tablecam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
         (self.trace_dir / "wristcam_raw").mkdir(exist_ok=True)
+        (self.trace_dir / "wristcam_annotated").mkdir(exist_ok=True)
         (self.trace_dir / "wristcam_results").mkdir(exist_ok=True)
         self.height_planes_path = self.trace_dir / "height_planes.json"
         self.height_plane_history = []
@@ -685,6 +687,27 @@ class Policy:
         refinements = []
         for request in requests:
             result = request["future"].result()
+            public_request = {key: value for key, value in request.items()
+                              if key not in ("future", "depth")}
+            path = (self.trace_dir / "wristcam_results" /
+                    f"{request['index']:04d}_{class_name}.json")
+            annotated_relative = (Path("wristcam_annotated") /
+                                  f"{request['index']:04d}_{class_name}.png")
+            annotated_path = self.trace_dir / annotated_relative
+            raw_path = self.trace_dir / "wristcam_raw" / request["image"]
+            raw_bgr = cv2.imread(str(raw_path))
+            annotation_written = False
+            if raw_bgr is not None:
+                annotated = render_wrist_refinement_annotation(
+                    raw_bgr, class_name, result, request["expected_pixel"])
+                annotation_written = cv2.imwrite(str(annotated_path), annotated)
+            # Persist raw VLM evidence before plane fitting/backprojection so
+            # an out-of-bounds correction still leaves an inspectable image.
+            path.write_text(json.dumps({
+                "request": public_request, "vlm": result,
+                "annotated_image": (str(annotated_relative)
+                                    if annotation_written else None),
+            }, indent=2) + "\n")
             plane_z = request["plane_z_m"]
             support_plane = None
             support_plane_fallback = None
@@ -722,11 +745,15 @@ class Policy:
                 "image": request["image"], "support_plane": support_plane,
                 "support_plane_fallback": support_plane_fallback,
             })
-            path = (self.trace_dir / "wristcam_results" /
-                    f"{request['index']:04d}_{class_name}.json")
+            if raw_bgr is not None:
+                annotated = render_wrist_refinement_annotation(
+                    raw_bgr, class_name, result, request["expected_pixel"],
+                    refinement)
+                annotation_written = cv2.imwrite(str(annotated_path), annotated)
+            if annotation_written:
+                refinement["annotated_image"] = str(annotated_relative)
             path.write_text(json.dumps({
-                "request": {key: value for key, value in request.items()
-                            if key not in ("future", "depth")},
+                "request": public_request,
                 "vlm": result, "refinement": refinement,
             }, indent=2) + "\n")
             self.events.append({"event": "wrist_vlm_refinement", **refinement})

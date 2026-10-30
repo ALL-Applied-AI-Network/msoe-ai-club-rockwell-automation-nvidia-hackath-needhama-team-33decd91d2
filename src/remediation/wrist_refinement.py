@@ -8,6 +8,7 @@ the TableCam candidate.  No tray coordinates or simulator poses enter here.
 from __future__ import annotations
 
 import json
+import cv2
 import numpy as np
 import sys
 
@@ -94,6 +95,55 @@ def box_center(box_xyxy):
     if not np.isfinite(box).all() or box[2] <= box[0] or box[3] <= box[1]:
         raise ValueError("VLM box must be finite XYXY with positive area")
     return np.array([(box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0])
+
+
+def render_wrist_refinement_annotation(image_bgr, class_name, vlm_result,
+                                       expected_pixel, refinement=None):
+    """Render the wrist VLM target and its coarse projected anchor.
+
+    The selected VLM box and its centre are green.  The projected TableCam
+    candidate is a blue X, and a blue segment makes the image-space residual
+    visible.  Gray boxes retain any additional VLM proposals for diagnosis.
+    ``refinement`` may be omitted so the raw model result can be persisted
+    before geometric validation.
+    """
+    annotated = np.asarray(image_bgr).copy()
+    if annotated.ndim != 3 or annotated.shape[2] != 3:
+        raise ValueError("wrist annotation requires a BGR image")
+
+    for candidate in vlm_result.get("all_boxes_xyxy", []):
+        x0, y0, x1, y1 = [int(round(value)) for value in candidate]
+        cv2.rectangle(annotated, (x0, y0), (x1, y1), (160, 160, 160), 1)
+
+    x0, y0, x1, y1 = [int(round(value))
+                      for value in vlm_result["bbox_xyxy"]]
+    cv2.rectangle(annotated, (x0, y0), (x1, y1), (0, 255, 0), 4)
+    centre = (int(round((x0 + x1) / 2)), int(round((y0 + y1) / 2)))
+    expected = tuple(int(round(value)) for value in expected_pixel)
+    cv2.line(annotated, expected, centre, (255, 0, 0), 2, cv2.LINE_AA)
+    cv2.drawMarker(annotated, centre, (0, 255, 0),
+                   cv2.MARKER_CROSS, 24, 3)
+    cv2.drawMarker(annotated, expected, (255, 0, 0),
+                   cv2.MARKER_TILTED_CROSS, 24, 3)
+
+    latency = float(vlm_result.get("latency_s", 0.0))
+    if refinement is not None and "correction_norm_m" in refinement:
+        residual = f"base correction {1000.0 * float(refinement['correction_norm_m']):.1f}mm"
+    else:
+        residual_px = float(np.linalg.norm(np.asarray(centre) - np.asarray(expected)))
+        residual = f"image residual {residual_px:.1f}px"
+    labels = [
+        f"{class_name} | VLM {latency:.2f}s | {residual}",
+        "green +=VLM centre | blue X=coarse projected target",
+    ]
+    for row, label in enumerate(labels):
+        origin = (30, 55 + 38 * row)
+        cv2.putText(annotated, label, origin, cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9, (0, 0, 0), 5, cv2.LINE_AA)
+        cv2.putText(annotated, label, origin, cv2.FONT_HERSHEY_SIMPLEX,
+                    0.9, (0, 255, 0) if row == 0 else (255, 255, 255),
+                    2, cv2.LINE_AA)
+    return annotated
 
 
 def fit_local_support_plane(points_base_m, colour_pixels, target_box_xyxy,
