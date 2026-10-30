@@ -111,21 +111,10 @@ def render_wrist_refinement_annotation(image_bgr, class_name, vlm_result,
     if annotated.ndim != 3 or annotated.shape[2] != 3:
         raise ValueError("wrist annotation requires a BGR image")
 
-    for candidate in vlm_result.get("all_boxes_xyxy", []):
-        x0, y0, x1, y1 = [int(round(value)) for value in candidate]
-        cv2.rectangle(annotated, (x0, y0), (x1, y1), (160, 160, 160), 1)
-
     x0, y0, x1, y1 = [int(round(value))
                       for value in vlm_result["bbox_xyxy"]]
-    cv2.rectangle(annotated, (x0, y0), (x1, y1), (0, 255, 0), 4)
     centre = (int(round((x0 + x1) / 2)), int(round((y0 + y1) / 2)))
     expected = tuple(int(round(value)) for value in expected_pixel)
-    cv2.line(annotated, expected, centre, (255, 0, 0), 2, cv2.LINE_AA)
-    cv2.drawMarker(annotated, centre, (0, 255, 0),
-                   cv2.MARKER_CROSS, 24, 3)
-    cv2.drawMarker(annotated, expected, (255, 0, 0),
-                   cv2.MARKER_TILTED_CROSS, 24, 3)
-
     latency = float(vlm_result.get("latency_s", 0.0))
     if refinement is not None and "correction_norm_m" in refinement:
         residual = f"base correction {1000.0 * float(refinement['correction_norm_m']):.1f}mm"
@@ -143,6 +132,18 @@ def render_wrist_refinement_annotation(image_bgr, class_name, vlm_result,
         cv2.putText(annotated, label, origin, cv2.FONT_HERSHEY_SIMPLEX,
                     0.9, (0, 255, 0) if row == 0 else (255, 255, 255),
                     2, cv2.LINE_AA)
+
+    # Draw localization geometry last so the legend cannot hide a target that
+    # happens to be near the upper-left text area.
+    for candidate in vlm_result.get("all_boxes_xyxy", []):
+        cx0, cy0, cx1, cy1 = [int(round(value)) for value in candidate]
+        cv2.rectangle(annotated, (cx0, cy0), (cx1, cy1), (160, 160, 160), 1)
+    cv2.rectangle(annotated, (x0, y0), (x1, y1), (0, 255, 0), 4)
+    cv2.line(annotated, expected, centre, (255, 0, 0), 2, cv2.LINE_AA)
+    cv2.drawMarker(annotated, centre, (0, 255, 0),
+                   cv2.MARKER_CROSS, 24, 3)
+    cv2.drawMarker(annotated, expected, (255, 0, 0),
+                   cv2.MARKER_TILTED_CROSS, 24, 3)
     return annotated
 
 
