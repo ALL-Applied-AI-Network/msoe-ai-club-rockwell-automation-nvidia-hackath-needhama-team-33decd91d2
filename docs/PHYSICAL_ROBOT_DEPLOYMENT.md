@@ -70,7 +70,8 @@ It must end with `Ready for the real robot` and zero rejected actions.
 
 Normal deployment tuning lives in
 `PhysicalAI-Hackathon-2026/config/remediation_offsets.json`. Change one value at
-a time and record the exact file with every physical trial.
+a time and record the exact file with every physical trial. The canonical,
+key-by-key field reference is [REMEDIATION_OFFSETS.md](REMEDIATION_OFFSETS.md).
 
 | Setting | Meaning | Default / sign |
 |---|---|---|
@@ -164,8 +165,14 @@ the explicitly supplied trace directory). Check:
 - `height_planes.json`: fitted work-surface Z, point counts, RMS, fallback
   reason, derived rim, and any active override. The fit is frozen per rollout.
 - `tablecam_annotated/`: YOLO classes and coarse candidates.
+- `wristcam_raw/`: the unmodified wrist RGB snapshots submitted to the VLM.
+- `wristcam_annotated/`: selected VLM box and green refined centre, blue
+  TableCam-derived target, their image-space residual, VLM latency, and the
+  resulting base-frame correction. An image is written before geometric
+  validation so a rejected correction remains diagnosable.
 - `wristcam_results/`: VLM box, expected pixel, base-frame correction, latency,
-  and any wrist-depth support-plane fallback.
+  any wrist-depth support-plane fallback, and the corresponding annotated-image
+  path.
 - `trace.jsonl`: state transitions and commanded TCP poses.
 
 Do not make contact if `height_planes.json` reports a nominal fallback without

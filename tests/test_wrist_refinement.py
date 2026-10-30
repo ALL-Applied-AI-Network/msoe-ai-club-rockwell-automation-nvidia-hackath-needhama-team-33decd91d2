@@ -15,6 +15,7 @@ from src.remediation.wrist_refinement import (FINGERTIP_TCP_J6_M,  # noqa: E402
                                                fit_local_support_plane,
                                                project_base_to_wrist,
                                                refine_from_vlm_box,
+                                               render_wrist_refinement_annotation,
                                                wrist_pixel_to_plane,
                                                wrist_view_tcp)
 
@@ -83,6 +84,20 @@ class WristRefinementTests(unittest.TestCase):
                 [[0.3, 0.0, -0.005]] * 4,
                 [[800, 500], [810, 510], [820, 520], [830, 530]],
                 [900, 500, 1020, 620], [0.30, -0.02], -0.005)
+
+    def test_wrist_annotation_marks_vlm_and_coarse_centres(self):
+        image = np.zeros((240, 320, 3), dtype=np.uint8)
+        result = {
+            "bbox_xyxy": [130, 90, 170, 130],
+            "all_boxes_xyxy": [[130, 90, 170, 130]],
+            "latency_s": 2.5,
+        }
+        annotated = render_wrist_refinement_annotation(
+            image, "table_cap", result, [100, 110],
+            {"correction_norm_m": 0.004})
+        np.testing.assert_array_equal(annotated[90, 150], [0, 255, 0])
+        np.testing.assert_array_equal(annotated[110, 100], [255, 0, 0])
+        self.assertFalse(np.any(image))
 
 
 if __name__ == "__main__":

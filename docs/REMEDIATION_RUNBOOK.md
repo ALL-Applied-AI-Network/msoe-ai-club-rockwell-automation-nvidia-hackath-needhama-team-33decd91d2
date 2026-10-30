@@ -423,6 +423,9 @@ The trace directory contains:
 
 - `tablecam_raw/` — the TableCam RGB image used for each saved decision.
 - `tablecam_annotated/` — the same image with YOLO boxes, classes, and confidence.
+- `wristcam_raw/` — unmodified physical wrist-camera snapshots sent to the VLM.
+- `wristcam_annotated/` — VLM box/centre, projected coarse target, and correction
+  diagnostic for each physical wrist refinement.
 - `depth/` — viewable TableCam depth heatmaps: near surfaces are warm, far surfaces are cool, and depth discontinuities have white outlines.
 - `depth_raw/` — unchanged aligned uint16 TableCam depth in millimetres for calibration and numerical inspection.
 - `trace.jsonl` — one JSON record per TCP command: timestamp, controller state,
