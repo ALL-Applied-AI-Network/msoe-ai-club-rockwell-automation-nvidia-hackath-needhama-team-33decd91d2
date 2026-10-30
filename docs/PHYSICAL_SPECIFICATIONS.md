@@ -244,7 +244,8 @@ With `--wrist-refinement`, TableCam YOLO supplies the candidate class and coarse
 location. A target-centred wrist image is sent to FP16 LocateAnything-3B, the
 nearest returned box to the predicted wrist pixel is selected, and its centre ray
 is intersected with the cap, vial-rim, or crooked-cap surface plane. Corrections
-larger than 40 mm are rejected. The old TableCam XY offsets are not added to a
+wrist corrections are accepted without a policy-side distance bound because the
+physical cell controller enforces motion limits. The old TableCam XY offsets are not added to a
 wrist-refined result; three zero-default wrist residual offsets are available for
 measured hand-eye/TCP error. Missing-cap pickup and placement use separate views.
 The first crooked-cap view overlaps the one-time clockwise roll and the initial

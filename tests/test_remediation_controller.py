@@ -113,6 +113,8 @@ class RemediationControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RemediationController(tool, wrist_view_distance_m=0.10)
         with self.assertRaises(ValueError):
+            RemediationController(tool, wrist_crooked_view_distance_m=0.10)
+        with self.assertRaises(ValueError):
             RemediationController(tool, missing_release_side_step_m=-0.001)
         with self.assertRaises(ValueError):
             RemediationController(tool, missing_release_side_step_m=0.011)
@@ -217,7 +219,7 @@ class RemediationControllerTests(unittest.TestCase):
         self.assertFalse(any(np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
                              for action in actions))
 
-    def test_wrist_refinement_rejects_unrelated_vlm_target(self):
+    def test_wrist_refinement_accepts_correction_above_legacy_40_mm_limit(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
             wrist_refinement=True)
@@ -227,9 +229,9 @@ class RemediationControllerTests(unittest.TestCase):
             "height": 0.30,
         }
         controller.state = "await_refine_spare"
-        with self.assertRaises(ValueError):
-            controller.act({**self.obs, "wrist_refinement": {
-                "class_name": "table_cap", "base_pos_m": [0.40, -0.20, 0.006]}}, [])
+        action = controller.act({**self.obs, "wrist_refinement": {
+            "class_name": "table_cap", "base_pos_m": [0.40, -0.20, 0.006]}}, [])
+        self.assertEqual(len(action), 7)
 
     def test_wrist_crooked_refinement_orients_cone_once_while_waiting(self):
         controller = RemediationController(

@@ -137,8 +137,8 @@ Add `--wrist-refinement` to make TableCam/YOLO authoritative only for class,
 count, and coarse target identity. The arm moves to a target-centred wrist view,
 starts FP16 LocateAnything, then raises/translates/starts a safe pre-descent while
 the result is computed. The VLM box centre is ray/plane backprojected with the
-snapshot's measured joints and rejected if it is more than 40 mm from the YOLO
-candidate. No contact waypoint is emitted until that check passes. Missing-vial
+snapshot's measured joints. The physical cell controller, rather than the policy,
+enforces motion limits. No contact waypoint is emitted until a finite wrist result arrives. Missing-vial
 mouths and crooked caps follow the same contract; cone orientation overlaps the
 first crooked-cap inference. The clockwise roll is performed only once; any
 target-coordinate reach adjustment changes only the FANUC-W lean at clearance.

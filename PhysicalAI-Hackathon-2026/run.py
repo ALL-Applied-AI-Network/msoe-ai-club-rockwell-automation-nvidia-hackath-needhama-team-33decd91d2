@@ -275,6 +275,8 @@ def main() -> None:
     p.add_argument("--wrist-refinement", action="store_true",
                    help="use bounded LocateAnything wrist RGB refinement before contact")
     p.add_argument("--wrist-view-distance-m", type=float, default=0.300)
+    p.add_argument("--wrist-crooked-view-distance-m", type=float, default=0.250,
+                   help="crooked-cap wrist RGB optical distance; default 0.250 m")
     p.add_argument("--wrist-max-correction-m", type=float, default=0.040)
     p.add_argument("--wrist-table-cap-xy-offset-m", type=float, nargs=2,
                    metavar=("X", "Y"), default=DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M,
@@ -371,6 +373,7 @@ def main() -> None:
                                  vial_rim_z_m=args.vial_rim_z_m,
                                  wrist_refinement=args.wrist_refinement,
                                  wrist_view_distance_m=args.wrist_view_distance_m,
+                                 wrist_crooked_view_distance_m=args.wrist_crooked_view_distance_m,
                                  wrist_max_correction_m=args.wrist_max_correction_m,
                                  wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
                                  wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
@@ -430,6 +433,7 @@ def main() -> None:
                    vial_rim_z_m=args.vial_rim_z_m,
                    wrist_refinement=args.wrist_refinement,
                    wrist_view_distance_m=args.wrist_view_distance_m,
+                   wrist_crooked_view_distance_m=args.wrist_crooked_view_distance_m,
                    wrist_max_correction_m=args.wrist_max_correction_m,
                    wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
                    wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,

@@ -373,17 +373,15 @@ height, and cap axis remain eligible for its own wrist-camera refinement. This i
 short-lived perception memory; it does not look up a tray or G-slot coordinate.
 
 The physical cone handoff remains vertical for the clockwise wrist roll
-`(-180, 0, 0) -> (-180, 0, -90)`, then leans through FANUC W to
-the steepest reachable posture. The nominal 45-degree lean is `(135, 0, -90)`;
-the controller tries 45, 40, ... 0 degrees using the observed base-frame XYZ,
-the current joints, the calibrated tool, and both clearance/contact endpoints.
-For example, the qualified scene's far-side target selects the reachable
-25-degree `(155, 0, -90)` pose. This is a continuous arm-relative calculation,
-not a lookup by tray/G-slot identity. The clockwise roll occurs once; a lean
-change for a closer or farther vial occurs only at clearance, and each cone-tip
-press remains vertically downward. Do not express this lean as `P=45`: that
-bends the real arm across the wrong axis and invalidates the cone-tip position
-compensation.
+`(-180, 0, 0) -> (-180, 0, -90)`, then leans through FANUC W. The October 30
+supervised trial verified that the physical mount needs the opposite W branch
+from the retained Isaac visual: the nominal physical lean is `(-135, 0, -90)`,
+while simulation retains `(135, 0, -90)`. The physical policy keeps the verified
+fixed `-135` branch; simulation may reduce its positive-W lean using the observed
+base-frame XYZ and its IK reachability check. The clockwise roll occurs once and
+each cone-tip press remains vertically downward. Do not express this lean as
+`P=45`: that bends the real arm across the wrong axis and invalidates the
+cone-tip position compensation.
 
 Loose `table_cap` depth is optional because the real depth camera may not return
 pixels from the cap material. In that case pickup uses the YOLO box-centre ray

@@ -56,6 +56,7 @@ DEFAULT_TABLE_CAP_XY_OFFSET_M = (0.0, 0.0)
 DEFAULT_MISSING_CAP_XY_OFFSET_M = (0.0, 0.0)
 DEFAULT_CROOKED_CAP_XY_OFFSET_M = (0.0, 0.0)
 DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
+PHYSICAL_CONE_PRESS_W_DEG = -135.0
 GRIPPER_OPEN = 0.0
 TRANSIT_UF0_Z_MM = float(base_to_uf0([0.0, 0.0, transit_base_z()])[2])
 HOVER_ABOVE_CAP_M = 0.075
@@ -76,8 +77,8 @@ def provisional_contact_tool(allowed, pick_offset_m, place_offset_m, press_offse
         )
     values = [pick_offset_m, place_offset_m, press_offset_m]
     for name, value in zip(("pick", "place", "press"), values):
-        if not np.isfinite(value) or abs(value) > 0.025:
-            raise ValueError(f"--{name}-offset-m must be within +/-0.025 m")
+        if not np.isfinite(value):
+            raise ValueError(f"--{name}-offset-m must be finite")
     return ContactTool(*values, validated=True)
 
 
@@ -121,6 +122,7 @@ class Policy:
                  pickup_wiggle_radius_m=0.0, pickup_wiggle_cycles=0,
                  work_surface_z_m=-0.0051, vial_rim_z_m=None,
                  wrist_refinement=False, wrist_view_distance_m=0.300,
+                 wrist_crooked_view_distance_m=0.250,
                  wrist_max_correction_m=0.040,
                  wrist_table_cap_xy_offset_m=DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M,
                  wrist_missing_cap_xy_offset_m=DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
@@ -216,8 +218,8 @@ class Policy:
         else:
             effective_press_offset_m = float(cone_press_z_offset_m)
             cone_press_z_source = "cone_press_z_offset_m"
-        if not 0.0 <= float(pickup_z_offset_m) <= 0.025:
-            raise ValueError("pickup_z_offset_m must be between 0 and 0.025 m")
+        if not np.isfinite(float(pickup_z_offset_m)):
+            raise ValueError("pickup_z_offset_m must be finite")
         cone_heading_deg = float(cone_heading_deg)
         if not np.isfinite(cone_heading_deg) or not -180.0 <= cone_heading_deg <= 180.0:
             raise ValueError("cone_heading_deg must be between -180 and 180 degrees")
@@ -229,7 +231,10 @@ class Policy:
             crooked_tap_depth_m=crooked_tap_depth_m,
             crooked_action=crooked_action,
             cone_tip_from_tcp_m=cone_tip_from_tcp_m,
-            cone_press_wpr_deg=(135.0, 0.0, cone_heading_deg),
+            # The physical cone is mounted on the opposite FANUC-W side from
+            # the retained Isaac visual.  The October 30 supervised trial
+            # verified that +135 leans the real arm the wrong way.
+            cone_press_wpr_deg=(PHYSICAL_CONE_PRESS_W_DEG, 0.0, cone_heading_deg),
             cone_wpr_selector=None,
             cone_press_below_rim_m=cone_press_below_rim_m,
             cone_press_stroke_m=cone_press_stroke_m,
@@ -244,6 +249,7 @@ class Policy:
             pickup_wiggle_cycles=pickup_wiggle_cycles,
             wrist_refinement=wrist_refinement,
             wrist_view_distance_m=wrist_view_distance_m,
+            wrist_crooked_view_distance_m=wrist_crooked_view_distance_m,
             wrist_table_cap_xy_offset_m=wrist_table_cap_xy_offset_m,
             wrist_missing_cap_xy_offset_m=wrist_missing_cap_xy_offset_m,
             wrist_crooked_cap_xy_offset_m=wrist_crooked_cap_xy_offset_m,
@@ -251,8 +257,8 @@ class Policy:
             if self.full_remediation else None)
         self.wrist_refinement = bool(wrist_refinement and self.full_remediation)
         self.wrist_max_correction_m = float(wrist_max_correction_m)
-        if not 0.005 <= self.wrist_max_correction_m <= 0.060:
-            raise ValueError("wrist maximum correction must be between 0.005 and 0.060 m")
+        if not np.isfinite(self.wrist_max_correction_m):
+            raise ValueError("wrist maximum correction must be finite")
         self.wrist_vlm = None
         self.wrist_pool = None
         if self.wrist_refinement:
@@ -325,11 +331,13 @@ class Policy:
             "cone_press_below_rim_m": float(cone_press_below_rim_m),
             "cone_press_stroke_m": float(cone_press_stroke_m),
             "cone_heading_deg": cone_heading_deg,
+            "cone_press_wpr_deg": list(self.controller.cone_press_wpr_deg),
             "missing_release_side_step_m": float(missing_release_side_step_m),
             "missing_release_exit_step_m": float(missing_release_exit_step_m),
             "wrist_refinement": self.wrist_refinement,
             "wrist_colour_size": list(self.IMAGE_SIZE),
             "wrist_view_distance_m": float(wrist_view_distance_m),
+            "wrist_crooked_view_distance_m": float(wrist_crooked_view_distance_m),
             "wrist_max_correction_m": self.wrist_max_correction_m,
             "wrist_table_cap_xy_offset_m": np.asarray(
                 wrist_table_cap_xy_offset_m, dtype=float).tolist(),
@@ -728,7 +736,7 @@ class Policy:
                 "request": {key: value for key, value in request.items()
                             if key not in ("future", "depth")},
                 "vlm": result, "refinement": refinement,
-            }, indent=2) + "\n")
+            }, indent=2, default=self._json) + "\n")
             self.events.append({"event": "wrist_vlm_refinement", **refinement})
             refinements.append(refinement)
         if class_name == "crooked_cap":
