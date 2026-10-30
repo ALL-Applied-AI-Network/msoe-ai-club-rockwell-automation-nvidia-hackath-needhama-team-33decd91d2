@@ -50,6 +50,8 @@ class PolicyParityContractTests(unittest.TestCase):
         self.assertIn(
             'cone_press_wpr_deg=(PHYSICAL_CONE_PRESS_W_DEG, 0.0, cone_heading_deg)',
             physical)
+        self.assertGreaterEqual(physical.count("indent=2, default=self._json"), 2)
+        self.assertIn("MOTION_SETTLE_ROWS = 5", physical)
         self.assertNotIn('state == "crooked_observe_axis"', physical)
         self.assertNotIn("ctrl.state == 'crooked_observe_axis'", (
             ROOT / "src/remediation/run_compliant_breakable_remediation.py").read_text())

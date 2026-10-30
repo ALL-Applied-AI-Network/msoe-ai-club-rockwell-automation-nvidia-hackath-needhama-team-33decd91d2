@@ -299,9 +299,8 @@ class RemediationController:
     @staticmethod
     def _checked_xy_offset(value, name):
         offset = np.asarray(value, dtype=float)
-        if (offset.shape != (2,) or not np.isfinite(offset).all() or
-                np.any(np.abs(offset) > 0.025)):
-            raise ValueError(f"{name} XY offset must contain two finite values within +/-0.025 m")
+        if offset.shape != (2,) or not np.isfinite(offset).all():
+            raise ValueError(f"{name} XY offset must contain two finite values")
         return offset
 
     def _add_inspection(self, closed=False):

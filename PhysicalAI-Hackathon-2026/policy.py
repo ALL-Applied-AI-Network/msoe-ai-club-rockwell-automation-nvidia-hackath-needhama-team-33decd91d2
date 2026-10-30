@@ -64,6 +64,7 @@ HOVER_ABOVE_CAP_M = 0.075
 INSPECTION_UF0_MM = base_to_uf0(inspection_base_position())
 MAX_ROW_TRANSLATION_MM = 9.0
 MAX_ROW_WPR_DEG = 5.0
+MOTION_SETTLE_ROWS = 5
 ARRIVAL_TRANSLATION_MM = 1.5
 ARRIVAL_ORIENTATION_DEG = 2.0
 # Only used by the local mock, which has no initial TCP pose.
@@ -715,7 +716,7 @@ class Policy:
                 "request": public_request, "vlm": result,
                 "annotated_image": (str(annotated_relative)
                                     if annotation_written else None),
-            }, indent=2) + "\n")
+            }, indent=2, default=self._json) + "\n")
             plane_z = request["plane_z_m"]
             support_plane = None
             support_plane_fallback = None
@@ -871,6 +872,12 @@ class Policy:
             xyz = current[:3] + fraction * delta
             wpr = current[3:6] + fraction * angular
             chunk.append([*map(float, xyz), *map(float, wpr), float(goal[6])])
+        # The real FANUC follows streamed targets slightly behind the nominal
+        # 10 Hz sequence. Keep the final target queued for 0.5 s so the arm can
+        # settle before the next observation is judged against the waypoint.
+        # Without this tail, the policy repeatedly issued short correction
+        # chunks from stale 5-37 mm-behind poses, producing stop/start motion.
+        chunk.extend([chunk[-1].copy() for _ in range(MOTION_SETTLE_ROWS)])
         return chunk
 
     def _dispatch(self, obs, desired):

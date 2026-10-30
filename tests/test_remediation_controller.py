@@ -104,8 +104,12 @@ class RemediationControllerTests(unittest.TestCase):
             RemediationController(tool, pickup_wiggle_radius_m=0.0051)
         with self.assertRaises(ValueError):
             RemediationController(tool, pickup_wiggle_cycles=3)
-        with self.assertRaises(ValueError):
-            RemediationController(tool, table_cap_xy_offset_m=(0.026, 0.0))
+        controller = RemediationController(
+            tool, table_cap_xy_offset_m=(0.100, -0.100),
+            wrist_crooked_cap_xy_offset_m=(-0.100, 0.100))
+        np.testing.assert_allclose(controller.table_cap_xy_offset_m, [0.100, -0.100])
+        np.testing.assert_allclose(
+            controller.wrist_crooked_cap_xy_offset_m, [-0.100, 0.100])
         with self.assertRaises(ValueError):
             RemediationController(tool, missing_cap_xy_offset_m=(0.0,))
         with self.assertRaises(ValueError):

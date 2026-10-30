@@ -17,9 +17,13 @@ continues to use `(135, 0, -90)`.
 Crooked-cap wrist inspection uses a 250 mm optical working distance by default,
 while loose-cap and missing-vial views retain 300 mm. The route translates at
 tray clearance before descending vertically to the lower camera view.
-Policy-side numeric bounds on pickup clearance and wrist XY correction are not
-enforced; the physical cell controller is the motion-limit authority. The policy
-still rejects non-finite values and records the requested values in its trace.
+Policy-side numeric bounds on pickup clearance and configured target XY offsets,
+including wrist corrections, are not enforced; the physical cell controller is
+the motion-limit authority. The policy still rejects incorrectly shaped or
+non-finite values and records the requested values in its trace.
+Every streamed motion ends with five repeated copies of its final target (0.5 s
+at the cell's 10 Hz rate), allowing the physical arm's normal tracking lag to
+settle without stop/start correction chunks.
 
 ## 1. Before entering the cell
 
