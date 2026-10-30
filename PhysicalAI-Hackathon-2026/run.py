@@ -29,6 +29,7 @@ from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
                     DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
                     DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
                     DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                    DEFAULT_PICKUP_SLIDE_X_M,
                     DEFAULT_PICKUP_Z_OFFSET_M,
                     DEFAULT_TABLE_CAP_XY_OFFSET_M,
                     DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
@@ -236,6 +237,9 @@ def main() -> None:
     p.add_argument("--pickup-z-offset-m", type=float,
                    default=DEFAULT_PICKUP_Z_OFFSET_M,
                    help="fingertip clearance above the local table plane during table-cap pickup (default from config/remediation_offsets.json)")
+    p.add_argument("--pickup-slide-x-m", type=float,
+                   default=DEFAULT_PICKUP_SLIDE_X_M,
+                   help="base-frame X offset for the low pickup approach; descend there, then slide to the cap")
     p.add_argument("--work-surface-z-offset-m", type=float,
                    default=DEFAULT_WORK_SURFACE_Z_OFFSET_M,
                    help="signed correction added to the per-run TableCam depth plane")
@@ -346,6 +350,7 @@ def main() -> None:
                                  cone_press_z_offset_m=args.cone_press_z_offset_m,
                                  cone_table_pick_offset_m=args.cone_table_pick_offset_m,
                                  pickup_z_offset_m=args.pickup_z_offset_m,
+                                 pickup_slide_x_m=args.pickup_slide_x_m,
                                  work_surface_z_offset_m=args.work_surface_z_offset_m,
                                  table_plane_offset_m=args.table_plane_offset_m,
                                  table_cap_xy_offset_m=args.table_cap_xy_offset_m,
@@ -406,6 +411,7 @@ def main() -> None:
                    cone_press_z_offset_m=args.cone_press_z_offset_m,
                    cone_table_pick_offset_m=args.cone_table_pick_offset_m,
                    pickup_z_offset_m=args.pickup_z_offset_m,
+                   pickup_slide_x_m=args.pickup_slide_x_m,
                    work_surface_z_offset_m=args.work_surface_z_offset_m,
                    table_plane_offset_m=args.table_plane_offset_m,
                    table_cap_xy_offset_m=args.table_cap_xy_offset_m,

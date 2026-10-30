@@ -194,7 +194,8 @@ class RemediationController:
                  crooked_shoulder_depth_m=0.0326838, crooked_tap_depth_m=0.005,
                  crooked_action="shoulder", crooked_wiggle_radius_m=0.00075,
                  crooked_wiggle_cycles=1, pickup_wiggle_radius_m=0.0,
-                 pickup_wiggle_cycles=0, vial_rim_z_m=None,
+                 pickup_wiggle_cycles=0, pickup_slide_x_m=0.0,
+                 vial_rim_z_m=None,
                  cone_tip_from_tcp_m=DEFAULT_CONE_TIP_FROM_TCP_M,
                  cone_wrist_wpr_deg=DEFAULT_CONE_WRIST_WPR_DEG,
                  cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
@@ -238,10 +239,13 @@ class RemediationController:
             raise ValueError("crooked wiggle cycles must be between 0 and 3")
         self.pickup_wiggle_radius_m = float(pickup_wiggle_radius_m)
         self.pickup_wiggle_cycles = int(pickup_wiggle_cycles)
+        self.pickup_slide_x_m = float(pickup_slide_x_m)
         if not 0.0 <= self.pickup_wiggle_radius_m <= 0.005:
             raise ValueError("pickup wiggle radius must be between 0 and 0.005 m")
         if not 0 <= self.pickup_wiggle_cycles <= 2:
             raise ValueError("pickup wiggle cycles must be between 0 and 2")
+        if not np.isfinite(self.pickup_slide_x_m):
+            raise ValueError("pickup slide X offset must be finite")
         self.cone_tip_from_tcp_m = np.asarray(cone_tip_from_tcp_m, dtype=float)
         self.cone_wrist_wpr_deg = tuple(np.asarray(cone_wrist_wpr_deg, dtype=float))
         self.cone_press_wpr_deg = tuple(np.asarray(cone_press_wpr_deg, dtype=float))
@@ -816,9 +820,12 @@ class RemediationController:
         else:
             spare_pos = (np.asarray(spare["base_pos_m"], dtype=float) +
                          np.r_[self.table_cap_xy_offset_m, 0.0])
-            self._add([spare_pos[0], spare_pos[1], height], False)
-            self._add(spare_pos + [0, 0, 0.025], False)
             pick = spare_pos + [0, 0, self.tool.pick_offset_m]
+            slide_start = pick + [self.pickup_slide_x_m, 0, 0]
+            self._add([slide_start[0], slide_start[1], height], False)
+            self._add(slide_start + [0, 0, 0.025], False)
+            self._add(slide_start, False)
+            self._add(pick, False)
             self._add(pick, False)
             radius = self.pickup_wiggle_radius_m
             for _ in range(self.pickup_wiggle_cycles):
@@ -861,9 +868,10 @@ class RemediationController:
             # height to align the TCP over the coarse target, then descend.
             # Raising back to tray transit here wasted the VLM overlap window
             # and crossed an avoidable ER-4iA wrist singularity.
-            align_z = max(current[2], spare[2] + 0.050)
-            self._add([spare[0], spare[1], align_z], False)
-            self._add(spare + [0, 0, 0.025], False)
+            approach = spare + [self.pickup_slide_x_m, 0, 0]
+            align_z = max(current[2], approach[2] + 0.050)
+            self._add([approach[0], approach[1], align_z], False)
+            self._add(approach + [0, 0, 0.025], False)
             self.state = "await_refine_spare"
             return self.queue.popleft()
         if self.state == "await_refine_spare":
@@ -873,7 +881,9 @@ class RemediationController:
                 return self.hold(obs)
             spare_pos = refined + np.r_[self.wrist_table_cap_xy_offset_m, 0.0]
             pick = spare_pos + [0, 0, self.tool.pick_offset_m]
-            self._add(spare_pos + [0, 0, 0.025], False)
+            slide_start = pick + [self.pickup_slide_x_m, 0, 0]
+            self._add(slide_start + [0, 0, 0.025], False)
+            self._add(slide_start, False)
             self._add(pick, False)
             radius = self.pickup_wiggle_radius_m
             for _ in range(self.pickup_wiggle_cycles):

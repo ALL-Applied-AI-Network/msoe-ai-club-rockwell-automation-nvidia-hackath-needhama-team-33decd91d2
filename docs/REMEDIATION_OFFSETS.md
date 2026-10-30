@@ -21,6 +21,18 @@ policy after editing it. Every physical run copies the effective values into
   additional 3 mm.”
 - Affects: loose `table_cap` pickup only.
 
+### `pickup_slide_x_m`
+
+- Default: `-0.04`
+- Meaning: the gripper first approaches a point offset from the vision-refined
+  loose-cap position in robot-base X, descends to pickup height there, then
+  slides horizontally into the cap before closing.
+- Direction: negative approaches from robot-base `-X`; `-0.04` starts the
+  slide 40 mm away in that direction. Set to `0.0` for a vertical pickup.
+- Affects: loose `table_cap` pickup only, with or without wrist refinement.
+- Safety: travel to the offset point occurs at the normal tray-clearance
+  height. Only the final 40 mm segment is performed at pickup height.
+
 ### `work_surface_z_offset_m`
 
 - Default: `0.0`

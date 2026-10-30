@@ -130,7 +130,7 @@ class RemediationControllerTests(unittest.TestCase):
     def test_wrist_refinement_stages_spare_then_corrects_before_pickup(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
-            wrist_refinement=True)
+            wrist_refinement=True, pickup_slide_x_m=-0.040)
         missing = self.detection("missing_cap", [0.31, 0.02, rim_base_z()])
         spare = self.detection("table_cap", [0.34, -0.20, 0.006], depth=False)
         controller.act(self.obs, [missing, spare])
@@ -143,7 +143,7 @@ class RemediationControllerTests(unittest.TestCase):
             coarse_actions.append(controller.act(self.obs, []))
         self.assertEqual(controller.state, "await_refine_spare")
         np.testing.assert_allclose(
-            coarse_actions[-1][:3], base_to_uf0([0.34, -0.20, 0.031]), atol=1e-9)
+            coarse_actions[-1][:3], base_to_uf0([0.30, -0.20, 0.031]), atol=1e-9)
         self.assertGreater(coarse_actions[0][2], coarse_actions[-1][2])
 
         refined = [0.321, -0.184, 0.006]
@@ -151,12 +151,35 @@ class RemediationControllerTests(unittest.TestCase):
             "class_name": "table_cap", "base_pos_m": refined}}, [])
         self.assertEqual(controller.state, "pickup")
         np.testing.assert_allclose(
-            correction[:3], base_to_uf0([refined[0], refined[1], 0.031]), atol=1e-9)
+            correction[:3],
+            base_to_uf0([refined[0] - 0.040, refined[1], 0.031]), atol=1e-9)
         # No old TableCam empirical offset is added after wrist localization.
         queued = list(controller.queue)
         pick_actions = [action for action in queued if action[6] == 0.0]
-        self.assertTrue(any(np.allclose(action[:2], np.array(refined[:2]) * 1000)
-                            for action in pick_actions))
+        pickup_base = [uf0_to_base(action[:3]) for action in pick_actions]
+        np.testing.assert_allclose(pickup_base[0],
+                                   [refined[0] - 0.040, refined[1], refined[2]])
+        np.testing.assert_allclose(pickup_base[1], refined)
+
+    def test_table_cap_pickup_descends_at_x_offset_then_slides_before_closing(self):
+        controller = RemediationController(
+            ContactTool(-0.006, 0.0, 0.0, validated=True),
+            pickup_slide_x_m=-0.040)
+        missing = self.detection("missing_cap", [0.31, 0.02, 0.01])
+        spare = self.detection("table_cap", [0.34, -0.20, 0.02])
+        actions = [controller.act(self.obs, [missing, spare])]
+        while controller.queue:
+            actions.append(controller.act(self.obs, []))
+
+        open_base = [uf0_to_base(action[:3]) for action in actions
+                     if action[6] == 0.0]
+        slide_start = np.array([0.30, -0.20, 0.014])
+        pick = np.array([0.34, -0.20, 0.014])
+        start_i = next(i for i, point in enumerate(open_base)
+                       if np.allclose(point, slide_start))
+        np.testing.assert_allclose(open_base[start_i + 1], pick)
+        first_closed = next(action for action in actions if action[6] == 1.0)
+        np.testing.assert_allclose(uf0_to_base(first_closed[:3]), pick)
 
     def test_centred_wrist_view_clamps_only_camera_staging_pose_at_workspace_edge(self):
         from src.remediation.wrist_refinement import fingertip_tcp_from_joints

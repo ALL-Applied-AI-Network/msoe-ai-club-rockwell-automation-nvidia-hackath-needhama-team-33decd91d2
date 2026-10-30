@@ -37,6 +37,7 @@ DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
 OFFSETS_PATH = Path(__file__).resolve().parent / "config" / "remediation_offsets.json"
 _OFFSETS = json.loads(OFFSETS_PATH.read_text())
 DEFAULT_PICKUP_Z_OFFSET_M = float(_OFFSETS["pickup_z_offset_m"])
+DEFAULT_PICKUP_SLIDE_X_M = float(_OFFSETS["pickup_slide_x_m"])
 DEFAULT_WORK_SURFACE_Z_OFFSET_M = float(_OFFSETS["work_surface_z_offset_m"])
 DEFAULT_VIAL_RIM_PLANE_OFFSET_M = float(_OFFSETS["vial_rim_plane_offset_m"])
 DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M = float(_OFFSETS["vial_rim_plane_override_m"])
@@ -109,6 +110,7 @@ class Policy:
                  cone_heading_deg=-90.0,
                  cone_table_pick_offset_m=None,
                  pickup_z_offset_m=DEFAULT_PICKUP_Z_OFFSET_M,
+                 pickup_slide_x_m=DEFAULT_PICKUP_SLIDE_X_M,
                  work_surface_z_offset_m=DEFAULT_WORK_SURFACE_Z_OFFSET_M,
                  vial_rim_plane_offset_m=DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
                  vial_rim_plane_override_m=DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
@@ -249,6 +251,7 @@ class Policy:
             crooked_wiggle_cycles=crooked_wiggle_cycles,
             pickup_wiggle_radius_m=pickup_wiggle_radius_m,
             pickup_wiggle_cycles=pickup_wiggle_cycles,
+            pickup_slide_x_m=pickup_slide_x_m,
             wrist_refinement=wrist_refinement,
             wrist_view_distance_m=wrist_view_distance_m,
             wrist_crooked_view_distance_m=wrist_crooked_view_distance_m,
@@ -297,6 +300,7 @@ class Policy:
             "pick_offset_m": None if pick_offset_m is None else float(pick_offset_m),
             "effective_pick_offset_m": float(effective_pick_offset_m),
             "pickup_z_offset_m": float(pickup_z_offset_m),
+            "pickup_slide_x_m": float(pickup_slide_x_m),
             "pickup_z_offset_convention": "fingertip clearance above local table plane",
             "pickup_z_source": pickup_z_source,
             "nominal_work_surface_z_m": self.nominal_work_surface_z,
