@@ -56,7 +56,15 @@ class PolicyParityContractTests(unittest.TestCase):
             ROOT / "PhysicalAI-Hackathon-2026/config/remediation_offsets.json").read_text())
         self.assertEqual(config, {
             "pickup_z_offset_m": 0.003,
-            "table_plane_offset_m": 0.0,
+            "work_surface_z_offset_m": 0.0,
+            "vial_rim_plane_offset_m": 0.0,
+            "vial_rim_plane_override_m": 0.0,
+            "vial_height_override_m": 0.0,
+            "missing_release_z_offset_m": 0.0,
+            "cone_press_z_offset_m": 0.0,
+            "wrist_table_cap_xy_offset_m": [0.0, 0.0],
+            "wrist_missing_cap_xy_offset_m": [0.0, 0.0],
+            "wrist_crooked_cap_xy_offset_m": [0.0, 0.0],
             "missing_release_side_step_m": 0.001,
             "missing_release_exit_step_m": 0.002,
         })

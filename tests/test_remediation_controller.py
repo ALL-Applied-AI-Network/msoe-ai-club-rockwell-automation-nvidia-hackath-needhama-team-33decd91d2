@@ -680,15 +680,47 @@ class RemediationControllerTests(unittest.TestCase):
         np.testing.assert_allclose(
             uf0_to_base(route[2][:3])[:2], centroid[:2], atol=1e-12)
 
-    def test_cone_press_rejects_missing_depth_axis(self):
+    def test_fixed_cone_press_does_not_require_unused_depth_axis(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
             crooked_action="cone-press")
         action = controller.act(
             self.obs, [self.detection("crooked_cap", [0.31, 0.02, 0.21])])
+        self.assertTrue(controller.queue)
+        self.assertEqual(action[6], 1.0)
+        self.assertFalse(any("cap axis" in event.get("reason", "")
+                             for event in controller.events))
+
+    def test_wrist_cone_route_accepts_depthless_coarse_candidate(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", wrist_refinement=True)
+        detection = self.detection(
+            "crooked_cap", [0.31, 0.02, 0.21], depth=False)
+        detection["surface_top_base_z_m"] = None
+
+        action = controller.act(self.obs, [detection])
+
+        self.assertEqual(controller.state, "refine_crooked")
+        self.assertTrue(controller.queue)
+        self.assertEqual(action[6], 0.0)
+
+    def test_wrist_cone_route_rejects_finite_robot_height_false_positive(self):
+        controller = RemediationController(
+            ContactTool(0.0, 0.0, 0.0005, validated=True),
+            crooked_action="cone-press", wrist_refinement=True)
+        detection = self.detection(
+            "crooked_cap", [0.31, 0.02, 0.21], depth=True)
+        detection["surface_top_base_z_m"] = 0.425
+
+        action = controller.act(self.obs, [detection])
+
+        self.assertEqual(controller.state, "inspect")
+        self.assertFalse(controller.queue)
         np.testing.assert_allclose(action[:6], self.tcp)
-        self.assertTrue(any("aligned-depth cap axis" in event.get("reason", "")
-                            for event in controller.events))
+        self.assertTrue(any(
+            "surface height outside physical range" in event.get("reason", "")
+            for event in controller.events))
 
     def test_impossible_crooked_surface_height_is_rejected(self):
         detection = self.detection("crooked_cap", [0.31, 0.02, 0.35])

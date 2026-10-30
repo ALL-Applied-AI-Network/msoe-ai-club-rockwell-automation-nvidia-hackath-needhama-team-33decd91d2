@@ -23,13 +23,21 @@ from pathlib import Path
 
 from cell_client import CellClient, run_all
 from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
+                    DEFAULT_CONE_PRESS_Z_OFFSET_M,
                     DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_MISSING_RELEASE_Z_OFFSET_M,
                     DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
                     DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
                     DEFAULT_MISSING_CAP_XY_OFFSET_M,
                     DEFAULT_PICKUP_Z_OFFSET_M,
                     DEFAULT_TABLE_CAP_XY_OFFSET_M,
-                    DEFAULT_TABLE_PLANE_OFFSET_M, Policy)
+                    DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
+                    DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
+                    DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
+                    DEFAULT_WORK_SURFACE_Z_OFFSET_M,
+                    DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
+                    DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M, Policy)
 
 HERE = Path(__file__).resolve().parent
 SUBMISSION = HERE / "submission" / "submission.yaml"
@@ -228,17 +236,27 @@ def main() -> None:
     p.add_argument("--pickup-z-offset-m", type=float,
                    default=DEFAULT_PICKUP_Z_OFFSET_M,
                    help="fingertip clearance above the local table plane during table-cap pickup (default from config/remediation_offsets.json)")
-    p.add_argument("--table-plane-offset-m", type=float,
-                   default=DEFAULT_TABLE_PLANE_OFFSET_M,
-                   help="signed correction added to fitted or calibrated table Z (default from config/remediation_offsets.json)")
+    p.add_argument("--work-surface-z-offset-m", type=float,
+                   default=DEFAULT_WORK_SURFACE_Z_OFFSET_M,
+                   help="signed correction added to the per-run TableCam depth plane")
+    p.add_argument("--table-plane-offset-m", type=float, default=None,
+                   help="deprecated alias for --work-surface-z-offset-m")
     p.add_argument("--pick-offset-m", type=float, default=None,
                    help="legacy signed pickup correction; positive raises and overrides --pickup-z-offset-m")
     p.add_argument("--cone-table-pick-offset-m", type=float,
                    default=None,
                    help="optional cone-workflow table-cap pickup Z correction; "
                         "default uses --pick-offset-m")
-    p.add_argument("--place-offset-m", type=float, default=0.0)
-    p.add_argument("--press-offset-m", type=float, default=0.0)
+    p.add_argument("--missing-release-z-offset-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_Z_OFFSET_M,
+                   help="positive-up Z correction for opening the gripper over a missing vial")
+    p.add_argument("--cone-press-z-offset-m", type=float,
+                   default=DEFAULT_CONE_PRESS_Z_OFFSET_M,
+                   help="positive-up residual correction for the cone contact endpoint")
+    p.add_argument("--place-offset-m", type=float, default=None,
+                   help="deprecated alias for --missing-release-z-offset-m")
+    p.add_argument("--press-offset-m", type=float, default=None,
+                   help="deprecated alias for --cone-press-z-offset-m")
     p.add_argument("--missing-release-side-step-m", type=float,
                    default=DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
                    help="small jaw-axis clearance after opening on a placed cap")
@@ -259,14 +277,26 @@ def main() -> None:
     p.add_argument("--wrist-view-distance-m", type=float, default=0.300)
     p.add_argument("--wrist-max-correction-m", type=float, default=0.040)
     p.add_argument("--wrist-table-cap-xy-offset-m", type=float, nargs=2,
-                   metavar=("X", "Y"), default=(0.0, 0.0))
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
     p.add_argument("--wrist-missing-cap-xy-offset-m", type=float, nargs=2,
-                   metavar=("X", "Y"), default=(0.0, 0.0))
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
     p.add_argument("--wrist-crooked-cap-xy-offset-m", type=float, nargs=2,
-                   metavar=("X", "Y"), default=(0.0, 0.0))
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
     p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
+    p.add_argument("--vial-rim-plane-offset-m", type=float,
+                   default=DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
+                   help="signed correction added after deriving rim Z from the fitted surface")
+    p.add_argument("--vial-rim-plane-override-m", type=float,
+                   default=DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
+                   help="absolute rim Z; zero keeps automatic plane fitting")
+    p.add_argument("--vial-height-override-m", type=float,
+                   default=DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
+                   help="measured vial height; zero uses the 203.2 mm specification")
     p.add_argument("--vial-rim-z-m", type=float,
-                   help="explicit vial-rim Z override; default derives from work surface and known dimensions")
+                   help="deprecated nonzero alias for --vial-rim-plane-override-m")
     p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
     p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
                    help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
@@ -310,8 +340,11 @@ def main() -> None:
                                  allow_provisional_contact=args.allow_provisional_contact,
                                  pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                                  press_offset_m=args.press_offset_m,
+                                 missing_release_z_offset_m=args.missing_release_z_offset_m,
+                                 cone_press_z_offset_m=args.cone_press_z_offset_m,
                                  cone_table_pick_offset_m=args.cone_table_pick_offset_m,
                                  pickup_z_offset_m=args.pickup_z_offset_m,
+                                 work_surface_z_offset_m=args.work_surface_z_offset_m,
                                  table_plane_offset_m=args.table_plane_offset_m,
                                  table_cap_xy_offset_m=args.table_cap_xy_offset_m,
                                  missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
@@ -332,6 +365,9 @@ def main() -> None:
                                  pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
                                  pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                                  work_surface_z_m=args.work_surface_z_m,
+                                 vial_rim_plane_offset_m=args.vial_rim_plane_offset_m,
+                                 vial_rim_plane_override_m=args.vial_rim_plane_override_m,
+                                 vial_height_override_m=args.vial_height_override_m,
                                  vial_rim_z_m=args.vial_rim_z_m,
                                  wrist_refinement=args.wrist_refinement,
                                  wrist_view_distance_m=args.wrist_view_distance_m,
@@ -363,8 +399,11 @@ def main() -> None:
                    allow_provisional_contact=args.allow_provisional_contact,
                    pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
                    press_offset_m=args.press_offset_m,
+                   missing_release_z_offset_m=args.missing_release_z_offset_m,
+                   cone_press_z_offset_m=args.cone_press_z_offset_m,
                    cone_table_pick_offset_m=args.cone_table_pick_offset_m,
                    pickup_z_offset_m=args.pickup_z_offset_m,
+                   work_surface_z_offset_m=args.work_surface_z_offset_m,
                    table_plane_offset_m=args.table_plane_offset_m,
                    table_cap_xy_offset_m=args.table_cap_xy_offset_m,
                    missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
@@ -385,6 +424,9 @@ def main() -> None:
                    pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
                    pickup_wiggle_cycles=args.pickup_wiggle_cycles,
                    work_surface_z_m=args.work_surface_z_m,
+                   vial_rim_plane_offset_m=args.vial_rim_plane_offset_m,
+                   vial_rim_plane_override_m=args.vial_rim_plane_override_m,
+                   vial_height_override_m=args.vial_height_override_m,
                    vial_rim_z_m=args.vial_rim_z_m,
                    wrist_refinement=args.wrist_refinement,
                    wrist_view_distance_m=args.wrist_view_distance_m,

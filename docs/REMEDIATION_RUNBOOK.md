@@ -1,5 +1,8 @@
 # Remediation runbook
 
+For the focused physical-cell operator checklist, one-T4 perception smoke test,
+and offset-tuning sequence, see [PHYSICAL_ROBOT_DEPLOYMENT.md](PHYSICAL_ROBOT_DEPLOYMENT.md).
+
 This is the reproducible path for the synthetic-data, TableCam perception, and
 Isaac Sim remediation workflow. New generated files live under `shared/runs/`
 so the team can inspect them; historical local archives remain under
@@ -307,8 +310,8 @@ TCP upward relative to the RGB-D point:
 
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
-  --pickup-z-offset-m 0.003 --table-plane-offset-m 0.000 \
-  --place-offset-m 0.010 --press-offset-m 0.010 \
+  --pickup-z-offset-m 0.003 --work-surface-z-offset-m 0.000 \
+  --missing-release-z-offset-m 0.010 --cone-press-z-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m=-0.005
 ```
 
@@ -319,19 +322,13 @@ over the vial. The controls have distinct effects:
 - `--pickup-z-offset-m`: fingertip/end clearance above the local table plane
   during loose-cap pickup. Default `0.003` m from
   `PhysicalAI-Hackathon-2026/config/remediation_offsets.json`.
-- `--table-plane-offset-m`: signed correction added to either a valid local
-  wrist-stereo table fit or the calibrated table fallback. Default `0` in the
-  same JSON file. It affects table-cap pickup only.
+- `--work-surface-z-offset-m`: signed correction added to both the once-per-run
+  TableCam depth fit and local wrist-stereo support fits. Default `0`.
 - `--pick-offset-m` and `--cone-table-pick-offset-m`: retained positive-up
   compatibility overrides for older launch commands. The Isaac adapter's
   STEP-derived default remains `-0.006` m.
-- `--table-cap-xy-offset-m X Y`: robot-base XY correction added only to loose-cap
-  pickup targets. The physical policy defaults to `0.021002 -0.019611` m, the
-  calibrated base-frame equivalent of correcting a target that was 20 mm too
-  far away from the TableCam and 20 mm too far camera-right.
-- `--missing-cap-xy-offset-m X Y`: robot-base XY correction added only to missing-vial
-  placement and its following fingertip press. The physical default is
-  `-0.000503 0.009987` m, correcting a 10 mm camera-left miss.
+- `--table-cap-xy-offset-m X Y` and `--missing-cap-xy-offset-m X Y`: retained
+  zero-default fallback corrections for operation without wrist refinement.
 - `--crooked-cap-xy-offset-m X Y`: robot-base XY correction added only to crooked-cap
   contact targets, including the compensated cone nose path. Its default remains
   `0 0` until the side cone is physically checked.
@@ -341,12 +338,12 @@ zero because these values compensate residual calibration in the physical TableC
 - `--work-surface-z-m`: work-surface Z in robot-base metres (default `-0.0051`).
   The default vial-rim plane is derived from this as work surface + 10 mm tray
   base + 203.2 mm vial height.
-- `--vial-rim-z-m`: optional direct vial-rim Z override. Prefer setting only the
-  work-surface value unless a rim measurement is more trustworthy. Both effective
-  planes are written to the run artifacts. This is independent of the pickup,
-  placement, and press offsets.
-- `--place-offset-m`: release height above a missing-cap target.
-- `--press-offset-m`: upward clearance applied to press endpoints, including the cone endpoint.
+- `--vial-rim-plane-offset-m`: residual added to the rim derived from the fitted
+  surface, tray base and vial height.
+- `--vial-rim-plane-override-m`: absolute rim Z; zero keeps automatic fitting.
+- `--vial-height-override-m`: measured vial height; zero uses 203.2 mm.
+- `--missing-release-z-offset-m`: release height above a missing-cap target.
+- `--cone-press-z-offset-m`: upward residual applied to the cone endpoint.
 - `--cone-press-below-rim-m`: side-cone endpoint relative to the calibrated rim; positive is lower and negative is clearance.
 - `--cone-tip-from-tcp-m X Y Z`: measured cone-nose offset from UTOOL1, replacing the CAD default.
 - `--crooked-shoulder-depth-m`: fingertip-TCP-to-internal-shoulder distance; default is the CAD-measured `0.0326838` m.

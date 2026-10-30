@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.inspection.vision_pipeline import RemediationVisionDetector, cap_axis_from_rgbd_points
 from src.inspection.depth_visualization import render_depth_heatmap
+from src.inspection.height_plane import fit_parallel_work_surface
 from src.remediation.geometry import (base_to_uf0, inspection_base_position,
                                       resolve_height_planes, SPEC, transit_base_z)
 from src.remediation.controller import (DEFAULT_CONE_TIP_FROM_TCP_M, ContactTool,
@@ -35,20 +36,24 @@ DEFAULT_CHECKPOINT = ROOT / "shared/yolo26x/best.pt"
 OFFSETS_PATH = Path(__file__).resolve().parent / "config" / "remediation_offsets.json"
 _OFFSETS = json.loads(OFFSETS_PATH.read_text())
 DEFAULT_PICKUP_Z_OFFSET_M = float(_OFFSETS["pickup_z_offset_m"])
-DEFAULT_TABLE_PLANE_OFFSET_M = float(_OFFSETS["table_plane_offset_m"])
+DEFAULT_WORK_SURFACE_Z_OFFSET_M = float(_OFFSETS["work_surface_z_offset_m"])
+DEFAULT_VIAL_RIM_PLANE_OFFSET_M = float(_OFFSETS["vial_rim_plane_offset_m"])
+DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M = float(_OFFSETS["vial_rim_plane_override_m"])
+DEFAULT_VIAL_HEIGHT_OVERRIDE_M = float(_OFFSETS["vial_height_override_m"])
+DEFAULT_MISSING_RELEASE_Z_OFFSET_M = float(_OFFSETS["missing_release_z_offset_m"])
+DEFAULT_CONE_PRESS_Z_OFFSET_M = float(_OFFSETS["cone_press_z_offset_m"])
+DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M = tuple(_OFFSETS["wrist_table_cap_xy_offset_m"])
+DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M = tuple(_OFFSETS["wrist_missing_cap_xy_offset_m"])
+DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M = tuple(_OFFSETS["wrist_crooked_cap_xy_offset_m"])
 DEFAULT_MISSING_RELEASE_SIDE_STEP_M = float(
     _OFFSETS["missing_release_side_step_m"])
 DEFAULT_MISSING_RELEASE_EXIT_STEP_M = float(
     _OFFSETS["missing_release_exit_step_m"])
-# Empirical real-cell corrections expressed in robot-base XY.  TableCam image
-# right maps to base (-0.05027, +0.99874), and image down/toward the camera maps
-# to (+0.99983, +0.01820).  The observed loose-cap target was 20 mm too far
-# away from the TableCam and 20 mm too far right, while the missing-vial target
-# was 10 mm too far left.
-DEFAULT_TABLE_CAP_XY_OFFSET_M = (0.0210020904, -0.0196107815)
-DEFAULT_MISSING_CAP_XY_OFFSET_M = (-0.0005027009, 0.0099873566)
-# Do not inherit another target's correction: the side cone has its own measured
-# TCP displacement and needs a dedicated physical hover/contact check.
+# TableCam supplies coarse candidates only when wrist refinement is enabled.
+# Keep legacy base-frame controls available for non-wrist fallback operation,
+# but do not bake a prior physical run's offsets into a new deployment.
+DEFAULT_TABLE_CAP_XY_OFFSET_M = (0.0, 0.0)
+DEFAULT_MISSING_CAP_XY_OFFSET_M = (0.0, 0.0)
 DEFAULT_CROOKED_CAP_XY_OFFSET_M = (0.0, 0.0)
 DOWN_WPR_DEG = (-180.0, 0.0, 0.0)
 GRIPPER_OPEN = 0.0
@@ -89,7 +94,9 @@ class Policy:
 
     def __init__(self, checkpoint=None, *, mode="hover", confidence=0.70, imgsz=1280,
                  device="0", allow_provisional_contact=False,
-                 pick_offset_m=None, place_offset_m=0.0, press_offset_m=0.0,
+                 pick_offset_m=None, place_offset_m=None, press_offset_m=None,
+                 missing_release_z_offset_m=DEFAULT_MISSING_RELEASE_Z_OFFSET_M,
+                 cone_press_z_offset_m=DEFAULT_CONE_PRESS_Z_OFFSET_M,
                  crooked_shoulder_depth_m=0.0326838,
                  crooked_tap_depth_m=0.005,
                  crooked_action="shoulder",
@@ -99,7 +106,11 @@ class Policy:
                  cone_heading_deg=-90.0,
                  cone_table_pick_offset_m=None,
                  pickup_z_offset_m=DEFAULT_PICKUP_Z_OFFSET_M,
-                 table_plane_offset_m=DEFAULT_TABLE_PLANE_OFFSET_M,
+                 work_surface_z_offset_m=DEFAULT_WORK_SURFACE_Z_OFFSET_M,
+                 vial_rim_plane_offset_m=DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
+                 vial_rim_plane_override_m=DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
+                 vial_height_override_m=DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
+                 table_plane_offset_m=None,
                  table_cap_xy_offset_m=DEFAULT_TABLE_CAP_XY_OFFSET_M,
                  missing_cap_xy_offset_m=DEFAULT_MISSING_CAP_XY_OFFSET_M,
                  crooked_cap_xy_offset_m=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
@@ -111,9 +122,9 @@ class Policy:
                  work_surface_z_m=-0.0051, vial_rim_z_m=None,
                  wrist_refinement=False, wrist_view_distance_m=0.300,
                  wrist_max_correction_m=0.040,
-                 wrist_table_cap_xy_offset_m=(0.0, 0.0),
-                 wrist_missing_cap_xy_offset_m=(0.0, 0.0),
-                 wrist_crooked_cap_xy_offset_m=(0.0, 0.0),
+                 wrist_table_cap_xy_offset_m=DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M,
+                 wrist_missing_cap_xy_offset_m=DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
+                 wrist_crooked_cap_xy_offset_m=DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M,
                  trace_dir=None):
         weights = Path(checkpoint) if checkpoint else DEFAULT_CHECKPOINT
         if str(device).lower() != "cpu":
@@ -123,8 +134,47 @@ class Policy:
                     "GPU inference requested but CUDA is unavailable. Claim a GPU (for example, "
                     "srun --gres=gpu:1 ...) or explicitly pass --device cpu."
                 )
-        self.work_surface_z, self.vial_rim_z, self.derived_vial_rim_z = resolve_height_planes(
-            work_surface_z_m, vial_rim_z_m)
+        self.nominal_work_surface_z = float(work_surface_z_m)
+        self.work_surface_z_offset_m = float(work_surface_z_offset_m)
+        # Backwards-compatible alias for launch commands written before the
+        # run-level work-surface plane fit. It has exactly the new global
+        # surface-offset meaning and cannot be combined with the new spelling.
+        if table_plane_offset_m is not None:
+            if abs(self.work_surface_z_offset_m) > 1e-12:
+                raise ValueError(
+                    "use either table_plane_offset_m or work_surface_z_offset_m, not both")
+            self.work_surface_z_offset_m = float(table_plane_offset_m)
+        self.vial_rim_plane_offset_m = float(vial_rim_plane_offset_m)
+        self.vial_rim_plane_override_m = float(vial_rim_plane_override_m)
+        self.vial_height_override_m = float(vial_height_override_m)
+        if vial_rim_z_m is not None:
+            if abs(self.vial_rim_plane_override_m) > 1e-12:
+                raise ValueError(
+                    "use either vial_rim_z_m or vial_rim_plane_override_m, not both")
+            self.vial_rim_plane_override_m = float(vial_rim_z_m)
+        for name, value in (
+                ("work surface Z offset", self.work_surface_z_offset_m),
+                ("vial-rim plane offset", self.vial_rim_plane_offset_m)):
+            if not np.isfinite(value) or abs(value) > 0.025:
+                raise ValueError(f"{name} must be within +/-0.025 m")
+        if (not np.isfinite(self.vial_rim_plane_override_m) or
+                (self.vial_rim_plane_override_m != 0.0 and
+                 not 0.05 <= self.vial_rim_plane_override_m <= 0.45)):
+            raise ValueError("vial-rim plane override must be zero or 0.05..0.45 m")
+        if (not np.isfinite(self.vial_height_override_m) or
+                (self.vial_height_override_m != 0.0 and
+                 not 0.15 <= self.vial_height_override_m <= 0.25)):
+            raise ValueError("vial-height override must be zero or 0.15..0.25 m")
+        self.vial_height_m = (SPEC.vial_height if self.vial_height_override_m == 0.0
+                              else self.vial_height_override_m)
+        self.work_surface_z = self.nominal_work_surface_z + self.work_surface_z_offset_m
+        self.derived_vial_rim_z = (self.work_surface_z + SPEC.tray_base_thickness +
+                                   self.vial_height_m)
+        self.vial_rim_z = (self.vial_rim_plane_override_m
+                           if self.vial_rim_plane_override_m != 0.0
+                           else self.derived_vial_rim_z + self.vial_rim_plane_offset_m)
+        # Reuse the shared range validation without changing the fitted values.
+        resolve_height_planes(self.work_surface_z, self.vial_rim_z)
         self.detector = RemediationVisionDetector(
             weights, confidence=confidence, imgsz=imgsz, device=device,
             work_surface_z_m=self.work_surface_z, rim_z=self.vial_rim_z)
@@ -148,17 +198,32 @@ class Policy:
             effective_pick_offset_m = (float(pickup_z_offset_m) -
                                        SPEC.plug_depth - SPEC.flange_thickness)
             pickup_z_source = "pickup_z_offset_m (fingertip height above table)"
-        self.table_plane_offset_m = float(table_plane_offset_m)
+        if place_offset_m is not None:
+            if abs(float(missing_release_z_offset_m)) > 1e-12:
+                raise ValueError(
+                    "use either place_offset_m or missing_release_z_offset_m, not both")
+            effective_place_offset_m = float(place_offset_m)
+            missing_release_z_source = "legacy place_offset_m"
+        else:
+            effective_place_offset_m = float(missing_release_z_offset_m)
+            missing_release_z_source = "missing_release_z_offset_m"
+        if press_offset_m is not None:
+            if abs(float(cone_press_z_offset_m)) > 1e-12:
+                raise ValueError(
+                    "use either press_offset_m or cone_press_z_offset_m, not both")
+            effective_press_offset_m = float(press_offset_m)
+            cone_press_z_source = "legacy press_offset_m"
+        else:
+            effective_press_offset_m = float(cone_press_z_offset_m)
+            cone_press_z_source = "cone_press_z_offset_m"
         if not 0.0 <= float(pickup_z_offset_m) <= 0.025:
             raise ValueError("pickup_z_offset_m must be between 0 and 0.025 m")
-        if abs(self.table_plane_offset_m) > 0.025:
-            raise ValueError("table_plane_offset_m must be within +/-0.025 m")
         cone_heading_deg = float(cone_heading_deg)
         if not np.isfinite(cone_heading_deg) or not -180.0 <= cone_heading_deg <= 180.0:
             raise ValueError("cone_heading_deg must be between -180 and 180 degrees")
         self.controller = (RemediationController(provisional_contact_tool(
             allow_provisional_contact, effective_pick_offset_m,
-            place_offset_m, press_offset_m),
+            effective_place_offset_m, effective_press_offset_m),
             min_confidence=self.confidence,
             crooked_shoulder_depth_m=crooked_shoulder_depth_m,
             crooked_tap_depth_m=crooked_tap_depth_m,
@@ -202,12 +267,15 @@ class Policy:
         (self.trace_dir / "tablecam_annotated").mkdir(exist_ok=True)
         (self.trace_dir / "wristcam_raw").mkdir(exist_ok=True)
         (self.trace_dir / "wristcam_results").mkdir(exist_ok=True)
-        (self.trace_dir / "height_planes.json").write_text(json.dumps({
-            "work_surface_z": self.work_surface_z,
-            "vial_rim_z": self.vial_rim_z,
-            "derived_vial_rim_z": self.derived_vial_rim_z,
-            "vial_rim_overridden": vial_rim_z_m is not None,
-        }, indent=2) + "\n")
+        self.height_planes_path = self.trace_dir / "height_planes.json"
+        self.height_plane_history = []
+        self._write_height_planes({
+            "status": "pending_first_tablecam_depth_frame",
+            "raw_fitted_work_surface_z_m": None,
+            "effective_work_surface_z_m": self.work_surface_z,
+            "derived_vial_rim_z_m": self.derived_vial_rim_z,
+            "effective_vial_rim_z_m": self.vial_rim_z,
+        })
         (self.trace_dir / "depth").mkdir(exist_ok=True)
         (self.trace_dir / "depth_raw").mkdir(exist_ok=True)
         config = {
@@ -222,12 +290,25 @@ class Policy:
             "pickup_z_offset_m": float(pickup_z_offset_m),
             "pickup_z_offset_convention": "fingertip clearance above local table plane",
             "pickup_z_source": pickup_z_source,
-            "table_plane_offset_m": self.table_plane_offset_m,
+            "nominal_work_surface_z_m": self.nominal_work_surface_z,
+            "work_surface_z_offset_m": self.work_surface_z_offset_m,
+            "vial_rim_plane_offset_m": self.vial_rim_plane_offset_m,
+            "vial_rim_plane_override_m": self.vial_rim_plane_override_m,
+            "vial_height_override_m": self.vial_height_override_m,
+            "effective_vial_height_m": self.vial_height_m,
+            "legacy_table_plane_offset_m": (None if table_plane_offset_m is None
+                                             else float(table_plane_offset_m)),
+            "legacy_vial_rim_z_m": (None if vial_rim_z_m is None
+                                     else float(vial_rim_z_m)),
             "offsets_file": str(OFFSETS_PATH),
             "cone_table_pick_offset_m": (None if cone_table_pick_offset_m is None
                                          else float(cone_table_pick_offset_m)),
-            "place_offset_m": float(place_offset_m),
-            "press_offset_m": float(press_offset_m),
+            "place_offset_m": None if place_offset_m is None else float(place_offset_m),
+            "press_offset_m": None if press_offset_m is None else float(press_offset_m),
+            "missing_release_z_offset_m": float(effective_place_offset_m),
+            "missing_release_z_source": missing_release_z_source,
+            "cone_press_z_offset_m": float(effective_press_offset_m),
+            "cone_press_z_source": cone_press_z_source,
             "table_cap_xy_offset_m": np.asarray(table_cap_xy_offset_m, dtype=float).tolist(),
             "missing_cap_xy_offset_m": np.asarray(missing_cap_xy_offset_m, dtype=float).tolist(),
             "crooked_cap_xy_offset_m": np.asarray(crooked_cap_xy_offset_m, dtype=float).tolist(),
@@ -238,8 +319,8 @@ class Policy:
             "crooked_wiggle_cycles": int(crooked_wiggle_cycles),
             "pickup_wiggle_radius_m": float(pickup_wiggle_radius_m),
             "pickup_wiggle_cycles": int(pickup_wiggle_cycles),
-            "work_surface_z_m": self.work_surface_z,
-            "vial_rim_z_m": self.vial_rim_z,
+            "initial_work_surface_z_m": self.work_surface_z,
+            "initial_vial_rim_z_m": self.vial_rim_z,
             "cone_tip_from_tcp_m": np.asarray(cone_tip_from_tcp_m, dtype=float).tolist(),
             "cone_press_below_rim_m": float(cone_press_below_rim_m),
             "cone_press_stroke_m": float(cone_press_stroke_m),
@@ -266,6 +347,80 @@ class Policy:
         print(f"[remediation-policy] local trace: {self.trace_dir}", flush=True)
         self.reset()
 
+    def _write_height_planes(self, current):
+        payload = {
+            "nominal_work_surface_z_m": self.nominal_work_surface_z,
+            "work_surface_z_offset_m": self.work_surface_z_offset_m,
+            "tray_base_thickness_m": SPEC.tray_base_thickness,
+            "specified_vial_height_m": SPEC.vial_height,
+            "vial_height_override_m": self.vial_height_override_m,
+            "effective_vial_height_m": self.vial_height_m,
+            "vial_rim_plane_offset_m": self.vial_rim_plane_offset_m,
+            "vial_rim_plane_override_m": self.vial_rim_plane_override_m,
+            "override_active": self.vial_rim_plane_override_m != 0.0,
+            "current": current,
+            "fits": self.height_plane_history,
+        }
+        self.height_planes_path.write_text(json.dumps(payload, indent=2) + "\n")
+
+    def _set_effective_height_planes(self, raw_surface_z_m):
+        self.work_surface_z = float(raw_surface_z_m) + self.work_surface_z_offset_m
+        self.derived_vial_rim_z = (self.work_surface_z + SPEC.tray_base_thickness +
+                                   self.vial_height_m)
+        self.vial_rim_z = (self.vial_rim_plane_override_m
+                           if self.vial_rim_plane_override_m != 0.0
+                           else self.derived_vial_rim_z + self.vial_rim_plane_offset_m)
+        resolve_height_planes(self.work_surface_z, self.vial_rim_z)
+        self.detector.work_surface_z = self.work_surface_z
+        self.detector.rim_z = self.vial_rim_z
+        self.detector.derived_rim_z = self.derived_vial_rim_z
+        if self.controller is not None:
+            self.controller.vial_rim_z_m = self.vial_rim_z
+
+    def _fit_run_height_planes(self, obs):
+        """Fit and freeze one TableCam-depth Z plane for the current rollout."""
+        if self.height_plane_fitted:
+            return
+        depth = obs.get("depth", {}).get("table")
+        if depth is None:
+            return
+        depth = np.asarray(depth)
+        depth_cam = self.cameras["table_depth"]
+        if tuple(depth.shape[:2][::-1]) != tuple(depth_cam["size"]):
+            raise ValueError(
+                f"Table depth has {depth.shape[:2]}, expected {depth_cam['size'][::-1]}")
+        fit = None
+        fallback_reason = None
+        try:
+            points = depth_to_base(depth_cam, depth, stride=4)
+            fit = fit_parallel_work_surface(points, self.nominal_work_surface_z)
+            raw_surface = float(fit["fitted_z_base_m"])
+            status = "fitted"
+        except ValueError as error:
+            raw_surface = self.nominal_work_surface_z
+            fallback_reason = str(error)
+            status = "nominal_fallback"
+        self._set_effective_height_planes(raw_surface)
+        trial = obs.get("trial") or {}
+        record = {
+            "status": status,
+            "timestamp": obs.get("t"),
+            "trial_id": trial.get("trial_id"),
+            "fit": fit,
+            "fallback_reason": fallback_reason,
+            "raw_fitted_work_surface_z_m": (None if fit is None else raw_surface),
+            "effective_work_surface_z_m": self.work_surface_z,
+            "derived_vial_rim_z_m": self.derived_vial_rim_z,
+            "effective_vial_rim_z_m": self.vial_rim_z,
+            "vial_rim_source": ("nonzero absolute override"
+                                if self.vial_rim_plane_override_m != 0.0
+                                else "fitted work surface + tray base + vial height + rim offset"),
+        }
+        self.height_plane_history.append(record)
+        self._write_height_planes(record)
+        self.events.append({"event": "height_plane_calibrated", **record})
+        self.height_plane_fitted = True
+
     def reset(self):
         self.state = "inspect"
         self.target = None
@@ -275,6 +430,8 @@ class Policy:
         self.motion_goal = None
         self.start_orientation_checked = False
         self.wrist_request = None
+        self.height_plane_fitted = False
+        self._set_effective_height_planes(self.nominal_work_surface_z)
         if self.controller is not None:
             self.controller.reset()
 
@@ -491,9 +648,12 @@ class Policy:
                 if class_name == "missing_cap":
                     plane_z = self.vial_rim_z
                 elif class_name == "crooked_cap":
-                    plane_z = float(item.get("surface_top_base_z_m", expected[2]))
+                    observed_top = item.get("surface_top_base_z_m")
+                    plane_z = (float(observed_top)
+                               if observed_top is not None and np.isfinite(observed_top)
+                               else self.vial_rim_z + 0.055)
                 else:
-                    plane_z = float(expected[2]) + self.table_plane_offset_m
+                    plane_z = float(expected[2])
                 expected_on_plane = expected.copy()
                 expected_on_plane[2] = plane_z
                 expected_pixel = project_base_to_wrist(
@@ -549,7 +709,7 @@ class Policy:
                         np.asarray(request["expected"], dtype=float)[:2],
                         self.work_surface_z)
                     plane_z = (support_plane["support_z_base_m"] +
-                               self.table_plane_offset_m + SPEC.plug_depth +
+                               self.work_surface_z_offset_m + SPEC.plug_depth +
                                SPEC.flange_thickness)
                 except ValueError as error:
                     support_plane_fallback = str(error)
@@ -626,6 +786,11 @@ class Policy:
             self.events.append({"event": "move_to_inspection_pose"})
             self._record_snapshot(observed, image, [], action)
             return action
+        # Calibrate one parallel work-surface Z plane from the first clear
+        # TableCam depth frame in each rollout. Freeze it for the complete
+        # missing-then-crooked workflow so contact heights cannot jitter between
+        # actions. Camera intrinsics/extrinsics and RGB processing are unchanged.
+        self._fit_run_height_planes(observed)
         detections = self._snapshot_detections(image, stamp)
         detections = self._attach_table_depth_observations(
             detections, observed.get("depth", {}).get("table"))

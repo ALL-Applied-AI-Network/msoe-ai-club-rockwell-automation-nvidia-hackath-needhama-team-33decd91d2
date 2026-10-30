@@ -102,8 +102,8 @@ For supervised provisional contact, use CLI options rather than environment vari
 ```bash
 uv run run.py --mode full --allow-provisional-contact \
   --work-surface-z-m -0.0051 \
-  --pickup-z-offset-m 0.003 --table-plane-offset-m 0.000 \
-  --place-offset-m 0.010 --press-offset-m 0.010 \
+  --pickup-z-offset-m 0.003 --work-surface-z-offset-m 0.000 \
+  --missing-release-z-offset-m 0.010 --cone-press-z-offset-m 0.010 \
   --crooked-action cone-press --cone-press-below-rim-m -0.005
 ```
 
@@ -114,27 +114,20 @@ uv run run.py --mode full --allow-provisional-contact \
 lift, same-vial replacement, release, and closed-tip tap). All five use the
 same shared controller in simulation and physical execution.
 
-Positive pick/place/press offsets move the TCP upward. For the cone endpoint,
+Positive pickup/release/press offsets move the TCP upward. For the cone endpoint,
 positive `--cone-press-below-rim-m` moves down; negative values stop above the rim.
-Start with `--press-offset-m 0.010 --cone-press-below-rim-m -0.005` for a visual
+Start with `--cone-press-z-offset-m 0.010 --cone-press-below-rim-m -0.005` for a visual
 clearance trial, then reduce the upward press offset before increasing depth. The
 CAD cone offset can be replaced after measurement with
 `--cone-tip-from-tcp-m X Y Z` (metres).
 
-The three base-frame XY calibration controls are independent:
-`--table-cap-xy-offset-m X Y` corrects loose-cap pickup,
-`--missing-cap-xy-offset-m X Y` corrects missing-vial placement/press, and
-`--crooked-cap-xy-offset-m X Y` corrects the cone or other crooked-cap contact.
-The physical defaults are respectively `(0.021002, -0.019611)` m,
-`(-0.000503, 0.009987)` m, and `(0, 0)` m. The first two are the TableCam-calibrated
-base-frame translations of the table-cap target being 20 mm too far away from the
-camera and 20 mm too far right, plus the 10 mm left missing-vial miss. Crooked-cap
-XY deliberately stays zero until the cone is tested.
-The two normal loose-cap Z tunings live in
-`config/remediation_offsets.json`: `pickup_z_offset_m` defaults to `0.003`
-(the fingertip/end target is 3 mm above the local table plane) and
-`table_plane_offset_m` defaults to `0.0` (signed base-Z correction). CLI flags
-with the same names override the file defaults.
+The old TableCam base-frame XY controls remain as zero-default non-wrist fallback
+options. Normal deployment uses the three zero-default wrist residuals
+`--wrist-table-cap-xy-offset-m`, `--wrist-missing-cap-xy-offset-m`, and
+`--wrist-crooked-cap-xy-offset-m` after local VLM backprojection.
+All normal Z and wrist residual defaults live in `config/remediation_offsets.json`.
+`pickup_z_offset_m` defaults to `0.003`, placing the fingertip 3 mm above the
+locally fitted table/paper support.
 The older `--pick-offset-m` and `--cone-table-pick-offset-m` flags remain explicit
 positive-up compatibility overrides; do not mix their sign convention into the
 new settings.
@@ -192,10 +185,14 @@ If the operator provides a direct cell token, export it as
 in the command line. Without a direct token, `run.py` uses the private
 `.request.json` created by the normal submission/approval workflow.
 
-`--work-surface-z-m` is expressed in robot-base metres. The vial-rim plane is
-derived by adding the known 10 mm tray base and 203.2 mm vial height. Use
-`--vial-rim-z-m` only when directly overriding that derived rim measurement;
-the policy records both effective planes in `height_planes.json`.
+`--work-surface-z-m` is the saved robot-base calibration prior. On the first
+camera-clear frame of every rollout, the policy robustly fits a constant-Z plane
+from TableCam depth and freezes it for the entire workflow. The vial-rim plane is
+derived by adding the 10 mm tray base and the 203.2 mm vial height. A nonzero
+`--vial-height-override-m` replaces that height; `--vial-rim-plane-offset-m`
+adds a residual; and a nonzero `--vial-rim-plane-override-m` supplies the final
+absolute rim Z. `height_planes.json` records the raw fit, inlier count, RMS,
+fallback reason, offsets, overrides and effective planes for every rollout.
 
 Start from the approved vertical home with the wrist camera facing away from the
 robot base (physical-cell W/P/R `-180, 0, 0` degrees). To protect the wrist-camera wiring,

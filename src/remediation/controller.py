@@ -355,6 +355,17 @@ class RemediationController:
             return False
         if detection.get("class_name") != "crooked_cap":
             return True
+        # Physical cone pressing uses a fixed calibrated 45-degree posture, a
+        # wrist-RGB XY correction and the run-level rim plane. Missing or
+        # unusable TableCam depth must not veto that workflow. When TableCam
+        # *does* provide a finite surface height, however, retain the broad
+        # physical-range check: it rejects false crooked-cap boxes on the
+        # elevated wrist/gripper before they become wrist-camera requests.
+        if (self.crooked_action == "cone-press" and self.wrist_refinement and
+                (detection.get("depth_available") is not True or
+                 not np.isfinite(float(detection.get(
+                     "surface_top_base_z_m", np.nan))))):
+            return True
         top = float(detection.get("surface_top_base_z_m", np.nan))
         if not self.vial_rim_z_m - 0.020 <= top <= self.vial_rim_z_m + 0.055:
             self.events.append({"event": "target_rejected",
@@ -618,9 +629,16 @@ class RemediationController:
         if not cone_batch:
             self._add([current[0], current[1], height], False)
         if spare is None:
-            surface_top = float(target.get("surface_top_base_z_m", np.nan))
+            raw_surface_top = target.get("surface_top_base_z_m")
+            surface_top = (float(raw_surface_top) if raw_surface_top is not None
+                           else float("nan"))
             if not np.isfinite(surface_top):
-                raise ValueError("crooked cap requires an RGB-D surface-top height")
+                if (self.crooked_action == "cone-press" and wrist_refined):
+                    # Conservative clearance over the entire supported physical
+                    # lean range. Contact Z itself comes from the fitted rim.
+                    surface_top = self.vial_rim_z_m + 0.055
+                else:
+                    raise ValueError("crooked cap requires an RGB-D surface-top height")
             if not cone_batch:
                 self._add([target_pos[0], target_pos[1], height], False)
             if self.crooked_action in ("shoulder", "shoulder-close"):
@@ -666,14 +684,9 @@ class RemediationController:
                 # nose is then placed from the RGB-D cap centre and surface
                 # height.  Jaw state never changes during cap contact.
                 vertical_high = np.array([target_pos[0], target_pos[1], height])
-                axis = np.asarray(target.get("cap_axis_base"), dtype=float)
-                if (axis.shape != (3,) or not np.isfinite(axis).all() or
-                        np.linalg.norm(axis[:2]) < 1e-6 or axis[2] < 0.5):
-                    raise ValueError("cone press requires a valid aligned-depth cap axis")
-                # The grid-fitted base position identifies the vial aperture;
-                # a leaning cap's observed centre can be several millimetres
-                # away.  Centre the STEP-measured 25.4 mm broad cone on that
-                # camera observation when it remains associated with the slot.
+                # The coarse TableCam position identifies the vial; a leaning
+                # cap's observed centre can be several millimetres away. Centre
+                # the STEP-measured broad cone on the bounded wrist observation.
                 cap_center_xy = raw_target_pos[:2]
                 observed_center = np.asarray(target.get("feature_base_pos_m", []), dtype=float)
                 if (observed_center.shape == (3,) and np.isfinite(observed_center).all() and
@@ -1003,8 +1016,9 @@ class RemediationController:
         # cap plane, so depth is an optional XY refinement for pickup. Defect
         # contact remains depth-qualified: missing/crooked targets use depth to
         # confirm slot state and crooked-cap surface geometry.
-        defects = sorted((d for d in qualified if d.get("depth_available") is True
-                          and d["class_name"] in ("crooked_cap", "missing_cap")
+        defects = sorted((d for d in qualified
+                          if d["class_name"] in ("crooked_cap", "missing_cap")
+                          and (d.get("depth_available") is True or self.wrist_refinement)
                           and self._valid_defect(d)),
                          key=lambda d: d["class_name"] != "missing_cap")
         spares = [d for d in qualified if d["class_name"] == "table_cap"]
