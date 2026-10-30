@@ -20,6 +20,7 @@ This work extends dataset generation and inspection tooling. It must not introdu
 - The vial-cap appearance classes are `good_cap`, `crooked_cap`, and `missing_cap`.
 - Loose intact caps are labeled `good_cap`, not `table_cap`.
 - Runtime depth Z distinguishes a seated `good_cap` from a spare cap on the table.
+- Vial-cap localization permits at most 35 merged object proposals per image; over-limit images require review and are never silently truncated.
 - Invalid or ambiguous depth never produces an autonomous spare-cap observation.
 - Existing four-class datasets and checkpoints remain unchanged for reproducibility.
 - GPU VLM inference and YOLO training run through Slurm.
@@ -140,7 +141,7 @@ Required invariants:
 
 - Pixel boxes use `[x1, y1, x2, y2]` with an exclusive lower-right boundary.
 - `source_box_xyxy` remains unchanged after localization.
-- `crop_box_xyxy` is derived deterministically from the source box and crop configuration.
+- `crop_box_xyxy` is `null` immediately after localization, then is derived deterministically from the source box and crop configuration during crop generation.
 - An effective training label is accepted only when `status` is `accepted` or `human_corrected`.
 - Raw model responses and human corrections remain available in provenance records.
 
@@ -148,13 +149,13 @@ Required invariants:
 
 ### Milestone 0 — Establish a Reviewed Pilot Set
 
-- [ ] Select a small but diverse set of real images covering capture sessions, lighting, seated caps, crooked caps, missing caps, and loose table caps.
-- [ ] Define the grouping key for the available real images.
-- [ ] Assign pilot train, validation, and test groups before labeling.
+- [x] Select a small pipeline-validation set covering seated, crooked, and missing caps across three real capture sequences.
+- [x] Define the grouping key for the available real images.
+- [x] Assign pilot train, validation, and test groups before labeling.
 - [ ] Manually label all objects in the pilot test set.
-- [ ] Manually label enough training examples to provide several references per class.
+- [x] Identify reviewed training examples providing several references per class.
 - [ ] Confirm loose intact table caps use `good_cap`.
-- [ ] Record the pilot source and grouping policy in a source manifest.
+- [x] Record the pilot source and grouping policy in a source manifest.
 
 Acceptance criteria:
 
@@ -164,14 +165,14 @@ Acceptance criteria:
 
 ### Milestone 1 — Configuration, Schemas, and Box Utilities
 
-- [ ] Add a versioned YAML project configuration schema.
-- [ ] Validate class names, unique IDs, crop scale, thresholds, and split fractions.
-- [ ] Add typed representations for images, proposals, classifications, and corrections.
-- [ ] Implement YOLO-to-pixel and pixel-to-YOLO conversions.
-- [ ] Implement centered 1.25-times box expansion with image-boundary clipping.
-- [ ] Implement stable object IDs independent of processing order.
-- [ ] Add JSONL readers and atomic record writers with schema-version checks.
-- [ ] Add tests for box expansion, clipping, degenerate boxes, and coordinate round trips.
+- [x] Add a versioned YAML project configuration schema.
+- [x] Validate class names, unique IDs, crop scale, thresholds, and split fractions.
+- [x] Add typed canonical object records for proposal and classification state.
+- [x] Implement YOLO-to-pixel and pixel-to-YOLO conversions.
+- [x] Implement centered 1.25-times box expansion with image-boundary clipping.
+- [x] Implement stable object IDs independent of processing order.
+- [x] Add JSONL readers and atomic record writers with schema-version checks.
+- [x] Add tests for box expansion, clipping, degenerate boxes, and coordinate round trips.
 
 Acceptance criteria:
 
@@ -181,13 +182,13 @@ Acceptance criteria:
 
 ### Milestone 2 — Seed Annotation Import
 
-- [ ] Accept a standard YOLO seed dataset and project configuration.
-- [ ] Verify that images, labels, and class IDs agree with the configuration.
-- [ ] Convert seed labels into canonical object records.
-- [ ] Generate 1.25-times reference crops.
-- [ ] Generate per-class contact sheets and full-image overlays.
-- [ ] Reject seeds outside the training split from the VLM reference pool.
-- [ ] Write a seed manifest containing provenance and class counts.
+- [x] Accept a standard YOLO seed dataset and project configuration.
+- [x] Verify that images, labels, and class IDs agree with the configuration.
+- [x] Convert seed labels into canonical object records.
+- [x] Generate 1.25-times reference crops.
+- [x] Generate per-class contact sheets and full-image overlays.
+- [x] Reject seeds outside the training split from the VLM reference pool.
+- [x] Write a seed manifest containing provenance and class counts.
 
 Acceptance criteria:
 
@@ -197,17 +198,17 @@ Acceptance criteria:
 
 ### Milestone 3 — Generic LocateAnything Proposals
 
-- [ ] Extract reusable worker and response-parsing logic from the existing LocateAnything evaluation scripts without breaking them.
-- [ ] Accept an unlabeled image directory, configuration, split manifest, and output directory.
-- [ ] Use one configurable object-of-interest prompt by default.
-- [ ] Preserve raw responses, model identity, adapter identity, seed, and inference settings.
-- [ ] Clamp coordinates and reject degenerate predictions.
-- [ ] Apply configurable NMS or proposal clustering.
-- [ ] Resume at image granularity.
-- [ ] Record images with zero proposals.
-- [ ] Flag unusual proposal counts without assuming a fixed aperture grid.
-- [ ] Generate full-image proposal overlays.
-- [ ] Add a Slurm launcher for full proposal generation.
+- [x] Reuse the existing LocateAnything worker behind a lightweight, testable proposal module.
+- [x] Accept an unlabeled image directory, configuration, split manifest, and output directory.
+- [x] Use one configurable object-of-interest prompt by default.
+- [x] Preserve raw responses, model identity, adapter identity, seed, and inference settings.
+- [x] Clamp coordinates and reject degenerate predictions.
+- [x] Apply configurable NMS or proposal clustering.
+- [x] Resume at image granularity.
+- [x] Record images with zero proposals.
+- [x] Flag unusual proposal counts without assuming a fixed aperture grid.
+- [x] Generate full-image proposal overlays.
+- [x] Add a Slurm launcher for full proposal generation.
 
 Acceptance criteria:
 
@@ -400,10 +401,10 @@ Acceptance criteria:
 
 | Milestone | Status | Evidence / Output |
 | --- | --- | --- |
-| 0. Reviewed pilot set | Not started | — |
-| 1. Configuration and schemas | Not started | — |
-| 2. Seed import | Not started | — |
-| 3. LocateAnything proposals | Not started | Existing specialized scripts available for refactoring |
+| 0. Reviewed pilot set | In progress | Five-frame/three-sequence validation pilot assigned; fully human-boxed holdout and loose-cap confirmation remain |
+| 1. Configuration and schemas | Complete | `src/inspection/defect_training/{config,schemas,boxes}.py`; 13 focused tests pass |
+| 2. Seed import | Complete | `seed_import.py` and `import_defect_seeds.py`; pilot imported 105 objects and produced training-only references |
+| 3. LocateAnything proposals | In progress | Jobs 290616/290617 completed; loose caps 2/2 localized, revised tray policy failed at 13/75 train+val recall |
 | 4. Crop generation | Not started | — |
 | 5. VLM classification | Not started | Existing cap-specific VLM experiments available for reference |
 | 6. Review and corrections | Not started | — |
@@ -434,6 +435,7 @@ Add dated entries whenever an implementation choice changes the fixed design or 
 | 2026-10-28 | Use three learned vial-cap appearance classes. | Loose and seated intact caps share visual identity; placement is geometric. | Convert old `table_cap` labels to `good_cap` in new derived datasets. |
 | 2026-10-28 | Use Z only for seated-versus-table qualification. | The two states differ by approximately the 203.2 mm vial height, and aperture/vial XY references are unavailable. | Require calibrated height bands and an explicit ambiguous state. |
 | 2026-10-28 | Keep the source proposal box separate from the padded VLM crop. | Context padding should not inflate YOLO ground truth. | Store and validate both boxes in every canonical record. |
+| 2026-10-28 | Set the vial-cap proposal sanity limit to 35 objects per image. | The physical scene should not contain more than approximately 35 caps/openings. | Preserve all proposals for audit, flag the image, and block automatic acceptance rather than truncating silently. |
 
 ## Session Update Template
 
@@ -457,3 +459,339 @@ Next:
 Blocked by:
 - None, or a concrete blocker requiring user input
 ```
+
+### 2026-10-28 — Configuration, records, and box geometry
+
+Completed:
+- Added validated, versioned YAML project configuration dataclasses.
+- Added immutable pixel boxes, exact 1.25-times expansion, clipping, and YOLO conversions.
+- Added canonical object records, deterministic IDs, and atomic JSONL manifests.
+- Added focused configuration, schema, and geometry tests.
+
+Validated:
+- `.conda_env/bin/python -m unittest tests.test_defect_training_boxes tests.test_defect_training_schemas` — 13 tests passed.
+- `git diff --check` — passed.
+
+Decisions:
+- Stable IDs normalize coordinates to floats so integer and floating-point representations of identical geometry produce the same ID.
+- Boundary clipping does not shift the opposite crop edge to preserve the requested size.
+
+Next:
+- Select and group the reviewed pilot images.
+- Implement the YOLO seed importer and reference-crop audit outputs.
+
+Blocked by:
+- Pilot image source and grouping policy have not yet been selected.
+
+### 2026-10-28 — Reviewed seed importer and validation pilot
+
+Completed:
+- Added the vial-cap trainer configuration and a leakage-safe three-sequence pilot split.
+- Added generic YOLO seed import, split-manifest validation, training-only crop generation, overlays, contact sheets, and build reports.
+- Imported the five existing reviewed TableCam frames as a non-destructive `/tmp` validation run.
+
+Validated:
+- `.conda_env/bin/python -m unittest tests.test_defect_training_boxes tests.test_defect_training_schemas tests.test_defect_training_seed_import` — 17 tests passed.
+- Pilot import — 5 images and 105 objects: 43 `good_cap`, 50 `crooked_cap`, and 12 `missing_cap`.
+- Split isolation — 60 training, 15 validation, and 30 test objects; related `run_155442` frames remain together.
+- Reference isolation — only the 60 training objects generated VLM reference crops.
+- Visual inspection — the generated `good_cap` contact sheet has centered crops with the intended context.
+
+Decisions:
+- Use the filename `run_HHMMSS` prefix as the grouping key for this pilot.
+- Treat the current five-frame set as pipeline validation because classes/counts were human-reviewed but some box geometry was VLM-refined.
+- Require a separately confirmed, fully human-boxed holdout before release evaluation.
+
+Next:
+- Add class-agnostic LocateAnything proposal generation against this validation pilot.
+- Explicitly convert the two reviewed loose-cap examples from legacy `table_cap` to `good_cap` before adding them to training references.
+
+Blocked by:
+- The final release holdout still needs fully human-reviewed box geometry.
+
+### 2026-10-28 — Class-agnostic LocateAnything proposals
+
+Completed:
+- Added a lightweight proposal module with response parsing, coordinate scaling, duplicate suppression, overlays, reports, canonical records, and image-level resume.
+- Added a GPU command and Slurm launcher that load the existing LocateAnything worker only in the model process.
+- Made crop geometry optional in localization-stage records; Milestone 4 will populate it deterministically.
+- Submitted the five-image validation pilot as Slurm job `290615` using the base LocateAnything model.
+
+Validated:
+- `.conda_env/bin/python -m unittest tests.test_defect_training_boxes tests.test_defect_training_schemas tests.test_defect_training_seed_import tests.test_defect_training_locate_anything` — 20 tests passed.
+- Resume tests prove completed images do not invoke the model again.
+- Fingerprint tests reject resume when the model, adapter, prompt, or NMS policy changes.
+- Slurm job `290615` entered `RUNNING` on `dh-dgxh100-1`.
+
+Decisions:
+- Keep GPU/model imports out of the reusable proposal module so geometry and resume behavior can be tested in the standard environment.
+- Use a configuration fingerprint on every per-image record to prevent mixed inference settings in one run.
+- Prefer the tighter box when duplicate generative outputs overlap above the configured NMS threshold.
+
+Next:
+- Inspect job `290615`, calculate proposal recall against the reviewed pilot, and tune the object prompt only from train/validation data.
+- Implement deterministic candidate crop generation after the pilot proposal format is confirmed.
+
+Blocked by:
+- Milestone 3 acceptance remains pending until the GPU pilot completes and proposal recall is measured.
+
+### 2026-10-28 — Multi-prompt vial-top and loose-cap localization
+
+Completed:
+- Generalized localization configuration from one prompt to an ordered set of object prompts.
+- Added cross-prompt duplicate merging while retaining every prompt that supported a proposal.
+- Changed the vial-cap configuration to localize both vial tops and loose caps on the work surface.
+- Added leakage-safe train/validation assignments for the two reviewed loose-cap still images.
+- Submitted revised tray job `290616` and loose-cap job `290617` to distinct output directories.
+
+Validated:
+- `.conda_env/bin/python -m unittest tests.test_defect_training_boxes tests.test_defect_training_schemas tests.test_defect_training_seed_import tests.test_defect_training_locate_anything` — 24 tests passed.
+- Source compilation and `git diff --check` passed.
+- Job `290616` entered `RUNNING`; job `290617` entered `PENDING` with a normal priority wait.
+
+Decisions:
+- Use `top of every clear plastic vial in the metal tray, whether capped or uncapped` for tray object proposals.
+- Use `loose cap lying on the table or work surface` for spare-cap proposals.
+- Keep both result streams appearance-agnostic; downstream VLM labeling assigns `good_cap`, `crooked_cap`, or `missing_cap`.
+- Store prompt provenance per proposal so false positives and prompt behavior remain auditable.
+
+Next:
+- Measure tray proposal recall using train/validation only and verify both loose-cap boxes are localized.
+- If localization passes, implement Milestone 4 candidate crop generation across the merged proposal manifests.
+
+Blocked by:
+- Waiting for Slurm jobs `290616` and `290617` to finish.
+
+### 2026-10-28 — Multi-prompt pilot results
+
+Completed:
+- Inspected completed tray job `290616` and loose-cap job `290617`.
+- Separated proposal counts by source prompt and measured class-agnostic train/validation recall.
+- Visually audited a loose-cap overlay and a failed tray overlay.
+
+Validated:
+- Both Slurm jobs completed with exit code `0:0`.
+- Loose-cap prompt localized exactly one reviewed loose cap in each of the two still images: 2/2 detected.
+- Revised tray prompts matched 13 of 75 train/validation objects at IoU 0.50, or 17.3 percent recall.
+- The vial-top prompt returned zero boxes in every image.
+- The loose-cap prompt produced all tray-run proposals; on training frames these were small false positives on table markings rather than vial objects.
+
+Decisions:
+- Keep the loose-cap prompt for images containing the work surface; its two reviewed examples passed.
+- Reject the broad vial-top prompt from the localization policy.
+- Restore the original seated/crooked-cap prompt, which previously found 93/93 visible caps, and add a separate focused uncapped-vial-opening prompt.
+- Do not begin candidate crop generation until the combined visible-cap and opening prompts meet the localization recall gate.
+
+Next:
+- Run prompt development only on train/validation images using the original visible-cap prompt plus a focused `open top of an uncapped clear plastic vial` prompt.
+- Measure per-class recall and visually inspect false positives before locking the localization configuration.
+
+Blocked by:
+- Missing-cap localization is not yet qualified; the current broad vial-top prompt has zero recall.
+
+### 2026-10-28 — Corrected cap and uncapped-opening prompt pilot
+
+Completed:
+- Restored the proven `cap or open top of each vial` prompt for visible seated and crooked caps.
+- Added the focused `open top of an uncapped clear plastic vial in the metal tray` prompt.
+- Retained the independently validated loose-cap prompt.
+- Added train/validation-only filtering to prevent prompt development from touching the locked test group.
+- Submitted corrected localization job `290625` to `proposals_v3_train_val`.
+
+Validated:
+- The expanded focused suite passes 27 tests.
+- Source compilation and `git diff --check` pass.
+- Split-filter testing proves test images are not passed to the inference backend.
+- Slurm job `290625` entered the queue with a normal priority wait.
+
+Decisions:
+- Treat the 35-object limit only as an anomaly/review gate, never as a localization repair or truncation policy.
+- Evaluate prompt changes on train/validation only; run the locked test split only after the localization policy is selected.
+
+Next:
+- On completion of job `290625`, measure visible-cap and missing-opening recall separately and audit the prompt-specific overlays.
+- Lock the prompt policy only if localization recall meets the agreed gate; otherwise refine the opening prompt without using test data.
+
+Blocked by:
+- Waiting for Slurm job `290625` and missing-opening recall results.
+
+### 2026-10-28 — Focused uncapped-opening prompt results
+
+Completed:
+- Inspected completed job `290625` and measured merged and per-prompt training recall.
+- Visually audited the newest merged proposal overlay.
+- Identified a Slurm export issue that reduced `train,val` to `train`; no locked test images were processed.
+
+Validated:
+- Job `290625` completed with exit code `0:0`.
+- The original cap prompt matched all 52 visible good/crooked caps in the three training frames.
+- The focused uncapped-opening prompt matched 51 visible caps but 0 of 8 missing-cap openings; it duplicated cap geometry rather than localizing openings.
+- The loose-cap prompt matched 0 tray objects and added 16 false positives on table markings.
+- Merged recall was 52/60, or 86.7 percent, with all eight misses belonging to `missing_cap`.
+- One image produced 39 merged proposals and was correctly flagged by the 35-object anomaly gate; no proposals were truncated.
+
+Decisions:
+- Do not continue treating a missing cap as a directly localizable object; LocateAnything consistently localizes visible caps and not their absence.
+- Evaluate localizing the containing vial as the object of interest, then classify a deterministic vial-top crop as good, crooked, or missing.
+- Keep loose-cap localization as a separate visible-object stream.
+
+Next:
+- Pilot a whole-vial LocateAnything prompt on train/validation images.
+- From each vial box, derive and visualize a consistent top-region crop for VLM condition classification.
+- Confirm that vial localization covers every reviewed missing-cap vial before implementing general crop generation.
+
+Blocked by:
+- The original direct-opening design cannot meet missing-cap recall; the localization unit must change from cap/opening to vial or another visible containing object.
+
+### 2026-10-28 — Whole-vial localization experiment
+
+Completed:
+- Added an isolated experiment configuration using `clear plastic vial in the metal tray` as the localization target.
+- Fixed Slurm split filtering to accept `train+val` without the comma being interpreted as another exported variable.
+- Made the Slurm wrapper accept an explicit project configuration.
+- Submitted train/validation-only whole-vial job `290674` to `vial_proposals_train_val`.
+
+Validated:
+- The focused suite still passes 27 tests.
+- Source compilation and `git diff --check` pass.
+- Job `290674` entered `RUNNING` on `dh-dgxh100-1`.
+
+Decisions:
+- Keep the vial-localization experiment separate from the main configuration until coverage is measured.
+- Evaluate vial proposals by containment of reviewed cap/opening centers rather than cap-box IoU, since the proposal geometry intentionally covers the containing vial.
+
+Next:
+- Measure vial coverage separately for good, crooked, and missing-cap examples.
+- Visualize candidate top regions derived from detected vial boxes.
+- Adopt the approach only if every missing-cap vial is covered without an unmanageable number of duplicate/false vial proposals.
+
+Blocked by:
+- Waiting for Slurm job `290674` and whole-vial coverage results.
+
+### 2026-10-28 — Whole-vial localization results
+
+Completed:
+- Inspected completed job `290674` and audited train/validation overlays.
+- Measured one-to-one containment of reviewed cap/opening centers within whole-vial proposals.
+- Evaluated full vial boxes and top-region fractions of 50, 35, and 25 percent.
+
+Validated:
+- Job `290674` completed with exit code `0:0` and correctly processed train plus validation only.
+- LocateAnything produced 62 vial proposals for 75 reviewed vial objects.
+- Best one-to-one top-region coverage was 62/75, or 82.7 percent.
+- Missing-cap coverage was 4/10; six missing-cap vials remained unlocalized.
+- Validation produced only 8 proposals for 15 reviewed vials.
+- No image exceeded the 35-object anomaly limit.
+
+Decisions:
+- Reject zero-shot whole-vial localization as the production proposal policy; it does not meet the recall gate.
+- Do not implement VLM crop classification on an incomplete proposal set.
+- The next LocateAnything path should be use-case fine-tuning on reviewed vial/cap geometry rather than further zero-shot prompt iteration.
+
+Next:
+- Prepare LocateAnything LoRA training examples from the reviewed train split, including every missing-cap vial and loose table-cap example.
+- Compare a fine-tuned vial localizer with a conventional high-recall detector/proposal baseline before committing the trainer to one proposal backend.
+
+Blocked by:
+- Neither zero-shot cap/opening prompts nor zero-shot vial prompts provide sufficient missing-cap recall.
+
+### 2026-10-28 — Three-phase vial/cap association pilot
+
+Completed:
+- Added deterministic one-to-one vial/cap association with configurable upper-vial geometry.
+- Added inferred top boxes for vials without matched caps and preserved unmatched caps for later loose-cap/Z handling.
+- Added color-coded overlays and per-image association records.
+- Ran the combiner over the train/validation whole-vial and visible-cap manifests.
+
+Validated:
+- The expanded focused suite passes 31 tests.
+- Across four images: 62 vial proposals, 65 cap proposals, 58 matches, 4 inferred missing-cap tops, and 7 unmatched caps.
+- All four inferred missing-cap boxes corresponded to true `missing_cap` annotations: 4/4 precision in this pilot.
+- Missing-cap recall remained 4/10 because Phase 1 failed to localize six missing-cap vials.
+- Visual inspection confirms the red inferred boxes are positioned over uncapped vial tops in the two frames where those vials were detected.
+
+Decisions:
+- Adopt vial-minus-cap association as the missing-cap inference design; it correctly inferred every unmatched detected vial in this pilot.
+- Treat Phase 1 vial recall, not association logic, as the remaining blocker.
+- Do not classify unmatched caps as table spares from 2D geometry alone; retain them as candidates for VLM labeling and runtime Z qualification.
+
+Next:
+- Fine-tune or replace the Phase 1 vial localizer to recover the six missed missing-cap vials.
+- Re-run the unchanged association stage and require full missing-vial coverage before generating pseudo-label crops.
+
+Blocked by:
+- Phase 1 whole-vial localization covers only 4 of 10 missing-cap vials; association cannot infer a missing cap for a vial that was never proposed.
+
+### 2026-10-28 — Dark uncapped-vial rim prompt experiment
+
+Completed:
+- Added an isolated localization experiment describing the visible dark circular rim/opening of an uncapped clear vial.
+- Added two prompt variants that explicitly exclude empty metal-tray holes and yellow-capped vials.
+- Submitted train/validation-only Slurm job `290675` to `dark_rim_proposals_train_val`.
+
+Validated:
+- The experiment configuration loads successfully with both prompts.
+- The focused suite remains at 31 passing tests.
+- `git diff --check` passes.
+- Job `290675` entered the queue with a normal priority wait.
+
+Decisions:
+- Treat the dark rim as a visible localization feature, avoiding language centered on an absent cap.
+- Keep this experiment independent of the validated vial-minus-cap association path until its missing-cap recall and tray-hole false-positive rate are measured.
+
+Next:
+- Measure each prompt variant separately against reviewed missing-cap boxes.
+- Audit whether detections correspond to vial rims or empty tray apertures.
+- Merge this stream with vial-minus-cap inference only if it adds true missing-cap recall without excessive false positives.
+
+Blocked by:
+- Waiting for Slurm job `290675` and dark-rim precision/recall results.
+
+### 2026-10-28 — Dark-rim prompt results
+
+Completed:
+- Inspected completed Slurm job `290675` and separated results by prompt and image.
+
+Validated:
+- Job `290675` completed with exit code `0:0`.
+- Both dark-rim prompt variants returned zero boxes on all four train/validation images.
+- Missing-cap recall was 0/10, with no tray-hole false positives because no proposals were emitted.
+
+Decisions:
+- Reject both zero-shot dark-rim prompts.
+- Stop further zero-shot wording iterations for missing-cap localization; three distinct formulations have failed to ground the feature.
+- Retain vial-minus-cap association because its four inferred missing-cap boxes were all correct, and focus further work on supervised improvement of Phase 1 vial recall.
+
+Next:
+- Build LocateAnything LoRA examples for full-vial localization from the reviewed training split, or compare a conventional detector trained on those vial boxes.
+- Reuse the existing association stage unchanged after improving vial proposal recall.
+
+Blocked by:
+- Zero-shot LocateAnything does not localize the dark uncapped-vial rim in these images.
+
+### 2026-10-28 — Qwen3-VL-32B grounding comparison
+
+Completed:
+- Added a Qwen3-VL visual-grounding backend without changing the proposal manifest consumed by later crop and labeling stages.
+- Added robust parsing for normalized `bbox_2d` JSON, including fenced output, clamping, invalid-entry rejection, and NMS.
+- Added an isolated four-prompt train/validation experiment for full vials, visible caps, uncapped dark rims, and loose table caps.
+- Submitted Slurm job `290677` using two H100 GPUs and BF16 model weights.
+
+Validated:
+- The shared inference environment has Transformers 4.57.1 and Accelerate 1.15.0.
+- The expanded focused suite passes 34 tests.
+- `git diff --check` passes.
+- The cluster exposes both four- and eight-H100 nodes; job `290677` is queued normally for two H100s.
+
+Decisions:
+- Keep Qwen output in the same records, overlays, manifest, and report format as LocateAnything for a direct comparison.
+- Limit this first run to the four train/validation images; preserve the test image for later unbiased evaluation.
+- Use the same 35-object anomaly threshold and no automatic acceptance of Qwen labels.
+
+Next:
+- Inspect the per-prompt overlays and measure reviewed-object coverage after job `290677` completes.
+- Run the existing vial-minus-cap association on Qwen proposals if full-vial recall improves.
+- Decide whether Qwen should replace Phase 1, supplement LocateAnything, or be rejected before scaling to the remaining real images.
+
+Blocked by:
+- Waiting for Slurm job `290677` to receive two H100 GPUs and download/load the 32B checkpoint.

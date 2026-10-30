@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "project_name": "vial_cap_dark_rim_localization_experiment",
+  "localization": {
+    "model": "nvidia/LocateAnything-3B",
+    "prompts": [
+      "dark circular opening at the top of an uncapped vial",
+      "black circular vial mouth in the metal tray",
+      "open vial rim without a yellow cap"
+    ],
+    "nms_iou": 0.7,
+    "maximum_objects_per_image": 35
+  },
+  "classes": [
+    {"name": "good_cap", "description": "Intact cap with no visible damage or deformation, whether seated or loose."},
+    {"name": "crooked_cap", "description": "Cap on a vial that is visibly tilted, raised, or off-center."},
+    {"name": "missing_cap", "description": "Open vial top where a cap should be present."}
+  ],
+  "crop": {"scale": 1.25, "square": false},
+  "classification": {
+    "uncertain_label": "uncertain",
+    "automatic_acceptance": 0.9,
+    "review_threshold": 0.7,
+    "require_consensus": true
+  },
+  "split": {"group_key": "capture_sequence", "train": 0.7, "val": 0.15, "test": 0.15}
+}

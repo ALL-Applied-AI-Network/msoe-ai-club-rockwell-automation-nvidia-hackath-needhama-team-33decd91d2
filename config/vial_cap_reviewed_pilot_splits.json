@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "grouping_policy": "Frames sharing the run_HHMMSS prefix are one capture sequence and may not cross splits.",
+  "images": {
+    "run_154105_0000.png": {
+      "split": "val",
+      "group": "run_154105"
+    },
+    "run_155442_0000.png": {
+      "split": "train",
+      "group": "run_155442"
+    },
+    "run_155442_0030.png": {
+      "split": "train",
+      "group": "run_155442"
+    },
+    "run_155442_0225.png": {
+      "split": "train",
+      "group": "run_155442"
+    },
+    "run_161143_0027.png": {
+      "split": "test",
+      "group": "run_161143"
+    }
+  }
+}

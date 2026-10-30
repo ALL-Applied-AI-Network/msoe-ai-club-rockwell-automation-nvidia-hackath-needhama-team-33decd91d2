@@ -1,0 +1,36 @@
+schema_version: 1
+project_name: vial_cap_qwen32b_grounding_experiment
+
+localization:
+  model: Qwen/Qwen3-VL-32B-Instruct
+  prompts:
+    - clear plastic vial in the black and silver metal tray
+    - yellow cap on or near a clear plastic vial
+    - dark circular rim or opening at the top of an uncapped clear plastic vial
+    - loose yellow cap lying on the table or work surface
+  nms_iou: 0.70
+  maximum_objects_per_image: 35
+
+classes:
+  - name: good_cap
+    description: Intact cap with no visible damage or deformation, whether seated or loose.
+  - name: crooked_cap
+    description: Cap on a vial that is visibly tilted, raised, or off-center.
+  - name: missing_cap
+    description: Open vial top where a cap should be present.
+
+crop:
+  scale: 1.25
+  square: false
+
+classification:
+  uncertain_label: uncertain
+  automatic_acceptance: 0.90
+  review_threshold: 0.70
+  require_consensus: true
+
+split:
+  group_key: capture_sequence
+  train: 0.70
+  val: 0.15
+  test: 0.15

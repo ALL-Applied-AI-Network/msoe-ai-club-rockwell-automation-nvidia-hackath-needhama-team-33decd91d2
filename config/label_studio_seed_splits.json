@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "grouping_policy": "Two manually labeled seed images; evaluation only.",
+  "images": {
+    "5a9803b2-0001.png": {
+      "split": "train",
+      "group": "5a9803b2"
+    },
+    "624b6024-0044.png": {
+      "split": "train",
+      "group": "624b6024"
+    }
+  }
+}

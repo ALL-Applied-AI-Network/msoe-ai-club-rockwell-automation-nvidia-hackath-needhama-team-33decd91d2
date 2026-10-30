@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "grouping_policy": "Each still image is a distinct loose-cap capture; no test split is assigned during prompt development.",
+  "images": {
+    "20261028_002417.png": {
+      "split": "train",
+      "group": "loose_cap_20261028_002417"
+    },
+    "20261028_002430.png": {
+      "split": "val",
+      "group": "loose_cap_20261028_002430"
+    }
+  }
+}

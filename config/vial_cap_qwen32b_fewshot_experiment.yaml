@@ -1,0 +1,38 @@
+schema_version: 1
+project_name: vial_cap_qwen32b_fewshot_experiment
+
+localization:
+  model: Qwen/Qwen3-VL-32B-Instruct
+  prompts:
+    - good_cap matching the human-labeled green examples
+    - crooked_cap matching the human-labeled orange examples
+    - missing_cap vial mouth matching the human-labeled red examples
+    - table_cap matching the human-labeled blue examples
+  nms_iou: 0.70
+  maximum_objects_per_image: 35
+
+classes:
+  - name: good_cap
+    description: Intact cap correctly seated on a vial.
+  - name: crooked_cap
+    description: Cap on a vial that is visibly tilted, raised, or off-center.
+  - name: missing_cap
+    description: Open vial mouth where a cap should be present.
+  - name: table_cap
+    description: Intact loose cap resting on the table or work surface.
+
+crop:
+  scale: 1.25
+  square: false
+
+classification:
+  uncertain_label: uncertain
+  automatic_acceptance: 0.90
+  review_threshold: 0.70
+  require_consensus: true
+
+split:
+  group_key: capture_sequence
+  train: 0.70
+  val: 0.15
+  test: 0.15

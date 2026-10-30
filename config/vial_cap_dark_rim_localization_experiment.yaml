@@ -1,0 +1,34 @@
+schema_version: 1
+project_name: vial_cap_dark_rim_localization_experiment
+
+localization:
+  model: nvidia/LocateAnything-3B
+  prompts:
+    - dark circular glass rim at the top of an uncapped clear plastic vial, not an empty hole in the metal tray
+    - black circular opening on top of a clear vial with no yellow cap
+  nms_iou: 0.70
+  maximum_objects_per_image: 35
+
+classes:
+  - name: good_cap
+    description: Intact cap with no visible damage or deformation, whether seated or loose.
+  - name: crooked_cap
+    description: Cap on a vial that is visibly tilted, raised, or off-center.
+  - name: missing_cap
+    description: Open vial top where a cap should be present.
+
+crop:
+  scale: 1.25
+  square: false
+
+classification:
+  uncertain_label: uncertain
+  automatic_acceptance: 0.90
+  review_threshold: 0.70
+  require_consensus: true
+
+split:
+  group_key: capture_sequence
+  train: 0.70
+  val: 0.15
+  test: 0.15
