@@ -1556,6 +1556,11 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                            for known in batch_items):
                         continue
                     batch_items.append(item)
+            vlm_dwell_steps = int(args.vlm_dwell_s * 60) if (
+                getattr(args, 'realistic_pauses', False) or
+                getattr(args, 'timing_mode', 'fast') == 'realistic') else 0
+            if vlm_dwell_steps > 0:
+                ex.hold(f'wrist_vlm_dwell_{class_name}', current_jaw, vlm_dwell_steps)
             requests = []
             bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             for item in batch_items:
@@ -1917,6 +1922,12 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         current_jaw = target_jaw
         last_action = action[:6].tolist()
 
+    scan_dwell_steps = int(args.tablecam_dwell_s * 60) if (
+        getattr(args, 'realistic_pauses', False) or
+        getattr(args, 'timing_mode', 'fast') == 'realistic') else 0
+    if scan_dwell_steps > 0:
+        ex.hold('tablecam_initial_scan_dwell', current_jaw, scan_dwell_steps)
+
     driver = PolicyDriver(controller, observe, execute, max_decisions=240, max_idle=8)
     try:
         driver.run()
@@ -2042,6 +2053,17 @@ def main():
     parser.add_argument('--pickup-slide-x-m', type=float,
                         default=float(offsets.get('pickup_slide_x_m', -0.04)),
                         help='base-frame X offset for the low pickup approach slide')
+    parser.add_argument('--timing-mode', choices=('fast', 'realistic'), default='fast',
+                        help='playback timing mode: "fast" (default) runs continuous simulation without compute wait; '
+                             '"realistic" adds realistic pauses at TableCam and WristCam inspection poses matching physical robot latency')
+    parser.add_argument('--realistic-pauses', action='store_true',
+                        help='shorthand for --timing-mode realistic (accurately reproduces physical camera dwell times)')
+    parser.add_argument('--vlm-dwell-s', type=float, default=2.4,
+                        help='inspection dwell at wrist camera poses in realistic timing mode (default: 2.4 s)')
+    parser.add_argument('--tablecam-dwell-s', type=float, default=1.5,
+                        help='initial and verification scan dwell in realistic timing mode (default: 1.5 s)')
+    parser.add_argument('--settle-dwell-s', type=float, default=0.5,
+                        help='servo endpoint settling dwell in realistic timing mode (default: 0.5 s)')
     parser.add_argument('--anti-clipping', choices=('physics', 'lock'), default='physics',
                         help='cap collision mode: "physics" uses calibrated sub-mm offsets + CCD + TGS solver; '
                              '"lock" locks/seats the cap directly on the rim once placed')
