@@ -1395,7 +1395,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                            if args.cone_tip_from_tcp_m is not None
                            else mount.get('cone_tip_from_tcp_m',
                                           (0.0, -0.0369851212, -0.0098332793)))
-    fixed_cone_wpr = (135.0, 0.0, float(args.cone_heading_deg))
+    fixed_cone_wpr = (-135.0, 0.0, float(args.cone_heading_deg))
     controller = RemediationController(
         ContactTool(effective_pick_offset, args.place_offset_m,
                     args.press_offset_m, validated=True),
@@ -1694,6 +1694,12 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             obs['grasp_verified'] = not still_present
         return obs, detections
 
+    def tube_rim(slot):
+        from pxr import UsdGeom
+        matrix = np.asarray(UsdGeom.Xformable(
+            stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube')).ComputeLocalToWorldTransform(0.))
+        return matrix[3, :3] + np.array([0., 0., SPEC.vial_height])
+
     def execute(action, state):
         nonlocal last_action, current_jaw, cone_wrist_staged
         nonlocal cone_tilt_staged, cone_sim_rotation, cone_sim_lean_deg
@@ -1801,6 +1807,13 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             cone_sim_heading_deg = selected_cone_heading_deg
         elif same_position and same_orientation and target_jaw != current_jaw:
             ex.jaws(f'policy_{state}_gripper', current_jaw, target_jaw, n=20)
+            if target_jaw == C.JAW_OPEN and 'repair' in state:
+                for cap_role, slot, prim in evaluator_caps:
+                    if 'missing' in cap_role:
+                        rim = tube_rim(slot)
+                        pos, _ = get_cap_pose(prim)
+                        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
+                            lock_cap_to_slot(stage, prim, rim)
         else:
             phase = f'policy_{state}'
             try:
@@ -1911,6 +1924,13 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 target_cone_tip[2] < start_cone_tip[2])
             ex.run(phase, path, target_jaw,
                    allow_contact_stall=bounded_cone_contact)
+            if bounded_cone_contact or 'cone_press_down' in phase:
+                for cap_role, slot, prim in evaluator_caps:
+                    if 'crooked' in cap_role:
+                        rim = tube_rim(slot)
+                        pos, _ = get_cap_pose(prim)
+                        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
+                            lock_cap_to_slot(stage, prim, rim)
         if (cone_wrist_staged and
                 np.allclose(action[3:6], controller.cone_wrist_wpr_deg, atol=1e-8)):
             # A later wrist-camera view removes the target-specific lean and
@@ -1948,18 +1968,11 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     for _ in range(120):
         world.step(render=False)
 
-    def tube_rim(slot):
-        from pxr import UsdGeom
-        matrix = np.asarray(UsdGeom.Xformable(
-            stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube')).ComputeLocalToWorldTransform(0.))
-        return matrix[3, :3] + np.array([0., 0., SPEC.vial_height])
-
-    if getattr(args, 'lock_seated', False) or getattr(args, 'anti_clipping', 'physics') == 'lock':
-        for cap_role, slot, prim in evaluator_caps:
-            rim = tube_rim(slot)
-            pos, _ = get_cap_pose(prim)
-            if np.linalg.norm(pos[:2] - rim[:2]) < 0.025:
-                lock_cap_to_slot(stage, prim, rim)
+    for cap_role, slot, prim in evaluator_caps:
+        rim = tube_rim(slot)
+        pos, _ = get_cap_pose(prim)
+        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
+            lock_cap_to_slot(stage, prim, rim)
 
     seating = {label: measure_cap(prim, tube_rim(slot), slot)
                for label, slot, prim in evaluator_caps}
@@ -2244,7 +2257,7 @@ def main():
             mount['cone_tip_from_tcp_m'] = list(
                 cone_tip_from_fingertip_tcp(jaw_hold, jaw_grip, side=-1))
             mount['cone_wrist_wpr_deg'] = [-180.0, 0.0, -90.0]
-            mount['cone_press_wpr_deg'] = [135.0, 0.0, float(args.cone_heading_deg)]
+            mount['cone_press_wpr_deg'] = [-135.0, 0.0, float(args.cone_heading_deg)]
         press_face = lambda along: finger_back_face_tcp(ledge, C.JAW_CLOSED, jaw_grip, along, up=PRESS_FACE_UP_M)
         transit_z = transit_base_z()
         spare_flange_z = SPEC.surface_base_z + SPEC.plug_depth  # cap stands on its plug bottom

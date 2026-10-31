@@ -273,9 +273,11 @@ class CollisionSubAgent:
                     prims_to_check.append(prim)
 
         for cap_prim in prims_to_check:
-            # Enable CCD if cap is a rigid body
+            # Enable CCD and bounded depenetration velocity if cap is a rigid body
             if cap_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                PhysxSchema.PhysxRigidBodyAPI.Apply(cap_prim).CreateEnableCCDAttr().Set(True)
+                physx_rb = PhysxSchema.PhysxRigidBodyAPI.Apply(cap_prim)
+                physx_rb.CreateEnableCCDAttr().Set(True)
+                physx_rb.CreateMaxDepenetrationVelocityAttr().Set(0.5)
 
             # Apply to cap root and any submesh collision prims (e.g. Flange_*, Plug_*)
             # Note: Do NOT apply CollisionAPI to non-colliding visual liners (CavityLiner_*, FlangeCavityLiner_*)

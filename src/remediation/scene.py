@@ -198,6 +198,7 @@ def _cap_dynamics(prim,dynamic):
         phys.CreateLinearDampingAttr(1.2); phys.CreateAngularDampingAttr(2.)
         phys.CreateSolverPositionIterationCountAttr(64); phys.CreateSolverVelocityIterationCountAttr(16)
         phys.CreateEnableCCDAttr(True)
+        phys.CreateMaxDepenetrationVelocityAttr().Set(0.5)
         # Never sleep: a 5 g cap landing gently can otherwise freeze in a pose that
         # cannot actually support it (e.g. resting on only two rim points).
         phys.CreateSleepThresholdAttr(0.); phys.CreateStabilizationThresholdAttr(0.)

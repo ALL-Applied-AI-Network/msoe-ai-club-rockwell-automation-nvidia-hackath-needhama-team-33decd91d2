@@ -43,8 +43,8 @@ class PhysicalSpec:
     contact_offset: float = 0.0005
     # 0.2 mm: PhysX settles a leaning cap ~0.13 mm into the rim at its pivot contact.
     penetration_tolerance: float = 0.0002
-    friction_static: float = 1.2
-    friction_dynamic: float = 1.0
+    friction_static: float = 0.35
+    friction_dynamic: float = 0.25
 
     @property
     def surface_world_z(self):
