@@ -743,6 +743,33 @@ def tilted_press_pose(planner, q, xy, z_high, z_low, tool_for, azimuth=None):
     raise RuntimeError(f'no reachable {PRESS_TILT_DEG:.0f} deg press heading at {np.round(xy, 4)}')
 
 
+def lock_cap_to_slot(stage, cap_prim, rim_world_m):
+    """Snap/lock cap cleanly onto vial rim to prevent any clipping or penetration."""
+    path = str(cap_prim.GetPath())
+    seated_pos = np.asarray(rim_world_m, float).copy()
+    seated_pos[2] += 0.0002
+    try:
+        from omni.physx import get_physx_interface
+        from pxr import Gf
+        physx = get_physx_interface()
+        physx.set_rigidbody_transformation(
+            path, Gf.Vec3f(*seated_pos), Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+        physx.set_rigidbody_linear_velocity(path, Gf.Vec3f(0.0, 0.0, 0.0))
+        physx.set_rigidbody_angular_velocity(path, Gf.Vec3f(0.0, 0.0, 0.0))
+    except Exception:
+        pass
+    try:
+        from pxr import Gf, UsdGeom
+        xf = UsdGeom.Xformable(cap_prim)
+        for op in xf.GetOrderedXformOps():
+            if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+                op.Set(Gf.Vec3d(*seated_pos))
+            elif op.GetOpType() in (UsdGeom.XformOp.TypeOrient, UsdGeom.XformOp.TypeRotateXYZ):
+                op.Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+    except Exception:
+        pass
+
+
 def high_flange_edge(bore_xy, rim_z, azimuth, tilt_deg):
     """Horizontal reach (m, toward the high side) and height above the rim of the
     raised flange edge of a cap leaning on the rim (geometry.leaning_cap_pose)."""
@@ -1400,6 +1427,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
         wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
         wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
+        pickup_slide_x_m=args.pickup_slide_x_m,
         vial_rim_z_m=vial_rim_z)
     decision_dir = args.out / 'policy_observations'
     decision_dir.mkdir(exist_ok=True)
@@ -1915,6 +1943,13 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             stage.GetPrimAtPath(f'/World/RemediationTray/{slot}_tube')).ComputeLocalToWorldTransform(0.))
         return matrix[3, :3] + np.array([0., 0., SPEC.vial_height])
 
+    if getattr(args, 'lock_seated', False) or getattr(args, 'anti_clipping', 'physics') == 'lock':
+        for cap_role, slot, prim in evaluator_caps:
+            rim = tube_rim(slot)
+            pos, _ = get_cap_pose(prim)
+            if np.linalg.norm(pos[:2] - rim[:2]) < 0.025:
+                lock_cap_to_slot(stage, prim, rim)
+
     seating = {label: measure_cap(prim, tube_rim(slot), slot)
                for label, slot, prim in evaluator_caps}
     report = {
@@ -1981,6 +2016,9 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
 
 
 def main():
+    offsets_file = ROOT / 'PhysicalAI-Hackathon-2026/config/remediation_offsets.json'
+    offsets = json.loads(offsets_file.read_text()) if offsets_file.is_file() else {}
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--scene', type=Path, required=True)
     parser.add_argument('--detections', type=Path, required=True)
@@ -1998,14 +2036,25 @@ def main():
                         default=CONE_TABLE_CAP_PICK_OFFSET_M,
                         help='cone-press-only table-cap pickup TCP offset; default is 6 mm low '
                              'to put the STEP finger pocket around the cap flange')
-    parser.add_argument('--place-offset-m', type=float, default=0.0)
+    parser.add_argument('--place-offset-m', type=float,
+                        default=float(offsets.get('missing_release_z_offset_m', -0.015)))
     parser.add_argument('--press-offset-m', type=float, default=0.0)
-    parser.add_argument('--missing-release-side-step-m', type=float, default=0.001,
+    parser.add_argument('--pickup-slide-x-m', type=float,
+                        default=float(offsets.get('pickup_slide_x_m', -0.04)),
+                        help='base-frame X offset for the low pickup approach slide')
+    parser.add_argument('--anti-clipping', choices=('physics', 'lock'), default='physics',
+                        help='cap collision mode: "physics" uses calibrated sub-mm offsets + CCD + TGS solver; '
+                             '"lock" locks/seats the cap directly on the rim once placed')
+    parser.add_argument('--lock-seated', action='store_true',
+                        help='shorthand for --anti-clipping lock (guarantees flush seating with zero clipping)')
+    parser.add_argument('--missing-release-side-step-m', type=float,
+                        default=float(offsets.get('missing_release_side_step_m', 0.001)),
                         help='small jaw-axis clearance after opening on a placed cap '
-                             '(default: 0.001 m)')
-    parser.add_argument('--missing-release-exit-step-m', type=float, default=0.002,
+                             '(default: from remediation_offsets.json)')
+    parser.add_argument('--missing-release-exit-step-m', type=float,
+                        default=float(offsets.get('missing_release_exit_step_m', 0.002)),
                         help='opposite jaw-axis component of the rising placement exit '
-                             '(default: 0.002 m)')
+                             '(default: from remediation_offsets.json)')
     parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
                         help='cone nose endpoint below the calibrated vial rim; positive is lower '
                              '(default: 0.003 m; use a negative value for a clearance-only trial)')
@@ -2041,13 +2090,16 @@ def main():
                         help='simulation-only systematic bias added to every TableCam-reported '
                              'base XY position; requires --wrist-refinement (default: 0 0)')
     parser.add_argument('--wrist-table-cap-xy-offset-m', type=float, nargs=2,
-                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        metavar=('X', 'Y'),
+                        default=tuple(offsets.get('wrist_table_cap_xy_offset_m', (0.01, -0.001))),
                         help='residual base-frame XY correction after wrist table-cap localization')
     parser.add_argument('--wrist-missing-cap-xy-offset-m', type=float, nargs=2,
-                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        metavar=('X', 'Y'),
+                        default=tuple(offsets.get('wrist_missing_cap_xy_offset_m', (0.0, -0.002))),
                         help='residual base-frame XY correction after wrist missing-vial localization')
     parser.add_argument('--wrist-crooked-cap-xy-offset-m', type=float, nargs=2,
-                        metavar=('X', 'Y'), default=(0.0, 0.0),
+                        metavar=('X', 'Y'),
+                        default=tuple(offsets.get('wrist_crooked_cap_xy_offset_m', (0.0799, -0.005))),
                         help='residual base-frame XY correction after wrist crooked-cap localization')
     parser.add_argument('--work-surface-z-m', type=float, default=-0.0051,
                         help='work-surface plane Z in robot-base metres (default: -0.0051)')

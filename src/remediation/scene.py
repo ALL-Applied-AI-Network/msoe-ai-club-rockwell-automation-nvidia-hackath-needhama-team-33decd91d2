@@ -196,7 +196,7 @@ def _cap_dynamics(prim,dynamic):
         UsdPhysics.MassAPI.Apply(prim).CreateMassAttr(.005)
         phys=PhysxSchema.PhysxRigidBodyAPI.Apply(prim)
         phys.CreateLinearDampingAttr(1.2); phys.CreateAngularDampingAttr(2.)
-        phys.CreateSolverPositionIterationCountAttr(32); phys.CreateSolverVelocityIterationCountAttr(8)
+        phys.CreateSolverPositionIterationCountAttr(64); phys.CreateSolverVelocityIterationCountAttr(16)
         phys.CreateEnableCCDAttr(True)
         # Never sleep: a 5 g cap landing gently can otherwise freeze in a pose that
         # cannot actually support it (e.g. resting on only two rim points).
@@ -204,9 +204,21 @@ def _cap_dynamics(prim,dynamic):
 
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
-                paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30):
+                paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30,
+                spec=None, pattern=None, missing_slots=None, crooked_slots=None, empty_slots=None):
     import cell
-    if min(crooked,missing,table_caps)<0 or not 0<crooked+missing<=vials<=30 or table_caps>10:
+    from src.remediation.vial_patterns import ALL_SLOTS, resolve_tray_pattern
+    current_spec = spec if spec is not None else SPEC
+    pattern_spec = None
+    if pattern is not None or missing_slots is not None or crooked_slots is not None or empty_slots is not None:
+        pattern_spec = resolve_tray_pattern(
+            pattern_name=pattern or "custom",
+            missing_slots=missing_slots,
+            crooked_slots=crooked_slots,
+            empty_slots=empty_slots,
+            table_caps=table_caps if table_caps != 1 else None,
+        )
+    elif min(crooked,missing,table_caps)<0 or not 0<crooked+missing<=vials<=30 or table_caps>10:
         raise ValueError('Invalid scene inventory (at most 30 vials, at most 10 separated spares)')
     cell.build(stage,with_objects=False)
     if paper_color is not None:
@@ -219,7 +231,7 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         # Lift the rendered sheet 0.5 mm beyond its physical half-thickness.
         # The starter cell has a separate white mat coplanar with the nominal
         # work surface; the extra visual clearance prevents depth fighting.
-        box(stage, '/World/TableCapPaper', (.37, .315, SPEC.surface_world_z + .0006),
+        box(stage, '/World/TableCapPaper', (.37, .315, current_spec.surface_world_z + .0006),
             (.27, .12, .0002), paper)
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
@@ -233,13 +245,13 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     black=material(stage,'TrayBase',(.025,.028,.032),roughness=.42)
     physics_mat=UsdShade.Material.Define(stage,'/World/RemediationLooks/Contact')
     pm=UsdPhysics.MaterialAPI.Apply(physics_mat.GetPrim())
-    pm.CreateStaticFrictionAttr(SPEC.friction_static); pm.CreateDynamicFrictionAttr(SPEC.friction_dynamic); pm.CreateRestitutionAttr(0.)
+    pm.CreateStaticFrictionAttr(current_spec.friction_static); pm.CreateDynamicFrictionAttr(current_spec.friction_dynamic); pm.CreateRestitutionAttr(0.)
     layout=load_layout()
     # The reachable fixture pose is 80 mm closer to the robot than the legacy
     # scene. This is scene-construction data only, never a robot target.
     if tray_center_xy is None:
         tray_center_xy=(.305,.035)
-    center=np.array([float(tray_center_xy[0]),float(tray_center_xy[1]),SPEC.surface_world_z])
+    center=np.array([float(tray_center_xy[0]),float(tray_center_xy[1]),current_spec.surface_world_z])
     yaw=float(rng.uniform(-2,2)) if randomize else 0.
     if randomize: center[:2]+=rng.uniform(-.008,.008,2)
     R=rotation(0,yaw)
@@ -251,7 +263,7 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     # is not reused as a dimensional authority.
     top_source=layout['parts']['tray_good_top']
     tray_xy=top_source['size_m'][:2]
-    base_t, clearance, top_t = SPEC.tray_base_thickness, SPEC.tray_top_clearance, SPEC.tray_top_thickness
+    base_t, clearance, top_t = current_spec.tray_base_thickness, current_spec.tray_top_clearance, current_spec.tray_top_thickness
     top_z=base_t + clearance + top_t/2
     box(stage,str(root.GetPath())+'/BlackBottomPlate',(0,0,base_t/2),(tray_xy[0],tray_xy[1],base_t),black)
     for ix, x in enumerate((-tray_xy[0]/2+.012, tray_xy[0]/2-.012)):
@@ -263,24 +275,35 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
     xs=slots[:,:,0].mean(axis=1); ys=slots[:,:,1].mean(axis=0)
     xe=np.r_[-tray_xy[0]/2,(xs[:-1]+xs[1:])/2,tray_xy[0]/2]
     ye=np.r_[-tray_xy[1]/2,(ys[:-1]+ys[1:])/2,tray_xy[1]/2]
-    # With fewer than 30 vials the remaining apertures are left empty (plate only).
-    shuffled=rng.permutation(30)+1
-    loaded_ids=set(shuffled[:vials])
-    crooked_ids=set(shuffled[:crooked]); missing_ids=set(shuffled[crooked:crooked+missing])
+    if pattern_spec is not None:
+        empty_slot_names = set(pattern_spec.empty_slots)
+        loaded_ids = {int(s.replace('G', '')) for s in ALL_SLOTS if s not in empty_slot_names}
+        crooked_ids = {int(s.replace('G', '')) for s in pattern_spec.crooked_slots}
+        missing_ids = {int(s.replace('G', '')) for s in pattern_spec.missing_slots}
+        effective_table_caps = pattern_spec.table_caps
+        effective_vials = len(loaded_ids)
+    else:
+        # With fewer than 30 vials the remaining apertures are left empty (plate only).
+        shuffled=rng.permutation(30)+1
+        loaded_ids=set(shuffled[:vials])
+        crooked_ids=set(shuffled[:crooked]); missing_ids=set(shuffled[crooked:crooked+missing])
+        effective_table_caps = table_caps
+        effective_vials = vials
     inventory={'seed':seed,'tray_center_world_m':center.tolist(),'tray_yaw_deg':yaw,
-               'camera_variation':camera_variation,'vials':vials,'slots':{},'caps':[]}
+               'camera_variation':camera_variation,'vials':effective_vials,'slots':{},'caps':[],
+               'pattern': pattern_spec.to_dict() if pattern_spec is not None else None}
     for index in range(1,31):
         slot=f'G{index:02d}'; p=np.array(layout['slots_m'][slot]); p[2]=base_t; row,col=divmod(index-1,5)
         perforated_cell(stage,str(root.GetPath())+'/'+slot+'_plate',p[:2],(xe[row],xe[row+1],ye[col],ye[col+1]),top_z-top_t/2,top_z+top_t/2,metal)
         if index not in loaded_ids: continue
         tube=UsdGeom.Xform.Define(stage,str(root.GetPath())+'/'+slot+'_tube')
         tube.AddTranslateOp().Set(Gf.Vec3d(*p))
-        annulus(stage,str(tube.GetPath())+'/Wall',SPEC.vial_outer_radius,SPEC.vial_outer_radius,SPEC.vial_inner_radius,0,SPEC.vial_height,glass)
+        annulus(stage,str(tube.GetPath())+'/Wall',current_spec.vial_outer_radius,current_spec.vial_outer_radius,current_spec.vial_inner_radius,0,current_spec.vial_height,glass)
         bottom=UsdGeom.Cylinder.Define(stage,str(tube.GetPath())+'/Bottom')
-        bottom.CreateRadiusAttr(SPEC.vial_outer_radius); bottom.CreateHeightAttr(SPEC.vial_bottom)
-        bottom.AddTranslateOp().Set(Gf.Vec3d(0,0,SPEC.vial_bottom/2)); collision(bottom.GetPrim())
+        bottom.CreateRadiusAttr(current_spec.vial_outer_radius); bottom.CreateHeightAttr(current_spec.vial_bottom)
+        bottom.AddTranslateOp().Set(Gf.Vec3d(0,0,current_spec.vial_bottom/2)); collision(bottom.GetPrim())
         UsdShade.MaterialBindingAPI.Apply(bottom.GetPrim()).Bind(glass)
-        rim=R@p+center+np.array([0,0,SPEC.vial_height])
+        rim=R@p+center+np.array([0,0,current_spec.vial_height])
         inventory['slots'][slot]={'rim_world_m':rim.tolist(),'tube_path':str(tube.GetPath()),'requested':'missing_cap' if index in missing_ids else 'crooked_cap' if index in crooked_ids else 'good_cap'}
         if index in missing_ids: continue
         tilted=index in crooked_ids
@@ -296,13 +319,13 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         make_cap(stage,path,pos,cap_R,yellow,cavity,physics_mat,dynamic=tilted)
         inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap',
                                   **({'spawn_tilt_deg':tilt} if tilted else {})})
-    for i in range(table_caps):
+    for i in range(effective_table_caps):
         # Three per row: a fourth column (x 0.415 m and beyond) is at the edge of the arm's reach.
         row,col=divmod(i,3)
         # Stage loose replacement caps on the right from TableCam's viewpoint.
         pos=np.array([.28+col*.045,.325-row*.043,0.])
         if randomize: pos[:2]+=rng.uniform(-.001,.001,2)
-        cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(SPEC.surface_world_z,cap_R)
+        cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(current_spec.surface_world_z,cap_R)
         path=f'/World/RemediationCaps/Table_{i:02d}'
         make_cap(stage,path,pos,cap_R,yellow,cavity,physics_mat)
         inventory['caps'].append({'path':path,'slot':None,'dynamic':True,'requested':'table_cap'})

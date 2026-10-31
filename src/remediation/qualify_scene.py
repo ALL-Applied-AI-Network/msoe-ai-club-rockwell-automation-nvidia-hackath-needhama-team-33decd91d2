@@ -67,10 +67,20 @@ def run(args):
         paper_color=tuple(float(x) for x in args.paper_color.split(',')) if args.paper_color else None
         if paper_color is not None and (len(paper_color) != 3 or any(x < 0 or x > 1 for x in paper_color)):
             raise ValueError('--paper-color must be r,g,b with values in [0,1]')
+        from src.remediation.vial_patterns import create_vial_spec
+        vial_spec = create_vial_spec(
+            vial_type=getattr(args, 'vial_type', 'standard') or 'standard',
+            vial_height=getattr(args, 'vial_height', None),
+        )
         inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
                               paper_color,(args.tray_center_x,args.tray_center_y),
                               [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None,
-                              args.vials)
+                              args.vials,
+                              spec=vial_spec,
+                              pattern=getattr(args, 'pattern', None),
+                              missing_slots=getattr(args, 'missing_slots', None),
+                              crooked_slots=getattr(args, 'crooked_slots', None),
+                              empty_slots=getattr(args, 'empty_slots', None))
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -164,6 +174,12 @@ def parser():
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
     p.add_argument('--vials',type=int,default=30,help='Vials loaded in the 30-aperture tray (the rest stay empty)')
     p.add_argument('--crooked-tilts',help='Comma-separated spawn tilt (deg) per crooked cap, for tilt sweeps')
+    p.add_argument('--vial-type',default='standard',help='Vial type profile (standard, short, tall, thick_wall, wide, micro)')
+    p.add_argument('--vial-height',type=float,help='Explicit vial height in metres overriding the profile')
+    p.add_argument('--pattern',help='Predefined tray pattern (canonical, full, checkerboard, perimeter, center_defect, alternating_rows, single_missing, single_crooked, multi_defect, sparse, stress_test)')
+    p.add_argument('--missing-slots',help='Comma-separated missing slots, e.g. G01,G05')
+    p.add_argument('--crooked-slots',help='Comma-separated crooked slots, e.g. G02,G12')
+    p.add_argument('--empty-slots',help='Comma-separated empty slots, e.g. G25,G26')
     return p
 
 

@@ -8,12 +8,16 @@ This module enforces physically correct, jitter-free PhysX collision behavior:
 5. Uses high-friction gripper pads and lower-friction plastic cap/vial contact.
 6. Anchors static fixtures (vial tray, tubes, tabletop) against downward press forces.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, PhysxSchema
+try:
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade, PhysxSchema
+except ImportError:
+    Gf = Sdf = Usd = UsdGeom = UsdPhysics = UsdShade = PhysxSchema = None
 
 from src.remediation.geometry import SPEC
 
@@ -40,10 +44,12 @@ RETIRED_STOCK_EOAT_TOKENS = [
 
 @dataclass(frozen=True)
 class CollisionConfig:
-    # Sub-millimeter contact offsets to eliminate PhysX 20 mm phantom bubbles
+    # Sub-millimeter contact offsets calibrated to prevent mesh clipping.
+    # Vial wall is 0.635 mm thick; setting cap and vial contact offset to 0.2 mm
+    # ensures contact buffers (0.2 + 0.2 = 0.4 mm) never bridge or overlap through the wall.
     finger_contact_offset_m: float = 0.0005  # 0.5 mm
-    cap_contact_offset_m: float = 0.0005  # 0.5 mm
-    vial_contact_offset_m: float = 0.0005  # 0.5 mm
+    cap_contact_offset_m: float = 0.0002  # 0.2 mm (anti-clipping)
+    vial_contact_offset_m: float = 0.0002  # 0.2 mm (anti-clipping)
     tray_contact_offset_m: float = 0.0005  # 0.5 mm
     rest_offset_m: float = 0.0  # Surface coincidence at zero penetration
 
@@ -124,7 +130,12 @@ class CollisionSubAgent:
         for scene_path in ("/physicsScene", "/World/PhysicsScene"):
             scene_prim = stage.GetPrimAtPath(scene_path)
             if scene_prim.IsValid():
-                PhysxSchema.PhysxSceneAPI.Apply(scene_prim).CreateEnableCCDAttr().Set(True)
+                px_scene = PhysxSchema.PhysxSceneAPI.Apply(scene_prim)
+                px_scene.CreateEnableCCDAttr().Set(True)
+                try:
+                    px_scene.CreateSolverTypeAttr().Set("TGS")
+                except Exception:
+                    pass
 
         # 2. Deconflict End-Effector (EOAT) Colliders
         disabled = self.deconflict_eoat_colliders(stage)
