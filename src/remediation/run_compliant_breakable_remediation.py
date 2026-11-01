@@ -743,33 +743,6 @@ def tilted_press_pose(planner, q, xy, z_high, z_low, tool_for, azimuth=None):
     raise RuntimeError(f'no reachable {PRESS_TILT_DEG:.0f} deg press heading at {np.round(xy, 4)}')
 
 
-def lock_cap_to_slot(stage, cap_prim, rim_world_m):
-    """Snap/lock cap cleanly onto vial rim to prevent any clipping or penetration."""
-    path = str(cap_prim.GetPath())
-    seated_pos = np.asarray(rim_world_m, float).copy()
-    seated_pos[2] += 0.0002
-    try:
-        from omni.physx import get_physx_interface
-        from pxr import Gf
-        physx = get_physx_interface()
-        physx.set_rigidbody_transformation(
-            path, Gf.Vec3f(*seated_pos), Gf.Quatf(1.0, 0.0, 0.0, 0.0))
-        physx.set_rigidbody_linear_velocity(path, Gf.Vec3f(0.0, 0.0, 0.0))
-        physx.set_rigidbody_angular_velocity(path, Gf.Vec3f(0.0, 0.0, 0.0))
-    except Exception:
-        pass
-    try:
-        from pxr import Gf, UsdGeom
-        xf = UsdGeom.Xformable(cap_prim)
-        for op in xf.GetOrderedXformOps():
-            if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
-                op.Set(Gf.Vec3d(*seated_pos))
-            elif op.GetOpType() in (UsdGeom.XformOp.TypeOrient, UsdGeom.XformOp.TypeRotateXYZ):
-                op.Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
-    except Exception:
-        pass
-
-
 def high_flange_edge(bore_xy, rim_z, azimuth, tilt_deg):
     """Horizontal reach (m, toward the high side) and height above the rim of the
     raised flange edge of a cap leaning on the rim (geometry.leaning_cap_pose)."""
@@ -1412,6 +1385,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         cone_press_wpr_deg=fixed_cone_wpr,
         cone_wpr_selector=None,
         cone_press_below_rim_m=args.cone_press_below_rim_m,
+        cone_target=args.cone_target,
         cone_press_stroke_m=args.cone_press_stroke_m,
         table_cap_xy_offset_m=args.table_cap_xy_offset_m,
         missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
@@ -1439,11 +1413,16 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     if not conda_python.is_file():
         raise FileNotFoundError(
             f'YOLO Python not found at {conda_python}; set REMEDIATION_PYTHON')
+    vlm_python = Path(os.environ.get(
+        'LOCATEANYTHING_PYTHON',
+        str(ROOT / 'shared/cache/locateanything_3b/venv/bin/python')
+        if (ROOT / 'shared/cache/locateanything_3b/venv/bin/python').is_file()
+        else str(conda_python)))
     vlm_client = None
     if args.wrist_refinement:
         from src.inspection.locateanything_client import LocateAnythingProcessClient
         vlm_client = LocateAnythingProcessClient(
-            conda_python, ROOT / 'scripts/vlm/serve_locateanything_wrist.py',
+            vlm_python, ROOT / 'scripts/vlm/serve_locateanything_wrist.py',
             cwd=ROOT, cuda_device=args.wrist_vlm_device,
             hf_home=ROOT / 'shared/cache/locateanything_3b/huggingface')
     inspect_script = ROOT / 'src/inspection/inspect_remediation_capture.py'
@@ -1784,13 +1763,21 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             # 180-degree jaw-swapped branch, which appears as an extra wrist
             # turn and leans forward. A local negative W delta is the
             # cable-safe backward motion.
+            # The simulator CAD sits on the jaw-swapped branch, so a lean about
+            # the local command X mirrors the physical motion (W=-135 leaned
+            # toward the base and was unreachable).  Instead tilt about a
+            # world axis until the tool axis equals the commanded W/P/R tool
+            # axis -- on the real cell (2026-10-30 16:21 success) W=-135 leans
+            # the wrist away from the base with the cone nose vertical.
             current_rotation = j6_rotation_to_command(Rj)
-            lean_delta_deg = selected_cone_lean_deg - cone_sim_lean_deg
+            headed = (ScipyRot.from_euler('z', heading_delta_deg, degrees=True).as_matrix()
+                      @ current_rotation)
+            commanded_axis = wpr_to_rotation(action[3:6])[:, 2]
+            tilt = np.cross(headed[:, 2], commanded_axis)
+            tilt_angle = np.arctan2(np.linalg.norm(tilt), headed[:, 2] @ commanded_axis)
             cone_sim_rotation = (
-                ScipyRot.from_euler('z', heading_delta_deg, degrees=True).as_matrix()
-                @ current_rotation
-                @ ScipyRot.from_euler(
-                    'x', -lean_delta_deg, degrees=True).as_matrix())
+                ScipyRot.from_rotvec(tilt / max(np.linalg.norm(tilt), 1e-12) * tilt_angle)
+                .as_matrix() @ headed)
             path = []
             q_path = ex.q.copy()
             for position, sample_rotation in pose_interpolation(
@@ -1807,23 +1794,14 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
             cone_sim_heading_deg = selected_cone_heading_deg
         elif same_position and same_orientation and target_jaw != current_jaw:
             ex.jaws(f'policy_{state}_gripper', current_jaw, target_jaw, n=20)
-            if target_jaw == C.JAW_OPEN and 'repair' in state:
-                for cap_role, slot, prim in evaluator_caps:
-                    if 'missing' in cap_role:
-                        rim = tube_rim(slot)
-                        pos, _ = get_cap_pose(prim)
-                        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
-                            lock_cap_to_slot(stage, prim, rim)
         else:
             phase = f'policy_{state}'
             try:
-                # pose_line consumes controller-frame rotations because its IK
-                # extracts command +Z as the physical J6 +X tool axis.  Convert
-                # the measured flange orientation back into that frame before
-                # interpolating; mixing the two frames causes artificial 100+
-                # degree wrist branch jumps even on a no-op waypoint.
-                pose_start_rotation = Rj if (cone_tilt_staged and cone_press_action) \
-                    else j6_rotation_to_command(Rj)
+                # pose_line converts its start rotation from the measured J6
+                # frame itself (Planner.logical_tcp_rotation).  Converting here
+                # as well turned a vertical start into a horizontal tool axis
+                # and made low wrist-refined approaches unreachable.
+                pose_start_rotation = Rj
                 cone_offset = np.asarray(controller.cone_tip_from_tcp_m, dtype=float)
                 start_cone_tip = start + pose_start_rotation @ cone_offset
                 target_cone_tip = target + rotation @ cone_offset
@@ -1924,13 +1902,6 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 target_cone_tip[2] < start_cone_tip[2])
             ex.run(phase, path, target_jaw,
                    allow_contact_stall=bounded_cone_contact)
-            if bounded_cone_contact or 'cone_press_down' in phase:
-                for cap_role, slot, prim in evaluator_caps:
-                    if 'crooked' in cap_role:
-                        rim = tube_rim(slot)
-                        pos, _ = get_cap_pose(prim)
-                        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
-                            lock_cap_to_slot(stage, prim, rim)
         if (cone_wrist_staged and
                 np.allclose(action[3:6], controller.cone_wrist_wpr_deg, atol=1e-8)):
             # A later wrist-camera view removes the target-specific lean and
@@ -1967,12 +1938,6 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     ex.hold('policy_settle', current_jaw, 30)
     for _ in range(120):
         world.step(render=False)
-
-    for cap_role, slot, prim in evaluator_caps:
-        rim = tube_rim(slot)
-        pos, _ = get_cap_pose(prim)
-        if np.linalg.norm(pos[:2] - rim[:2]) < 0.035:
-            lock_cap_to_slot(stage, prim, rim)
 
     seating = {label: measure_cap(prim, tube_rim(slot), slot)
                for label, slot, prim in evaluator_caps}
@@ -2077,11 +2042,8 @@ def main():
                         help='initial and verification scan dwell in realistic timing mode (default: 1.5 s)')
     parser.add_argument('--settle-dwell-s', type=float, default=0.5,
                         help='servo endpoint settling dwell in realistic timing mode (default: 0.5 s)')
-    parser.add_argument('--anti-clipping', choices=('physics', 'lock'), default='physics',
-                        help='cap collision mode: "physics" uses calibrated sub-mm offsets + CCD + TGS solver; '
-                             '"lock" locks/seats the cap directly on the rim once placed')
-    parser.add_argument('--lock-seated', action='store_true',
-                        help='shorthand for --anti-clipping lock (guarantees flush seating with zero clipping)')
+    parser.add_argument('--anti-clipping', choices=('physics',), default='physics',
+                        help='cap collision mode: "physics" uses calibrated sub-mm offsets + CCD + TGS solver')
     parser.add_argument('--missing-release-side-step-m', type=float,
                         default=float(offsets.get('missing_release_side_step_m', 0.001)),
                         help='small jaw-axis clearance after opening on a placed cap '
@@ -2090,6 +2052,9 @@ def main():
                         default=float(offsets.get('missing_release_exit_step_m', 0.002)),
                         help='opposite jaw-axis component of the rising placement exit '
                              '(default: from remediation_offsets.json)')
+    parser.add_argument('--cone-target', choices=('center', 'high-edge'), default='center',
+                        help='cone-press nose XY: the observed cap centre (as run on the real cell '
+                             '2026-10-30) or the TableCam RGB-D raised flange edge (default: center)')
     parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
                         help='cone nose endpoint below the calibrated vial rim; positive is lower '
                              '(default: 0.003 m; use a negative value for a clearance-only trial)')
@@ -2126,16 +2091,22 @@ def main():
                              'base XY position; requires --wrist-refinement (default: 0 0)')
     parser.add_argument('--wrist-table-cap-xy-offset-m', type=float, nargs=2,
                         metavar=('X', 'Y'),
-                        default=tuple(offsets.get('wrist_table_cap_xy_offset_m', (0.01, -0.001))),
-                        help='residual base-frame XY correction after wrist table-cap localization')
+                        default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist table-cap localization; '
+                             'remediation_offsets.json holds the physical wrist-camera residual, '
+                             'which the simulated wrist camera does not have (default: 0 0)')
     parser.add_argument('--wrist-missing-cap-xy-offset-m', type=float, nargs=2,
                         metavar=('X', 'Y'),
-                        default=tuple(offsets.get('wrist_missing_cap_xy_offset_m', (0.0, -0.002))),
-                        help='residual base-frame XY correction after wrist missing-vial localization')
+                        default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist missing-vial localization; '
+                             'remediation_offsets.json holds the physical wrist-camera residual, '
+                             'which the simulated wrist camera does not have (default: 0 0)')
     parser.add_argument('--wrist-crooked-cap-xy-offset-m', type=float, nargs=2,
                         metavar=('X', 'Y'),
-                        default=tuple(offsets.get('wrist_crooked_cap_xy_offset_m', (0.0799, -0.005))),
-                        help='residual base-frame XY correction after wrist crooked-cap localization')
+                        default=(0.0, 0.0),
+                        help='residual base-frame XY correction after wrist crooked-cap localization; '
+                             'remediation_offsets.json holds the physical wrist-camera residual, '
+                             'which the simulated wrist camera does not have (default: 0 0)')
     parser.add_argument('--work-surface-z-m', type=float, default=-0.0051,
                         help='work-surface plane Z in robot-base metres (default: -0.0051)')
     parser.add_argument('--vial-rim-z-m', type=float,

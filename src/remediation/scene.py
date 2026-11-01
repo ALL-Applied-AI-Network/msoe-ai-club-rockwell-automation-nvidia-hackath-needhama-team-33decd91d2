@@ -299,11 +299,13 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         if index not in loaded_ids: continue
         tube=UsdGeom.Xform.Define(stage,str(root.GetPath())+'/'+slot+'_tube')
         tube.AddTranslateOp().Set(Gf.Vec3d(*p))
-        annulus(stage,str(tube.GetPath())+'/Wall',current_spec.vial_outer_radius,current_spec.vial_outer_radius,current_spec.vial_inner_radius,0,current_spec.vial_height,glass)
+        wall = annulus(stage,str(tube.GetPath())+'/Wall',current_spec.vial_outer_radius,current_spec.vial_outer_radius,current_spec.vial_inner_radius,0,current_spec.vial_height,glass)
+        UsdShade.MaterialBindingAPI.Apply(wall).Bind(physics_mat,materialPurpose='physics')
         bottom=UsdGeom.Cylinder.Define(stage,str(tube.GetPath())+'/Bottom')
         bottom.CreateRadiusAttr(current_spec.vial_outer_radius); bottom.CreateHeightAttr(current_spec.vial_bottom)
         bottom.AddTranslateOp().Set(Gf.Vec3d(0,0,current_spec.vial_bottom/2)); collision(bottom.GetPrim())
         UsdShade.MaterialBindingAPI.Apply(bottom.GetPrim()).Bind(glass)
+        UsdShade.MaterialBindingAPI.Apply(bottom.GetPrim()).Bind(physics_mat,materialPurpose='physics')
         rim=R@p+center+np.array([0,0,current_spec.vial_height])
         inventory['slots'][slot]={'rim_world_m':rim.tolist(),'tube_path':str(tube.GetPath()),'requested':'missing_cap' if index in missing_ids else 'crooked_cap' if index in crooked_ids else 'good_cap'}
         if index in missing_ids: continue

@@ -45,11 +45,11 @@ RETIRED_STOCK_EOAT_TOKENS = [
 @dataclass(frozen=True)
 class CollisionConfig:
     # Sub-millimeter contact offsets calibrated to prevent mesh clipping.
-    # Vial wall is 0.635 mm thick; setting cap and vial contact offset to 0.2 mm
-    # ensures contact buffers (0.2 + 0.2 = 0.4 mm) never bridge or overlap through the wall.
+    # Vial wall is 0.635 mm thick; setting cap and vial contact offset to 0.15 mm
+    # ensures contact buffers (0.15 + 0.15 = 0.3 mm) never bridge or overlap through the wall.
     finger_contact_offset_m: float = 0.0005  # 0.5 mm
-    cap_contact_offset_m: float = 0.0002  # 0.2 mm (anti-clipping)
-    vial_contact_offset_m: float = 0.0002  # 0.2 mm (anti-clipping)
+    cap_contact_offset_m: float = 0.00015  # 0.15 mm (anti-clipping)
+    vial_contact_offset_m: float = 0.00015  # 0.15 mm (anti-clipping)
     tray_contact_offset_m: float = 0.0005  # 0.5 mm
     rest_offset_m: float = 0.0  # Surface coincidence at zero penetration
 
@@ -58,25 +58,29 @@ class CollisionConfig:
     pad_dynamic_friction: float = 1.3
     pad_restitution: float = 0.0  # Completely inelastic (damps bounce)
 
-    # The optional side cone is printed in TPU.  Give only that opt-in proxy a
-    # compliant material; the standard finger proxies and default shoulder
-    # workflow retain their qualified material unchanged.  At 30 N this is
-    # approximately 0.3 mm of elastic contact travel.
-    cone_compliant_stiffness_N_per_m: float = 1.0e5
-    cone_compliant_damping_Ns_per_m: float = 120.0
+    # The side cone is printed TPU: it keeps the pad friction pair.
+    cone_static_friction: float = 1.5
+    cone_dynamic_friction: float = 1.3
+    cone_compliant_stiffness_N_per_m: float = 5.0e4
+    cone_compliant_damping_Ns_per_m: float = 80.0
 
     # Smooth molded plastic against a clear plastic vial.  The old rubber-like
     # 1.2/1.0 pair wedged a four-point crooked cap onto the rim instead of
     # allowing it to pivot into the 1.27 mm radial plug clearance.
+    # Silicone cap compliance: real caps compress elastically (~1 mm deflection under load),
+    # enabling the 1.13 mm tilted geometric interference to pass through the vial opening,
+    # while preventing the wide 31.5 mm flange from entering the 25.4 mm mouth.
+    cap_compliant_stiffness_N_per_m: float = 6.0e4
+    cap_compliant_damping_Ns_per_m: float = 100.0
     cap_static_friction: float = 0.35
     cap_dynamic_friction: float = 0.25
     cap_restitution: float = 0.0
 
-    # Vial "give": glass held in the tray is not perfectly rigid at the rim.  PhysX
-    # compliant contact on the tube colliders acts as a stiff spring, ~0.5 mm of
-    # deflection at a 30 N press, instead of a hard non-penetration constraint.
-    vial_compliant_stiffness_N_per_m: float = 6.0e4
-    vial_compliant_damping_Ns_per_m: float = 100.0
+    # Plastic vial "give": clear plastic vials flex and yield under contact load.
+    # PhysX compliant contact on the tube colliders acts as a spring-damper (~1-2 mm of
+    # elastic deflection at 15-20 N) allowing the cap plug to enter smoothly.
+    vial_compliant_stiffness_N_per_m: float = 1.2e4
+    vial_compliant_damping_Ns_per_m: float = 60.0
     vial_static_friction: float = 0.35
     vial_dynamic_friction: float = 0.25
 
@@ -110,8 +114,8 @@ class CollisionSubAgent:
         cone_material = self._get_or_create_physics_material(
             stage,
             "/World/PhysicsMaterials/ConeTpuCompliant",
-            static_friction=self.cfg.pad_static_friction,
-            dynamic_friction=self.cfg.pad_dynamic_friction,
+            static_friction=self.cfg.cone_static_friction,
+            dynamic_friction=self.cfg.cone_dynamic_friction,
             restitution=self.cfg.pad_restitution,
         )
         cone_px = PhysxSchema.PhysxMaterialAPI(cone_material.GetPrim())
@@ -119,6 +123,7 @@ class CollisionSubAgent:
             self.cfg.cone_compliant_stiffness_N_per_m)
         cone_px.CreateCompliantContactDampingAttr().Set(
             self.cfg.cone_compliant_damping_Ns_per_m)
+        cone_px.CreateFrictionCombineModeAttr().Set("min")
         cap_material = self._get_or_create_physics_material(
             stage,
             "/World/PhysicsMaterials/PlasticCapMaterial",
@@ -126,6 +131,12 @@ class CollisionSubAgent:
             dynamic_friction=self.cfg.cap_dynamic_friction,
             restitution=self.cfg.cap_restitution,
         )
+        cap_px = PhysxSchema.PhysxMaterialAPI(cap_material.GetPrim())
+        cap_px.CreateCompliantContactStiffnessAttr().Set(
+            self.cfg.cap_compliant_stiffness_N_per_m)
+        cap_px.CreateCompliantContactDampingAttr().Set(
+            self.cfg.cap_compliant_damping_Ns_per_m)
+        cap_px.CreateFrictionCombineModeAttr().Set("min")
 
         for scene_path in ("/physicsScene", "/World/PhysicsScene"):
             scene_prim = stage.GetPrimAtPath(scene_path)
@@ -326,9 +337,10 @@ class CollisionSubAgent:
                     col.CreateCollisionEnabledAttr().Set(True)
 
                     physx_col = PhysxSchema.PhysxCollisionAPI.Apply(prim)
-                    physx_col.CreateContactOffsetAttr().Set(
-                        self.cfg.tray_contact_offset_m
-                    )
+                    offset = (self.cfg.vial_contact_offset_m
+                              if ("_tube" in str(prim.GetPath()) or "tube" in str(prim.GetPath()) or "Wall" in str(prim.GetPath()))
+                              else self.cfg.tray_contact_offset_m)
+                    physx_col.CreateContactOffsetAttr().Set(offset)
                     physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
 
                     # Ensure static anchoring: infinite mass / no dynamic gravity

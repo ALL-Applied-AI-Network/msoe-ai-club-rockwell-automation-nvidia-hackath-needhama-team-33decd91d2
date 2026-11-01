@@ -201,6 +201,7 @@ class RemediationController:
                  cone_press_wpr_deg=DEFAULT_CONE_PRESS_WPR_DEG,
                  cone_wpr_selector=None,
                  cone_press_below_rim_m=DEFAULT_CONE_PRESS_BELOW_RIM_M,
+                 cone_target="center",
                  cone_press_stroke_m=DEFAULT_CONE_PRESS_STROKE_M,
                  table_cap_xy_offset_m=(0.0, 0.0),
                  missing_cap_xy_offset_m=(0.0, 0.0),
@@ -253,6 +254,9 @@ class RemediationController:
             raise ValueError("cone W/P/R selector must be callable")
         self.cone_wpr_selector = cone_wpr_selector
         self.cone_press_below_rim_m = float(cone_press_below_rim_m)
+        if cone_target not in ("center", "high-edge"):
+            raise ValueError("cone_target must be 'center' or 'high-edge'")
+        self.cone_target = cone_target
         self.cone_press_stroke_m = float(cone_press_stroke_m)
         self.table_cap_xy_offset_m = self._checked_xy_offset(
             table_cap_xy_offset_m, "table-cap")
@@ -706,6 +710,13 @@ class RemediationController:
                         np.linalg.norm(high_point[:2] - raw_target_pos[:2]) <= 0.016 and
                         self.vial_rim_z_m - 0.020 <= high_point[2] <= self.vial_rim_z_m + 0.055):
                     contact_surface_top = float(high_point[2])
+                    if self.cone_target == "high-edge":
+                        # Press the observed raised flange edge, not the open
+                        # cap centre: the nose drops into the cavity there and
+                        # lifts the cap on retreat.  Pushing the high edge down
+                        # turns the cap about its flange edge dipped in the
+                        # mouth until the plug drops in.
+                        feature_xy = high_point[:2] + crooked_xy_offset
                 else:
                     contact_surface_top = surface_top
                 selected_wpr = self._cone_wpr_for_target(

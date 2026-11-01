@@ -28,10 +28,13 @@ class LocateAnythingProcessClient:
         self._next_id = 0
         # Remote-code imports can print informational lines.  Read until the
         # server's explicit JSON readiness record rather than assuming line 1.
+        startup_lines = []
         while True:
             line = self.process.stdout.readline()
             if not line:
-                raise RuntimeError("LocateAnything worker exited during startup")
+                detail = "".join(startup_lines[-10:])
+                raise RuntimeError(f"LocateAnything worker exited during startup: {detail}")
+            startup_lines.append(line)
             try:
                 record = json.loads(line)
             except json.JSONDecodeError:

@@ -40,9 +40,9 @@ class PhysicalSpec:
     jaw_travel: float = 0.006
     pad_width: float = 0.034
     spawn_clearance: float = 0.003
-    contact_offset: float = 0.0005
-    # 0.2 mm: PhysX settles a leaning cap ~0.13 mm into the rim at its pivot contact.
-    penetration_tolerance: float = 0.0002
+    contact_offset: float = 0.00015
+    # 0.15 mm: PhysX settles a leaning cap ~0.13 mm into the rim at its pivot contact.
+    penetration_tolerance: float = 0.00015
     friction_static: float = 0.35
     friction_dynamic: float = 0.25
 

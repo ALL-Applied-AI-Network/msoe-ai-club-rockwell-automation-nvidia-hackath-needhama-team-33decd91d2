@@ -134,8 +134,6 @@ class VialTypesAndPatternsTests(unittest.TestCase):
         self.assertIn("PhysicalAI-Hackathon-2026/config/remediation_offsets.json", runner_source)
         self.assertIn("--pickup-slide-x-m", runner_source)
         self.assertIn("--anti-clipping", runner_source)
-        self.assertIn("--lock-seated", runner_source)
-        self.assertIn("lock_cap_to_slot", runner_source)
 
 
 if __name__ == "__main__":
