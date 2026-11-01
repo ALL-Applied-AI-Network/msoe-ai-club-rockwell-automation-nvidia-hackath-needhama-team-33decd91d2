@@ -1072,13 +1072,16 @@ class Executor:
 
     def __init__(self, world, arm, names, arm_idx, camera, frame_dir, meter, monitor, slots,
                  tracked=(), press_control='position-limited', eoat_paths=(),
-                 closed_loop_tracking=False, side_camera=None, side_frame_dir=None):
+                 closed_loop_tracking=False, side_camera=None, side_frame_dir=None,
+                 wrist_frame_reader=None, wrist_frame_dir=None):
         self.world, self.arm, self.names, self.arm_idx = world, arm, names, arm_idx
         self.tracked = list(tracked)   # cap prims whose pose and gripper contacts are logged each step
         self.trace = []
         self.camera, self.frame_dir, self.meter, self.monitor = camera, frame_dir, meter, monitor
         self.side_camera = side_camera
         self.side_frame_dir = side_frame_dir
+        self.wrist_frame_reader = wrist_frame_reader
+        self.wrist_frame_dir = wrist_frame_dir
         self.slots = slots
         self.q = arm.get_joint_positions()[arm_idx].copy()
         self.frames = 0
@@ -1253,7 +1256,12 @@ class Executor:
         rgba = camera.get_rgba()
         if rgba is None or not rgba.size:
             return False
-        frame = cv2.cvtColor(rgba[:, :, :3], cv2.COLOR_RGB2BGR)
+        return self._write_rgb_frame(rgba[:, :, :3], frame_dir, label, phase)
+
+    def _write_rgb_frame(self, rgb, frame_dir, label, phase):
+        if rgb is None or not np.asarray(rgb).size:
+            return False
+        frame = cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2BGR)
         cv2.putText(frame, f'PHYSICS-BASED REMEDIATION | {label}', (20, 32), cv2.FONT_HERSHEY_SIMPLEX, .65, (30, 230, 255), 2)
         cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 60), cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
         for k, slot in enumerate(self.slots):
@@ -1276,6 +1284,13 @@ class Executor:
             if not self._write_camera_frame(
                     self.side_camera, self.side_frame_dir, 'SideCam', phase):
                 raise RuntimeError('SideCam returned an empty synchronized frame')
+        if self.wrist_frame_reader is not None:
+            if self.wrist_frame_dir is None:
+                raise RuntimeError('WristCam frame directory was not configured')
+            if not self._write_rgb_frame(
+                    self.wrist_frame_reader(), self.wrist_frame_dir,
+                    'WristCam', phase):
+                raise RuntimeError('WristCam returned an empty synchronized frame')
         self.frames += 1
 
 
@@ -1359,13 +1374,18 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     frame_dir.mkdir(exist_ok=True)
     side_frame_dir = args.out / 'side_frames'
     side_frame_dir.mkdir(exist_ok=True)
+    wrist_frame_dir = args.out / 'wrist_frames'
+    if wrist is not None:
+        wrist_frame_dir.mkdir(exist_ok=True)
     monitor = VialBreakabilityMonitor(stage, allow_fracture=not args.unbreakable_vials)
     slots = tuple(item[1] for item in evaluator_caps)
     ex = Executor(world, arm, names, arm_idx, table, frame_dir, meter, monitor, slots,
                   tracked=tracked, press_control='position-limited',
                   eoat_paths=(cell.JAW_PRIMS['L'], cell.JAW_PRIMS['R'], cell.FLANGE),
                   closed_loop_tracking=True, side_camera=side,
-                  side_frame_dir=side_frame_dir)
+                  side_frame_dir=side_frame_dir,
+                  wrist_frame_reader=(lambda: read_wrist_colour(wrist)) if wrist else None,
+                  wrist_frame_dir=wrist_frame_dir if wrist else None)
     effective_pick_offset = (args.cone_table_pick_offset_m
                              if args.crooked_action == 'cone-press'
                              else args.pick_offset_m)
@@ -1787,7 +1807,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 cone_offset = np.asarray(controller.cone_tip_from_tcp_m, dtype=float)
                 start_cone_tip = start + pose_start_rotation @ cone_offset
                 target_cone_tip = target + rotation @ cone_offset
-                contact_z = (controller.vial_rim_z_m -
+                contact_z = (controller.vial_rim_z_m + SPEC.flange_thickness -
                              controller.cone_press_below_rim_m +
                              controller.tool.press_offset_m)
                 cone_contact_stroke = (
@@ -2031,8 +2051,8 @@ def main():
                         help='opposite jaw-axis component of the rising placement exit '
                              '(default: 0.002 m)')
     parser.add_argument('--cone-press-below-rim-m', type=float, default=0.003,
-                        help='cone nose endpoint below the calibrated vial rim; positive is lower '
-                             '(default: 0.003 m; use a negative value for a clearance-only trial)')
+                        help='cone nose endpoint below the seated cap top (vial rim + flange thickness); '
+                             'positive is lower (default: 0.003 m)')
     parser.add_argument('--cone-press-stroke-m', type=float, default=0.020,
                         help='vertical down/up cone stroke above the endpoint (default: 0.020 m)')
     parser.add_argument('--cone-heading-deg', type=float, default=-90.0,

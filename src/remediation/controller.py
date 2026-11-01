@@ -695,13 +695,18 @@ class RemediationController:
                 # the STEP-measured broad cone on the bounded wrist observation.
                 aperture = np.asarray(
                     target.get("aperture_base_pos_m", raw_target_pos), dtype=float)
-                # A wrist crop localizes the visible, displaced cap feature.
-                # The cone, however, is a funnel: its axis must remain over
-                # the camera-derived vial aperture or it applies a lateral
-                # impulse that ejects the leaning cap.  Wrist refinement still
-                # confirms the target and supplies its observed contact height.
-                feature_xy = aperture[:2] + crooked_xy_offset
-                vertical_high = np.array([aperture[0], aperture[1], height])
+                # The wrist crop localizes the raised, displaced part of the
+                # crooked cap. Press that high side to create the correcting
+                # moment seen on the physical cell, but bound the correction so
+                # a bad box cannot move the cone outside the cap flange.
+                observed_feature_xy = target_pos[:2]
+                feature_delta = observed_feature_xy - aperture[:2]
+                feature_distance = float(np.linalg.norm(feature_delta))
+                max_high_side_offset_m = 0.010
+                if feature_distance > max_high_side_offset_m:
+                    feature_delta *= max_high_side_offset_m / feature_distance
+                press_xy = aperture[:2] + feature_delta
+                vertical_high = np.array([press_xy[0], press_xy[1], height])
                 high_point = np.asarray(target.get("cap_high_point_base_m", []), dtype=float)
                 if (high_point.shape == (3,) and np.isfinite(high_point).all() and
                         np.linalg.norm(high_point[:2] - raw_target_pos[:2]) >= 0.001 and
@@ -711,24 +716,26 @@ class RemediationController:
                 else:
                     contact_surface_top = surface_top
                 selected_wpr = self._cone_wpr_for_target(
-                    [feature_xy[0], feature_xy[1], contact_surface_top], obs)
+                    [press_xy[0], press_xy[1], contact_surface_top], obs)
                 cone_high = self._cone_tcp_for_tip(vertical_high, selected_wpr)
                 # Advance only through the cone-led interval from the contact
                 # trace, retreat, and reacquire the cap surface before the next
                 # tap.  This prevents the broad finger proxy from continuing
                 # through the old 45 mm sweep after the useful initial impact.
-                # This endpoint is a directly calibratable physical quantity:
-                # positive depth moves below the rim and positive press offset
-                # raises it. The old surface-relative stroke is deliberately
-                # not allowed to override a clearance-only physical trial.
-                cone_contact_z = (self.vial_rim_z_m - self.cone_press_below_rim_m +
+                # Stop at the top of a correctly seated cap, not at the vial
+                # rim. A centred narrow nose can enter the open cap cavity;
+                # driving it to rim height embeds the wider cone before PhysX
+                # can depenetrate the 5 g cap. Positive depth advances below
+                # the seated flange top and press offset raises the endpoint.
+                cone_contact_z = (self.vial_rim_z_m + SPEC.flange_thickness -
+                                  self.cone_press_below_rim_m +
                                   self.tool.press_offset_m)
                 cone_contact = self._cone_tcp_for_tip(
-                    [aperture[0], aperture[1], cone_contact_z], selected_wpr)
+                    [press_xy[0], press_xy[1], cone_contact_z], selected_wpr)
                 cone_above_z = max(contact_surface_top + 0.005,
                                    cone_contact_z + self.cone_press_stroke_m)
                 cone_above = self._cone_tcp_for_tip(
-                    [aperture[0], aperture[1], cone_above_z], selected_wpr)
+                    [press_xy[0], press_xy[1], cone_above_z], selected_wpr)
                 if not self.cone_oriented:
                     current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
                     orientation_point = np.array([current[0], current[1], height])
@@ -749,12 +756,16 @@ class RemediationController:
                 if selected_lean_deg > 180.0:
                     selected_lean_deg -= 360.0
                 self.events.append({"event": "cone_lean_selected",
-                                    "target_base_m": [float(aperture[0]),
-                                                      float(aperture[1]),
+                                    "target_base_m": [float(press_xy[0]),
+                                                      float(press_xy[1]),
                                                       float(contact_surface_top)],
-                                    "observed_feature_base_m": [float(feature_xy[0]),
-                                                                float(feature_xy[1]),
+                                    "aperture_base_m": [float(aperture[0]),
+                                                        float(aperture[1]),
+                                                        float(self.vial_rim_z_m)],
+                                    "observed_feature_base_m": [float(observed_feature_xy[0]),
+                                                                float(observed_feature_xy[1]),
                                                                 float(contact_surface_top)],
+                                    "high_side_offset_m": feature_delta.tolist(),
                                     "wpr_deg": list(map(float, selected_wpr)),
                                     "selected_lean_deg": selected_lean_deg,
                                     "selected_heading_deg": float(selected_wpr[2]),

@@ -67,15 +67,17 @@ class CollisionConfig:
     cap_static_friction: float = 0.18
     cap_dynamic_friction: float = 0.12
     cap_restitution: float = 0.0
-    cap_linear_damping: float = 3.0
-    cap_angular_damping: float = 6.0
-    cap_max_depenetration_velocity_m_per_s: float = 0.5
+    cap_linear_damping: float = 2.0
+    cap_angular_damping: float = 4.0
 
     # Vial "give": glass held in the tray is not perfectly rigid at the rim.  PhysX
     # compliant contact on the tube colliders acts as a stiff spring, ~0.5 mm of
     # deflection at a 30 N press, instead of a hard non-penetration constraint.
     vial_compliant_stiffness_N_per_m: float = 6.0e4
-    vial_compliant_damping_Ns_per_m: float = 100.0
+    # Near critical damping for a 5 g cap against the 60 kN/m compliant rim
+    # (2*sqrt(k*m) ~= 35 Ns/m).  The previous 100 Ns/m contact was strongly
+    # overdamped and made the last millimetres of seating visibly creep.
+    vial_compliant_damping_Ns_per_m: float = 35.0
     vial_static_friction: float = 0.35
     vial_dynamic_friction: float = 0.25
 
@@ -280,8 +282,6 @@ class CollisionSubAgent:
                 physx_rb.CreateAngularDampingAttr().Set(self.cfg.cap_angular_damping)
                 physx_rb.CreateSolverPositionIterationCountAttr().Set(32)
                 physx_rb.CreateSolverVelocityIterationCountAttr().Set(8)
-                physx_rb.CreateMaxDepenetrationVelocityAttr().Set(
-                    self.cfg.cap_max_depenetration_velocity_m_per_s)
 
             # Apply to cap root and any submesh collision prims (e.g. Flange_*, Plug_*)
             # Note: Do NOT apply CollisionAPI to non-colliding visual liners (CavityLiner_*, FlangeCavityLiner_*)

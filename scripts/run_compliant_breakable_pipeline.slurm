@@ -104,7 +104,7 @@ perception="$out/perception"
 action="$out/action"
 
 mkdir -p "$out"
-rm -rf "$action/frames" "$action/side_frames" "$action/yolo_frames"
+rm -rf "$action/frames" "$action/side_frames" "$action/wrist_frames" "$action/yolo_frames"
 
 echo "[pipeline] 1/4: Capturing live TableCam observation..."
 ./scripts/run_isaac.sh src/remediation/capture_live_tablecam.py --scene "$scene" --out "$perception"
@@ -147,19 +147,43 @@ if ! find "$action/side_frames" -maxdepth 1 -type f -name '*.png' -print -quit |
     echo "[pipeline] compliant simulation produced no synchronized SideCam frames" >&2
     exit 1
 fi
+if [[ "$wrist_refinement" == true ]] && \
+   ! find "$action/wrist_frames" -maxdepth 1 -type f -name '*.png' -print -quit | grep -q .; then
+    echo "[pipeline] compliant simulation produced no synchronized WristCam frames" >&2
+    exit 1
+fi
 
 # Encode the diagnostic side view before the slower per-frame YOLO overlay so
 # close gripper/cap contact can be reviewed as soon as remediation completes.
 FFMPEG_BIN=$(command -v ffmpeg || "$yolo_python" -c 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())' 2>/dev/null || echo /usr/bin/ffmpeg)
 if [[ -x "$FFMPEG_BIN" ]]; then
-    "$FFMPEG_BIN" -y -framerate 60 -i "$action/side_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/sidecam_remediation.mp4"
+    "$FFMPEG_BIN" -y -framerate 60 -i "$action/side_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/sidecam_raw_remediation.mp4"
 else
     "$yolo_python" scripts/tools/encode_frames.py \
         --frames "$action/side_frames" \
-        --out "$out/sidecam_remediation.mp4" \
+        --out "$out/sidecam_raw_remediation.mp4" \
         --fps 60
 fi
-echo "[pipeline] SideCam video compiled at $out/sidecam_remediation.mp4"
+echo "[pipeline] SideCam video compiled at $out/sidecam_raw_remediation.mp4"
+
+encode_raw_view() {
+    local frames="$1"
+    local video="$2"
+    if [[ -x "$FFMPEG_BIN" ]]; then
+        "$FFMPEG_BIN" -y -framerate 60 -i "$frames/%04d.png" \
+            -c:v libx264 -pix_fmt yuv420p "$video"
+    else
+        "$yolo_python" scripts/tools/encode_frames.py \
+            --frames "$frames" --out "$video" --fps 60
+    fi
+}
+
+encode_raw_view "$action/frames" "$out/tablecam_raw_remediation.mp4"
+echo "[pipeline] raw TableCam video compiled at $out/tablecam_raw_remediation.mp4"
+if [[ "$wrist_refinement" == true ]]; then
+    encode_raw_view "$action/wrist_frames" "$out/wristcam_raw_remediation.mp4"
+    echo "[pipeline] raw WristCam video compiled at $out/wristcam_raw_remediation.mp4"
+fi
 
 if [[ "$skip_overlay" == true ]]; then
     echo "[pipeline] Temporary run requested; skipping the slow per-frame YOLO overlay."
@@ -185,13 +209,13 @@ fi
 
 # No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
 if [[ -x "$FFMPEG_BIN" ]]; then
-    "$FFMPEG_BIN" -y -framerate 60 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_yolo_compliant_remediation.mp4"
-    echo "[pipeline] Video compiled successfully at $out/tablecam_yolo_compliant_remediation.mp4"
+    "$FFMPEG_BIN" -y -framerate 60 -i "$action/yolo_frames/%04d.png" -c:v libx264 -pix_fmt yuv420p "$out/tablecam_annotated_remediation.mp4"
+    echo "[pipeline] Video compiled successfully at $out/tablecam_annotated_remediation.mp4"
 else
     echo "[pipeline] ffmpeg unavailable; encoding MP4 with the HPC Python/OpenCV fallback..."
     "$yolo_python" scripts/tools/encode_frames.py \
         --frames "$action/yolo_frames" \
-        --out "$out/tablecam_yolo_compliant_remediation.mp4" \
+        --out "$out/tablecam_annotated_remediation.mp4" \
         --fps 60
 fi
 

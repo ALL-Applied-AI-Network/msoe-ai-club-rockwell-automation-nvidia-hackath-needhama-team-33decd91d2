@@ -21,6 +21,10 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--device', default='0')
     parser.add_argument('--confidence', type=float, default=.70)
+    parser.add_argument('--label-scale', type=float, default=.45,
+                        help='detection-label font scale (default: .45)')
+    parser.add_argument('--label-thickness', type=int, default=2,
+                        help='detection-label text thickness (default: 2)')
     parser.add_argument('--watch', action='store_true',
                         help='continue annotating new frames until a stop file appears')
     parser.add_argument('--stop-file', action='append', type=Path, default=[],
@@ -33,6 +37,10 @@ def main():
     args = parser.parse_args(); args.out.mkdir(parents=True, exist_ok=True)
     if not 0.0 < args.confidence < 1.0:
         parser.error('--confidence must be between 0 and 1')
+    if args.label_scale <= 0.0:
+        parser.error('--label-scale must be positive')
+    if args.label_thickness < 1:
+        parser.error('--label-thickness must be at least 1')
     if args.watch and args.image:
         parser.error('--watch requires --frames')
     if args.watch and not args.stop_file:
@@ -76,7 +84,8 @@ def main():
                     cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
                     cv2.putText(image, f'{name} {confidence:.2f}',
                                 (x0, max(22, y0 - 6)),
-                                cv2.FONT_HERSHEY_SIMPLEX, .45, color, 2,
+                                cv2.FONT_HERSHEY_SIMPLEX, args.label_scale, color,
+                                args.label_thickness,
                                 cv2.LINE_AA)
                 cv2.putText(image, 'YOLO predictions on this TableCam frame',
                             (20, image.shape[0] - 20),
