@@ -36,26 +36,35 @@ else
     echo "  With no scene argument, uses $canonical_scene" >&2
     exit 2
 fi
-remediation_args=("$@")
+remediation_args=()
 perception_plane_args=()
 wrist_refinement=false
-for ((i=0; i<${#remediation_args[@]}; i++)); do
-    case "${remediation_args[$i]}" in
+skip_overlay=false
+raw_args=("$@")
+for ((i=0; i<${#raw_args[@]}; i++)); do
+    case "${raw_args[$i]}" in
+        --skip-overlay)
+            skip_overlay=true
+            continue
+            ;;
         --wrist-refinement)
             wrist_refinement=true
             ;;
         --work-surface-z-m|--vial-rim-z-m)
-            if (( i + 1 >= ${#remediation_args[@]} )); then
-                echo "Missing value for ${remediation_args[$i]}" >&2
+            if (( i + 1 >= ${#raw_args[@]} )); then
+                echo "Missing value for ${raw_args[$i]}" >&2
                 exit 2
             fi
-            perception_plane_args+=("${remediation_args[$i]}" "${remediation_args[$((i+1))]}")
+            perception_plane_args+=("${raw_args[$i]}" "${raw_args[$((i+1))]}")
+            remediation_args+=("${raw_args[$i]}" "${raw_args[$((i+1))]}")
             ((i+=1))
+            continue
             ;;
         --work-surface-z-m=*|--vial-rim-z-m=*)
-            perception_plane_args+=("${remediation_args[$i]}")
+            perception_plane_args+=("${raw_args[$i]}")
             ;;
     esac
+    remediation_args+=("${raw_args[$i]}")
 done
 
 if [[ "$wrist_refinement" == true ]]; then
@@ -151,6 +160,11 @@ else
         --fps 60
 fi
 echo "[pipeline] SideCam video compiled at $out/sidecam_remediation.mp4"
+
+if [[ "$skip_overlay" == true ]]; then
+    echo "[pipeline] Temporary run requested; skipping the slow per-frame YOLO overlay."
+    exit 0
+fi
 
 echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
 streaming_marker="$action/yolo_frames/.streaming"

@@ -53,18 +53,23 @@ class CollisionConfig:
     pad_restitution: float = 0.0  # Completely inelastic (damps bounce)
 
     # The optional side cone is printed in TPU.  Give only that opt-in proxy a
-    # compliant material; the standard finger proxies and default shoulder
-    # workflow retain their qualified material unchanged.  At 30 N this is
-    # approximately 0.3 mm of elastic contact travel.
+    # compliant, low-slip-resistance material so a displaced cap slides down
+    # the funnel instead of sticking to its flank and being dragged sideways.
+    # The standard finger proxies retain their high-friction pickup material.
+    cone_static_friction: float = 0.20
+    cone_dynamic_friction: float = 0.15
     cone_compliant_stiffness_N_per_m: float = 1.0e5
     cone_compliant_damping_Ns_per_m: float = 120.0
 
     # Smooth molded plastic against a clear plastic vial.  The old rubber-like
     # 1.2/1.0 pair wedged a four-point crooked cap onto the rim instead of
     # allowing it to pivot into the 1.27 mm radial plug clearance.
-    cap_static_friction: float = 0.35
-    cap_dynamic_friction: float = 0.25
+    cap_static_friction: float = 0.18
+    cap_dynamic_friction: float = 0.12
     cap_restitution: float = 0.0
+    cap_linear_damping: float = 3.0
+    cap_angular_damping: float = 6.0
+    cap_max_depenetration_velocity_m_per_s: float = 0.5
 
     # Vial "give": glass held in the tray is not perfectly rigid at the rim.  PhysX
     # compliant contact on the tube colliders acts as a stiff spring, ~0.5 mm of
@@ -104,9 +109,10 @@ class CollisionSubAgent:
         cone_material = self._get_or_create_physics_material(
             stage,
             "/World/PhysicsMaterials/ConeTpuCompliant",
-            static_friction=self.cfg.pad_static_friction,
-            dynamic_friction=self.cfg.pad_dynamic_friction,
+            static_friction=self.cfg.cone_static_friction,
+            dynamic_friction=self.cfg.cone_dynamic_friction,
             restitution=self.cfg.pad_restitution,
+            friction_combine_mode="min",
         )
         cone_px = PhysxSchema.PhysxMaterialAPI(cone_material.GetPrim())
         cone_px.CreateCompliantContactStiffnessAttr().Set(
@@ -119,6 +125,7 @@ class CollisionSubAgent:
             static_friction=self.cfg.cap_static_friction,
             dynamic_friction=self.cfg.cap_dynamic_friction,
             restitution=self.cfg.cap_restitution,
+            friction_combine_mode="min",
         )
 
         for scene_path in ("/physicsScene", "/World/PhysicsScene"):
@@ -160,6 +167,7 @@ class CollisionSubAgent:
         static_friction: float,
         dynamic_friction: float,
         restitution: float,
+        friction_combine_mode: str = "max",
     ) -> UsdShade.Material:
         mat_prim = stage.GetPrimAtPath(path)
         if not mat_prim.IsValid():
@@ -174,7 +182,7 @@ class CollisionSubAgent:
         p_mat.CreateRestitutionAttr().Set(restitution)
 
         px_mat = PhysxSchema.PhysxMaterialAPI.Apply(mat_prim)
-        px_mat.CreateFrictionCombineModeAttr().Set("max")
+        px_mat.CreateFrictionCombineModeAttr().Set(friction_combine_mode)
         px_mat.CreateRestitutionCombineModeAttr().Set("min")
         return mat
 
@@ -264,7 +272,16 @@ class CollisionSubAgent:
         for cap_prim in prims_to_check:
             # Enable CCD if cap is a rigid body
             if cap_prim.HasAPI(UsdPhysics.RigidBodyAPI):
-                PhysxSchema.PhysxRigidBodyAPI.Apply(cap_prim).CreateEnableCCDAttr().Set(True)
+                physx_rb = PhysxSchema.PhysxRigidBodyAPI.Apply(cap_prim)
+                physx_rb.CreateEnableCCDAttr().Set(True)
+                # Keep light caps from being ejected by a brief rim/cone
+                # penetration while preserving free contact-driven motion.
+                physx_rb.CreateLinearDampingAttr().Set(self.cfg.cap_linear_damping)
+                physx_rb.CreateAngularDampingAttr().Set(self.cfg.cap_angular_damping)
+                physx_rb.CreateSolverPositionIterationCountAttr().Set(32)
+                physx_rb.CreateSolverVelocityIterationCountAttr().Set(8)
+                physx_rb.CreateMaxDepenetrationVelocityAttr().Set(
+                    self.cfg.cap_max_depenetration_velocity_m_per_s)
 
             # Apply to cap root and any submesh collision prims (e.g. Flange_*, Plug_*)
             # Note: Do NOT apply CollisionAPI to non-colliding visual liners (CavityLiner_*, FlangeCavityLiner_*)

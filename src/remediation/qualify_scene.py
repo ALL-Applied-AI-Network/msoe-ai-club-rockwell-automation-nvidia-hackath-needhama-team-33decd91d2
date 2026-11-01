@@ -70,7 +70,7 @@ def run(args):
         inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
                               paper_color,(args.tray_center_x,args.tray_center_y),
                               [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None,
-                              args.vials)
+                              args.vials,args.table_cap_start_x,args.table_cap_start_y)
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -110,8 +110,16 @@ def run(args):
                 import omni.replicator.core as rep
                 instance=rep.AnnotatorRegistry.get_annotator('instance_id_segmentation',init_params={'colorize':False})
                 instance.attach([camera.get_render_product_path()])
-            for _ in range(12): world.render()
-            rgba=camera.get_rgba()
+            rgba=None
+            # RTX/Replicator startup can lag the Camera initialization on a
+            # freshly assigned cluster GPU.  Warm up until the annotator has
+            # produced a real frame instead of making qualification depend on
+            # node startup timing.
+            for _ in range(60):
+                world.render()
+                rgba=camera.get_rgba()
+                if rgba is not None and rgba.size:
+                    break
             if rgba is None or rgba.size==0: raise RuntimeError('Empty '+name+' camera capture')
             if not cv2.imwrite(str(out/(name+'.png')),cv2.cvtColor(rgba[:,:,:3],cv2.COLOR_RGB2BGR)):
                 raise RuntimeError('Failed image write')
@@ -164,6 +172,10 @@ def parser():
     p.add_argument('--fixed',action='store_true'); p.add_argument('--scene-out')
     p.add_argument('--vials',type=int,default=30,help='Vials loaded in the 30-aperture tray (the rest stay empty)')
     p.add_argument('--crooked-tilts',help='Comma-separated spawn tilt (deg) per crooked cap, for tilt sweeps')
+    p.add_argument('--table-cap-start-x',type=float,default=.28,
+                   help='Robot-base/world X of the first loose-cap supply position (default: 0.28 m)')
+    p.add_argument('--table-cap-start-y',type=float,default=.325,
+                   help='Robot-base/world Y of the first loose-cap supply position (default: 0.325 m)')
     return p
 
 

@@ -1021,8 +1021,9 @@ class VialBreakabilityMonitor:
     VIAL_AXIAL_FRACTURE_LIMIT_N or the lateral load exceeds VIAL_LATERAL_FRACTURE_LIMIT_N.
     """
 
-    def __init__(self, stage):
+    def __init__(self, stage, allow_fracture=True):
         self.stage = stage
+        self.allow_fracture = bool(allow_fracture)
         self.vial_states = {}
 
     def state(self, slot):
@@ -1043,7 +1044,11 @@ class VialBreakabilityMonitor:
             vial = self.state(slot)
             vial['peak_axial_N'] = max(vial['peak_axial_N'], axial)
             vial['peak_lateral_N'] = max(vial['peak_lateral_N'], lateral)
-            if not vial['fractured'] and (axial > VIAL_AXIAL_FRACTURE_LIMIT_N or lateral > VIAL_LATERAL_FRACTURE_LIMIT_N):
+            overloaded = (axial > VIAL_AXIAL_FRACTURE_LIMIT_N or
+                          lateral > VIAL_LATERAL_FRACTURE_LIMIT_N)
+            vial['overload_detected'] = bool(
+                vial.get('overload_detected', False) or overloaded)
+            if self.allow_fracture and not vial['fractured'] and overloaded:
                 vial['fractured'] = True
                 vial['status'] = 'FRACTURED'
                 self._trigger_fracture_geometry(slot)
@@ -1354,7 +1359,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
     frame_dir.mkdir(exist_ok=True)
     side_frame_dir = args.out / 'side_frames'
     side_frame_dir.mkdir(exist_ok=True)
-    monitor = VialBreakabilityMonitor(stage)
+    monitor = VialBreakabilityMonitor(stage, allow_fracture=not args.unbreakable_vials)
     slots = tuple(item[1] for item in evaluator_caps)
     ex = Executor(world, arm, names, arm_idx, table, frame_dir, meter, monitor, slots,
                   tracked=tracked, press_control='position-limited',
@@ -1395,6 +1400,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         crooked_wiggle_cycles=args.crooked_wiggle_cycles,
         pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
         pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+        pickup_slide_x_m=args.pickup_slide_x_m,
         wrist_refinement=args.wrist_refinement,
         wrist_view_distance_m=args.wrist_view_distance_m,
         wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
@@ -1784,15 +1790,20 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 contact_z = (controller.vial_rim_z_m -
                              controller.cone_press_below_rim_m +
                              controller.tool.press_offset_m)
-                fast_cone_stroke = (
+                cone_contact_stroke = (
                     cone_press_action and cone_tilt_staged and same_orientation
                     and np.linalg.norm(target_cone_tip[:2] - start_cone_tip[:2]) < 1e-4
                     and min(abs(start_cone_tip[2] - contact_z),
                             abs(target_cone_tip[2] - contact_z)) < 0.002)
+                # A physical robot executes the cone press as a controlled
+                # descent.  Collapsing this interval to one physics step turns
+                # it into an artificial rigid-body impact that launches the
+                # cap laterally even with the TPU compliant material.  Retain
+                # the normal interpolated trajectory and collision checks.
                 path = P.pose_line(
                     ex.q, start, pose_start_rotation, target, rotation, tip,
-                    min_steps=1 if fast_cone_stroke else 60)
-                if fast_cone_stroke:
+                    min_steps=60)
+                if cone_contact_stroke:
                     phase += ('_cone_press_down' if target_cone_tip[2] < start_cone_tip[2]
                               else '_cone_press_up')
             except RuntimeError as cartesian_error:
@@ -1829,6 +1840,17 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                     and np.linalg.norm(np.asarray(target[:2]) - spare_position[:2]) < 0.010
                     and float(target[2]) >= (
                         float(spare_position[2]) + controller.tool.pick_offset_m - 0.002))
+                slide_position = (spare_position +
+                                  np.array([controller.pickup_slide_x_m, 0.0, 0.0])
+                                  if spare_position is not None else None)
+                wrist_slide_approach_over_paper = (
+                    args.wrist_refinement and state in {
+                        'refine_spare', 'await_refine_spare', 'pickup'}
+                    and slide_position is not None
+                    and np.linalg.norm(
+                        np.asarray(target[:2]) - slide_position[:2]) < 0.010
+                    and float(target[2]) >= (
+                        float(spare_position[2]) + controller.tool.pick_offset_m - 0.002))
                 pending_target = ((controller.pending or {}).get('target')
                                   if state in {'refine_missing', 'await_refine_missing', 'repair'}
                                   else None)
@@ -1861,6 +1883,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                         and not wrist_view_descent_over_spare
                         and not wrist_coarse_approach_over_paper
                         and not wrist_corrected_pick_over_paper
+                        and not wrist_slide_approach_over_paper
                         and not wrist_missing_approach
                         and not wrist_corrected_missing_place
                         and not cone_clearance_transfer):
@@ -1962,6 +1985,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
         'collision_configuration': collision_report,
         'command_count': len(controller.decision_records),
         'vial_breakability_evaluator': {'vials': monitor.vial_states,
+                                        'fracture_enabled': monitor.allow_fracture,
                                         'all_vials_intact': not any(
                                             value['fractured'] for value in monitor.vial_states.values())},
         'seating_evaluator': seating,
@@ -2064,6 +2088,12 @@ def main():
                         help='open-claw centering orbit at loose-cap pickup height; default disabled')
     parser.add_argument('--pickup-wiggle-cycles', type=int, default=0,
                         help='pickup centering orbits before jaw closure; default 0')
+    parser.add_argument('--pickup-slide-x-m', type=float, default=0.0,
+                        help='base-frame X offset for descending beside a loose cap before '
+                             'sliding horizontally into it (default: 0.0)')
+    parser.add_argument('--unbreakable-vials', action='store_true',
+                        help='retain vial contact/load telemetry but never trigger visual fracture '
+                             'geometry, regardless of measured force')
     parser.add_argument('--crooked-action',
                         choices=('shoulder', 'shoulder-close', 'closed-tip', 'regrip', 'cone-press'),
                         default='shoulder',
@@ -2289,7 +2319,7 @@ def main():
         frame_dir.mkdir(exist_ok=True)
         side_frame_dir = args.out / 'side_frames'
         side_frame_dir.mkdir(exist_ok=True)
-        monitor = VialBreakabilityMonitor(stage)
+        monitor = VialBreakabilityMonitor(stage, allow_fracture=not args.unbreakable_vials)
         ex = Executor(world, arm, names, arm_idx, camera, frame_dir, meter, monitor,
                       tuple(missing_slots + crooked_slots), tracked=caps,
                       press_control=args.press_control,
@@ -2473,6 +2503,7 @@ def main():
             'vial_breakability': {'axial_fracture_threshold_N': VIAL_AXIAL_FRACTURE_LIMIT_N,
                                   'lateral_fracture_threshold_N': VIAL_LATERAL_FRACTURE_LIMIT_N,
                                   'load_source': 'PhysX contact report impulses / dt',
+                                  'fracture_enabled': monitor.allow_fracture,
                                   'vials': monitor.vial_states,
                                   'all_vials_intact': not any(v['fractured'] for v in monitor.vial_states.values())},
             'seating_check_after_120_settle_steps': seating,

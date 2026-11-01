@@ -204,7 +204,8 @@ def _cap_dynamics(prim,dynamic):
 
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
-                paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30):
+                paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30,
+                table_cap_start_x=.28, table_cap_start_y=.325):
     import cell
     if min(crooked,missing,table_caps)<0 or not 0<crooked+missing<=vials<=30 or table_caps>10:
         raise ValueError('Invalid scene inventory (at most 30 vials, at most 10 separated spares)')
@@ -300,7 +301,8 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         # Three per row: a fourth column (x 0.415 m and beyond) is at the edge of the arm's reach.
         row,col=divmod(i,3)
         # Stage loose replacement caps on the right from TableCam's viewpoint.
-        pos=np.array([.28+col*.045,.325-row*.043,0.])
+        pos=np.array([float(table_cap_start_x)+col*.045,
+                      float(table_cap_start_y)-row*.043,0.])
         if randomize: pos[:2]+=rng.uniform(-.001,.001,2)
         cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(SPEC.surface_world_z,cap_R)
         path=f'/World/RemediationCaps/Table_{i:02d}'

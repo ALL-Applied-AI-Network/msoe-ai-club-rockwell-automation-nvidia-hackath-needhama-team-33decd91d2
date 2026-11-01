@@ -400,7 +400,7 @@ class RemediationControllerTests(unittest.TestCase):
         np.testing.assert_allclose(actions[-1][3:6], DEFAULT_CONE_PRESS_WPR_DEG,
                                    atol=1e-10)
 
-    def test_cone_press_centres_broad_cone_on_observed_cap(self):
+    def test_cone_press_centres_broad_cone_on_vial_aperture(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
             crooked_action="cone-press")
@@ -417,14 +417,14 @@ class RemediationControllerTests(unittest.TestCase):
             uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
             for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
         ])
-        expected_xy = np.asarray(detection["feature_base_pos_m"][:2])
+        expected_xy = np.asarray(detection["base_pos_m"][:2])
         self.assertTrue(any(np.allclose(nose[:2], expected_xy)
                             and abs(nose[2] - 0.240) < 1e-9 for nose in noses))
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
         self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)
 
-    def test_cone_press_applies_base_frame_xy_calibration(self):
+    def test_cone_press_xy_calibration_does_not_shift_aperture_contact(self):
         offset = np.array([0.004, -0.003])
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
@@ -442,10 +442,10 @@ class RemediationControllerTests(unittest.TestCase):
         ])
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(
-            lowest[:2], np.asarray(detection["feature_base_pos_m"][:2]) + offset,
+            lowest[:2], np.asarray(detection["base_pos_m"][:2]),
             atol=1e-10)
 
-    def test_cone_lean_selector_receives_continuous_feature_coordinate(self):
+    def test_cone_lean_selector_receives_calibrated_feature_coordinate(self):
         requested = []
 
         def select_wpr(target_base_m, joints_deg):
@@ -466,14 +466,14 @@ class RemediationControllerTests(unittest.TestCase):
 
         self.assertEqual(len(requested), 1)
         np.testing.assert_allclose(
-            requested[0][0], [0.319, 0.016, 0.23], atol=1e-12)
+            requested[0][0], [0.312, 0.019, 0.23], atol=1e-12)
         self.assertIs(requested[0][1], self.obs["joints"])
         self.assertTrue(any(np.allclose(action[3:6], [135.0, 0.0, -90.0])
                             for action in actions))
         self.assertEqual(controller.active_cone_press_wpr_deg,
                          (135.0, 0.0, -90.0))
 
-    def test_cone_press_xy_calibration_is_not_doubled_without_feature_center(self):
+    def test_cone_press_without_feature_center_still_contacts_aperture(self):
         offset = np.array([0.004, -0.003])
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
@@ -490,7 +490,7 @@ class RemediationControllerTests(unittest.TestCase):
         ])
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(
-            lowest[:2], np.asarray(detection["base_pos_m"][:2]) + offset,
+            lowest[:2], np.asarray(detection["base_pos_m"][:2]),
             atol=1e-10)
 
     def test_cone_press_depth_is_tunable_above_or_below_rim(self):
@@ -510,7 +510,7 @@ class RemediationControllerTests(unittest.TestCase):
             ])
             self.assertAlmostEqual(noses[:, 2].min(), rim_base_z() - depth, places=10)
 
-    def test_cone_press_hands_off_to_cap_center_below_32_degrees(self):
+    def test_cone_press_hands_off_to_aperture_below_32_degrees(self):
         controller = RemediationController(
             ContactTool(0.0, 0.0, 0.0005, validated=True),
             crooked_action="cone-press")
@@ -527,7 +527,7 @@ class RemediationControllerTests(unittest.TestCase):
             uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
             for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
         ])
-        expected_xy = np.asarray(detection["feature_base_pos_m"][:2])
+        expected_xy = np.asarray(detection["base_pos_m"][:2])
         lowest = noses[np.argmin(noses[:, 2])]
         np.testing.assert_allclose(lowest[:2], expected_xy, atol=1e-10)
         self.assertAlmostEqual(lowest[2], rim_base_z() - 0.003 + 0.0005, places=10)

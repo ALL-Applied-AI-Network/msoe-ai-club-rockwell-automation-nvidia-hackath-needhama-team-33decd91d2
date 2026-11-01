@@ -690,16 +690,18 @@ class RemediationController:
                 # Close and orient only at vial-clearance height.  The CAD cone
                 # nose is then placed from the RGB-D cap centre and surface
                 # height.  Jaw state never changes during cap contact.
-                vertical_high = np.array([target_pos[0], target_pos[1], height])
                 # The coarse TableCam position identifies the vial; a leaning
                 # cap's observed centre can be several millimetres away. Centre
                 # the STEP-measured broad cone on the bounded wrist observation.
-                cap_center_xy = raw_target_pos[:2]
-                observed_center = np.asarray(target.get("feature_base_pos_m", []), dtype=float)
-                if (observed_center.shape == (3,) and np.isfinite(observed_center).all() and
-                        np.linalg.norm(observed_center[:2] - raw_target_pos[:2]) <= 0.016):
-                    cap_center_xy = observed_center[:2]
-                feature_xy = cap_center_xy + crooked_xy_offset
+                aperture = np.asarray(
+                    target.get("aperture_base_pos_m", raw_target_pos), dtype=float)
+                # A wrist crop localizes the visible, displaced cap feature.
+                # The cone, however, is a funnel: its axis must remain over
+                # the camera-derived vial aperture or it applies a lateral
+                # impulse that ejects the leaning cap.  Wrist refinement still
+                # confirms the target and supplies its observed contact height.
+                feature_xy = aperture[:2] + crooked_xy_offset
+                vertical_high = np.array([aperture[0], aperture[1], height])
                 high_point = np.asarray(target.get("cap_high_point_base_m", []), dtype=float)
                 if (high_point.shape == (3,) and np.isfinite(high_point).all() and
                         np.linalg.norm(high_point[:2] - raw_target_pos[:2]) >= 0.001 and
@@ -722,11 +724,11 @@ class RemediationController:
                 cone_contact_z = (self.vial_rim_z_m - self.cone_press_below_rim_m +
                                   self.tool.press_offset_m)
                 cone_contact = self._cone_tcp_for_tip(
-                    [feature_xy[0], feature_xy[1], cone_contact_z], selected_wpr)
+                    [aperture[0], aperture[1], cone_contact_z], selected_wpr)
                 cone_above_z = max(contact_surface_top + 0.005,
                                    cone_contact_z + self.cone_press_stroke_m)
                 cone_above = self._cone_tcp_for_tip(
-                    [feature_xy[0], feature_xy[1], cone_above_z], selected_wpr)
+                    [aperture[0], aperture[1], cone_above_z], selected_wpr)
                 if not self.cone_oriented:
                     current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
                     orientation_point = np.array([current[0], current[1], height])
@@ -747,16 +749,17 @@ class RemediationController:
                 if selected_lean_deg > 180.0:
                     selected_lean_deg -= 360.0
                 self.events.append({"event": "cone_lean_selected",
-                                    "target_base_m": [float(feature_xy[0]),
-                                                      float(feature_xy[1]),
+                                    "target_base_m": [float(aperture[0]),
+                                                      float(aperture[1]),
                                                       float(contact_surface_top)],
+                                    "observed_feature_base_m": [float(feature_xy[0]),
+                                                                float(feature_xy[1]),
+                                                                float(contact_surface_top)],
                                     "wpr_deg": list(map(float, selected_wpr)),
                                     "selected_lean_deg": selected_lean_deg,
                                     "selected_heading_deg": float(selected_wpr[2]),
                                     "nominal_lean_deg": 45.0,
                                     "press_stroke_m": float(cone_above_z - cone_contact_z)})
-                aperture = np.asarray(
-                    target.get("aperture_base_pos_m", raw_target_pos), dtype=float)
                 self.cone_batch_targets.append(
                     [float(aperture[0]), float(aperture[1]),
                      float(self.vial_rim_z_m)])
