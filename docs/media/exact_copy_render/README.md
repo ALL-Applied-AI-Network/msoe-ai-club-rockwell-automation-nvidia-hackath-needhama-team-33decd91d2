@@ -2,8 +2,14 @@
 
 Isaac Sim replay of the successful real-robot run `shared/runs/2026-10-30_16-21-27_physical_policy`
 (1 missing + 1 crooked cap -> all 28 seated). Made on branch `exact_copy_render_run`
-(commit `4bdd7fb`, `src/remediation/render_exact_copy_kinematic.py`); source frames and
-`plan.json`/`timeline.json` are in `shared/runs/2026-11-01_exact_copy_render_full_v1/`.
+(`src/remediation/render_exact_copy_kinematic.py`); source frames and
+`plan.json`/`timeline.json` are in `shared/runs/2026-11-01_exact_copy_render_matte_v1/`
+(reflective original: `shared/runs/2026-11-01_exact_copy_render_full_v1/`, commit `4bdd7fb`).
+
+**Matte metal (commit `3e42f71`):** the tray plate and gripper/robot metals were switched
+from a reflective finish to flat matte (metallic 0, roughness 0.9, flat grey diffuse,
+sparkle textures cleared) because the specular highlights on the perforated tray plate
+looked bad. Pass `--keep-metal-reflections` to the render script for the old look.
 
 **What is faked:** the real `trace.jsonl` waypoints are replayed through IK and the robot is posed
 every frame; there is no perception and no contact physics. The spare cap is attached to the

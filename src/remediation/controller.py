@@ -778,7 +778,35 @@ class RemediationController:
                 final_cone_target = self.defect_tracks is None or remaining <= 1
                 self._add_pose(cone_high, selected_wpr, True)
                 self._add_pose(cone_above, selected_wpr, True)
-                self._add_pose(cone_contact, selected_wpr, True)
+                if self.cone_target == "high-edge":
+                    # A single ballistic strike on the raised edge is a
+                    # knife-edge: contact chatter from the many simultaneous
+                    # finger/cone contacts can kick the cap past vertical
+                    # instead of settling it upright (observed: a dip to
+                    # 47 deg followed by an overshoot to 95 deg).  A lateral
+                    # wiggle at full depth makes this worse once the cap is
+                    # already near vertical, so instead stage the descent in
+                    # bounded increments -- each one a shorter, gentler
+                    # impact -- with no waypoint after the final depth that
+                    # could re-disturb a cap that has already righted.
+                    for fraction in (0.5, 0.8, 1.0):
+                        self._add_pose(
+                            cone_above + (cone_contact - cone_above) * fraction,
+                            selected_wpr, True)
+                    # At full depth the cap is already near vertical, but high
+                    # friction between the cone and the cap's open cavity
+                    # (the documented "thimble effect") drags it straight up
+                    # on a vertical retreat instead of letting it drop into
+                    # the mouth.  Peel the cone off sideways, away from the
+                    # vial centre, before climbing clear.
+                    outward = feature_xy - np.asarray(aperture[:2], dtype=float)
+                    outward_norm = np.linalg.norm(outward)
+                    outward = (outward / outward_norm if outward_norm > 1e-6
+                              else np.array([1.0, 0.0]))
+                    peel = cone_contact + np.r_[outward * 0.004, 0.0]
+                    self._add_pose(peel, selected_wpr, True)
+                else:
+                    self._add_pose(cone_contact, selected_wpr, True)
                 self._add_pose(cone_above, selected_wpr, True)
                 self._add_pose(cone_high, selected_wpr, True)
                 if final_cone_target:
