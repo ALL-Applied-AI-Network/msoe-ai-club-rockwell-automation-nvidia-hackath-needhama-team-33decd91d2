@@ -42,12 +42,8 @@ RETIRED_STOCK_EOAT_TOKENS = [
 class CollisionConfig:
     # Sub-millimeter contact offsets to eliminate PhysX 20 mm phantom bubbles
     finger_contact_offset_m: float = 0.0005  # 0.5 mm
-    # Cap/vial contact is the most demanding pair in the scene: a 5 g dynamic
-    # sleeve enters a static annulus with only 1.27 mm radial clearance.  Begin
-    # generating contacts 1 mm out so the solver sees the rim before a fast
-    # cone press can put the thin plug wall through it.
-    cap_contact_offset_m: float = 0.001  # 1.0 mm
-    vial_contact_offset_m: float = 0.001  # 1.0 mm
+    cap_contact_offset_m: float = 0.0005  # 0.5 mm
+    vial_contact_offset_m: float = 0.0005  # 0.5 mm
     tray_contact_offset_m: float = 0.0005  # 0.5 mm
     rest_offset_m: float = 0.0  # Surface coincidence at zero penetration
 
@@ -71,12 +67,15 @@ class CollisionConfig:
     cap_static_friction: float = 0.18
     cap_dynamic_friction: float = 0.12
     cap_restitution: float = 0.0
-    cap_linear_damping: float = 2.0
-    cap_angular_damping: float = 4.0
+    cap_linear_damping: float = 3.0
+    cap_angular_damping: float = 6.0
+    cap_max_depenetration_velocity_m_per_s: float = 0.5
 
-    # The vial is fixture-held.  Its contact must remain a hard non-penetration
-    # constraint: compliant PhysX contact represents give as collider overlap,
-    # which is visible as the cap phasing into the vial during a press.
+    # Fixture-held vial contact retains a small amount of calibrated compliance.
+    # This is the known-working d6b8607 behavior: the cap remains fully dynamic
+    # and settles through PhysX contact without any pose write or snapping.
+    vial_compliant_stiffness_N_per_m: float = 6.0e4
+    vial_compliant_damping_Ns_per_m: float = 100.0
     vial_static_friction: float = 0.35
     vial_dynamic_friction: float = 0.25
 
@@ -151,7 +150,7 @@ class CollisionSubAgent:
         static_prims = self.configure_static_tray_and_vials(stage)
         report["configured_vials_and_tray"] = len(static_prims)
 
-        # 6. Hard, low-friction contact on the fixture-held vial tubes
+        # 6. Compliant contact on the fixture-held vial tubes
         report["compliant_vial_colliders"] = len(self.configure_vial_give(stage))
 
         if verbose:
@@ -279,8 +278,10 @@ class CollisionSubAgent:
                 # penetration while preserving free contact-driven motion.
                 physx_rb.CreateLinearDampingAttr().Set(self.cfg.cap_linear_damping)
                 physx_rb.CreateAngularDampingAttr().Set(self.cfg.cap_angular_damping)
-                physx_rb.CreateSolverPositionIterationCountAttr().Set(64)
-                physx_rb.CreateSolverVelocityIterationCountAttr().Set(16)
+                physx_rb.CreateSolverPositionIterationCountAttr().Set(32)
+                physx_rb.CreateSolverVelocityIterationCountAttr().Set(8)
+                physx_rb.CreateMaxDepenetrationVelocityAttr().Set(
+                    self.cfg.cap_max_depenetration_velocity_m_per_s)
 
             # Apply to cap root and any submesh collision prims (e.g. Flange_*, Plug_*)
             # Note: Do NOT apply CollisionAPI to non-colliding visual liners (CavityLiner_*, FlangeCavityLiner_*)
@@ -329,10 +330,8 @@ class CollisionSubAgent:
                     col.CreateCollisionEnabledAttr().Set(True)
 
                     physx_col = PhysxSchema.PhysxCollisionAPI.Apply(prim)
-                    is_vial = "_tube" in str(prim.GetPath())
                     physx_col.CreateContactOffsetAttr().Set(
-                        self.cfg.vial_contact_offset_m if is_vial
-                        else self.cfg.tray_contact_offset_m
+                        self.cfg.tray_contact_offset_m
                     )
                     physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
 
@@ -346,19 +345,18 @@ class CollisionSubAgent:
         return configured
 
     def configure_vial_give(self, stage: Usd.Stage) -> List[str]:
-        """Bind hard, low-friction contact material to every vial collider.
-
-        Vials are statically held by the tray.  Do not use PhysX compliant
-        contact here: its spring displacement is implemented as collider
-        penetration and makes a correctly constrained cap visibly phase into
-        the vial wall.
-        """
+        """Bind the known-working compliant material to every vial collider."""
         glass = self._get_or_create_physics_material(
             stage, "/World/PhysicsMaterials/VialPlasticCompliant",
             static_friction=self.cfg.vial_static_friction,
             dynamic_friction=self.cfg.vial_dynamic_friction,
             restitution=0.0,
         )
+        px = PhysxSchema.PhysxMaterialAPI(glass.GetPrim())
+        px.CreateCompliantContactStiffnessAttr().Set(
+            self.cfg.vial_compliant_stiffness_N_per_m)
+        px.CreateCompliantContactDampingAttr().Set(
+            self.cfg.vial_compliant_damping_Ns_per_m)
         configured = []
         tray = stage.GetPrimAtPath("/World/RemediationTray")
         if not tray.IsValid():

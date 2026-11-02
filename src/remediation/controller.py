@@ -695,17 +695,14 @@ class RemediationController:
                 # the STEP-measured broad cone on the bounded wrist observation.
                 aperture = np.asarray(
                     target.get("aperture_base_pos_m", raw_target_pos), dtype=float)
-                # The wrist crop localizes the raised, displaced part of the
-                # crooked cap. Press that high side to create the correcting
-                # moment seen on the physical cell, but bound the correction so
-                # a bad box cannot move the cone outside the cap flange.
+                # Preserve the known-working d6b8607 behavior: the cone is a
+                # funnel, so its axis stays on the perception-derived aperture.
+                # Wrist refinement confirms the target and contact height but
+                # must not turn the press into a lateral sweep across the rim.
                 observed_feature_xy = target_pos[:2]
-                feature_delta = observed_feature_xy - aperture[:2]
-                feature_distance = float(np.linalg.norm(feature_delta))
-                max_high_side_offset_m = 0.010
-                if feature_distance > max_high_side_offset_m:
-                    feature_delta *= max_high_side_offset_m / feature_distance
-                press_xy = aperture[:2] + feature_delta
+                feature_delta = crooked_xy_offset.copy()
+                feature_xy = aperture[:2] + crooked_xy_offset
+                press_xy = aperture[:2]
                 vertical_high = np.array([press_xy[0], press_xy[1], height])
                 high_point = np.asarray(target.get("cap_high_point_base_m", []), dtype=float)
                 if (high_point.shape == (3,) and np.isfinite(high_point).all() and
@@ -716,19 +713,15 @@ class RemediationController:
                 else:
                     contact_surface_top = surface_top
                 selected_wpr = self._cone_wpr_for_target(
-                    [press_xy[0], press_xy[1], contact_surface_top], obs)
+                    [feature_xy[0], feature_xy[1], contact_surface_top], obs)
                 cone_high = self._cone_tcp_for_tip(vertical_high, selected_wpr)
                 # Advance only through the cone-led interval from the contact
                 # trace, retreat, and reacquire the cap surface before the next
                 # tap.  This prevents the broad finger proxy from continuing
                 # through the old 45 mm sweep after the useful initial impact.
-                # Stop at the top of a correctly seated cap, not at the vial
-                # rim. A centred narrow nose can enter the open cap cavity;
-                # driving it to rim height embeds the wider cone before PhysX
-                # can depenetrate the 5 g cap. Positive depth advances below
-                # the seated flange top and press offset raises the endpoint.
-                cone_contact_z = (self.vial_rim_z_m + SPEC.flange_thickness -
-                                  self.cone_press_below_rim_m +
+                # Directly calibratable d6b8607 endpoint: positive depth moves
+                # below the vial rim and positive press offset raises it.
+                cone_contact_z = (self.vial_rim_z_m - self.cone_press_below_rim_m +
                                   self.tool.press_offset_m)
                 cone_contact = self._cone_tcp_for_tip(
                     [press_xy[0], press_xy[1], cone_contact_z], selected_wpr)
@@ -736,24 +729,6 @@ class RemediationController:
                                    cone_contact_z + self.cone_press_stroke_m)
                 cone_above = self._cone_tcp_for_tip(
                     [press_xy[0], press_xy[1], cone_above_z], selected_wpr)
-                # A single off-centre stroke can level the cap and then carry
-                # it across the mouth: hard-contact traces showed the cap at
-                # 7.5 deg while 7.2 mm off-axis, before it tipped onto the
-                # opposite rim.  Use the observed high side only for a shallow
-                # leveling touch, retract clear, then seat at the perception-
-                # derived aperture centre.  Both motions remain collision-only.
-                leveling_clearance_m = 0.006
-                level_contact_z = cone_contact_z + leveling_clearance_m
-                level_contact = self._cone_tcp_for_tip(
-                    [press_xy[0], press_xy[1], level_contact_z], selected_wpr)
-                level_above_z = max(contact_surface_top + 0.005,
-                                    level_contact_z + self.cone_press_stroke_m)
-                level_above = self._cone_tcp_for_tip(
-                    [press_xy[0], press_xy[1], level_above_z], selected_wpr)
-                center_above = self._cone_tcp_for_tip(
-                    [aperture[0], aperture[1], cone_above_z], selected_wpr)
-                center_contact = self._cone_tcp_for_tip(
-                    [aperture[0], aperture[1], cone_contact_z], selected_wpr)
                 if not self.cone_oriented:
                     current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
                     orientation_point = np.array([current[0], current[1], height])
@@ -788,11 +763,7 @@ class RemediationController:
                                     "selected_lean_deg": selected_lean_deg,
                                     "selected_heading_deg": float(selected_wpr[2]),
                                     "nominal_lean_deg": 45.0,
-                                    "press_stroke_m": float(cone_above_z - cone_contact_z),
-                                    "leveling_clearance_m": leveling_clearance_m,
-                                    "seating_target_base_m": [float(aperture[0]),
-                                                              float(aperture[1]),
-                                                              float(cone_contact_z)]})
+                                    "press_stroke_m": float(cone_above_z - cone_contact_z)})
                 self.cone_batch_targets.append(
                     [float(aperture[0]), float(aperture[1]),
                      float(self.vial_rim_z_m)])
@@ -802,12 +773,9 @@ class RemediationController:
                     for track in (self.defect_tracks or []))
                 final_cone_target = self.defect_tracks is None or remaining <= 1
                 self._add_pose(cone_high, selected_wpr, True)
-                self._add_pose(level_above, selected_wpr, True)
-                self._add_pose(level_contact, selected_wpr, True)
-                self._add_pose(level_above, selected_wpr, True)
-                self._add_pose(center_above, selected_wpr, True)
-                self._add_pose(center_contact, selected_wpr, True)
-                self._add_pose(center_above, selected_wpr, True)
+                self._add_pose(cone_above, selected_wpr, True)
+                self._add_pose(cone_contact, selected_wpr, True)
+                self._add_pose(cone_above, selected_wpr, True)
                 self._add_pose(cone_high, selected_wpr, True)
                 if final_cone_target:
                     # Clear TableCam exactly once after the complete cached
