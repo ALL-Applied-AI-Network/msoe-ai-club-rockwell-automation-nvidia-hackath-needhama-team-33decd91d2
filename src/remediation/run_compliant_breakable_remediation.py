@@ -1807,7 +1807,7 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                 cone_offset = np.asarray(controller.cone_tip_from_tcp_m, dtype=float)
                 start_cone_tip = start + pose_start_rotation @ cone_offset
                 target_cone_tip = target + rotation @ cone_offset
-                contact_z = (controller.vial_rim_z_m + SPEC.flange_thickness -
+                contact_z = (controller.vial_rim_z_m -
                              controller.cone_press_below_rim_m +
                              controller.tool.press_offset_m)
                 cone_contact_stroke = (
@@ -1815,14 +1815,13 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                     and np.linalg.norm(target_cone_tip[:2] - start_cone_tip[:2]) < 1e-4
                     and min(abs(start_cone_tip[2] - contact_z),
                             abs(target_cone_tip[2] - contact_z)) < 0.002)
-                # A physical robot executes the cone press as a controlled
-                # descent.  Collapsing this interval to one physics step turns
-                # it into an artificial rigid-body impact that launches the
-                # cap laterally even with the TPU compliant material.  Retain
-                # the normal interpolated trajectory and collision checks.
+                # Resolve the last contact stroke at four times the normal
+                # spatial resolution. The rigid open cone cannot rely on soft
+                # overlap, so smaller commanded increments give CCD/solver
+                # contact a stable opportunity to turn and seat the 5 g cap.
                 path = P.pose_line(
                     ex.q, start, pose_start_rotation, target, rotation, tip,
-                    min_steps=60)
+                    min_steps=240 if cone_contact_stroke else 60)
                 if cone_contact_stroke:
                     phase += ('_cone_press_down' if target_cone_tip[2] < start_cone_tip[2]
                               else '_cone_press_up')

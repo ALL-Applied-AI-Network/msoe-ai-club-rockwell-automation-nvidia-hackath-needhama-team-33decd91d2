@@ -204,27 +204,40 @@ def finger_collision_pieces(sectors=12):
     return pieces
 
 
-def _cone_proxy_mesh(segments=24):
-    """Convex STEP-measured truncated-cone proxy in the finger frame."""
+def _cone_proxy_pieces(segments=24, shell_thickness=0.0005):
+    """Open, segmented STEP-measured cone contact shell in the finger frame.
+
+    A single convex-hull proxy closes both ends of the frustum.  During a deep
+    press that invisible disk can overlap the cap flange and carry it upward on
+    retraction.  Convex annular sectors retain the measured sloping contact
+    face while leaving the nose and base open, so there is no capture disk.
+    """
     axis = CONE_AXIS_FINGER / np.linalg.norm(CONE_AXIS_FINGER)
     reference = np.array([1.0, 0.0, 0.0])
     u = reference - axis * np.dot(reference, axis)
     u /= np.linalg.norm(u)
     v = np.cross(axis, u)
     base_centre = CONE_TIP_FINGER_M + axis * CONE_NOSE_LENGTH_M
-    angles = np.linspace(0.0, 2.0 * np.pi, segments, endpoint=False)
-    small_ring = [CONE_TIP_FINGER_M + CONE_REFERENCE_RADIUS_M *
-                  (np.cos(t) * u + np.sin(t) * v) for t in angles]
-    base_ring = [base_centre + CONE_BASE_RADIUS_M *
-                 (np.cos(t) * u + np.sin(t) * v) for t in angles]
-    points = [*small_ring, *base_ring]
-    counts = [segments, segments] + [4] * segments
-    indices = list(range(segments - 1, -1, -1))
-    indices.extend(range(segments, 2 * segments))
+    pieces = []
     for i in range(segments):
-        j = (i + 1) % segments
-        indices.extend((i, j, segments + j, segments + i))
-    return points, counts, indices
+        a = 2.0 * np.pi * i / segments
+        b = 2.0 * np.pi * (i + 1) / segments
+        ring = lambda centre, radius, angle: (
+            centre + radius * (np.cos(angle) * u + np.sin(angle) * v))
+        inner_small = max(0.0005, CONE_REFERENCE_RADIUS_M - shell_thickness)
+        inner_base = CONE_BASE_RADIUS_M - shell_thickness
+        points = [
+            ring(CONE_TIP_FINGER_M, CONE_REFERENCE_RADIUS_M, a),
+            ring(CONE_TIP_FINGER_M, CONE_REFERENCE_RADIUS_M, b),
+            ring(base_centre, CONE_BASE_RADIUS_M, b),
+            ring(base_centre, CONE_BASE_RADIUS_M, a),
+            ring(CONE_TIP_FINGER_M, inner_small, a),
+            ring(CONE_TIP_FINGER_M, inner_small, b),
+            ring(base_centre, inner_base, b),
+            ring(base_centre, inner_base, a),
+        ]
+        pieces.append(points)
+    return pieces
 
 
 def attach_collision_proxies(stage, cone_press=False):
@@ -257,16 +270,22 @@ def attach_collision_proxies(stage, cone_press=False):
             physx_col.CreateContactOffsetAttr().Set(0.0005)
             physx_col.CreateRestOffsetAttr().Set(0.0)
         if cone_press:
-            points, counts, indices = _cone_proxy_mesh()
-            cone = UsdGeom.Mesh.Define(stage, f'{path}/ConePressTip')
-            cone.CreatePointsAttr([Gf.Vec3f(*point) for point in points])
-            cone.CreateFaceVertexCountsAttr(counts)
-            cone.CreateFaceVertexIndicesAttr(indices)
-            UsdPhysics.CollisionAPI.Apply(cone.GetPrim())
-            UsdPhysics.MeshCollisionAPI.Apply(cone.GetPrim()).CreateApproximationAttr('convexHull')
-            physx_col = PhysxSchema.PhysxCollisionAPI.Apply(cone.GetPrim())
-            physx_col.CreateContactOffsetAttr().Set(0.0005)
-            physx_col.CreateRestOffsetAttr().Set(0.0)
+            faces = [4, 4, 4, 4, 4, 4]
+            indices = [0, 1, 2, 3, 4, 7, 6, 5,
+                       0, 4, 5, 1, 3, 2, 6, 7,
+                       0, 3, 7, 4, 1, 5, 6, 2]
+            for k, points in enumerate(_cone_proxy_pieces()):
+                cone = UsdGeom.Mesh.Define(
+                    stage, f'{path}/ConePressSurface_{k:02d}')
+                cone.CreatePointsAttr([Gf.Vec3f(*point) for point in points])
+                cone.CreateFaceVertexCountsAttr(faces)
+                cone.CreateFaceVertexIndicesAttr(indices)
+                UsdPhysics.CollisionAPI.Apply(cone.GetPrim())
+                UsdPhysics.MeshCollisionAPI.Apply(
+                    cone.GetPrim()).CreateApproximationAttr('convexHull')
+                physx_col = PhysxSchema.PhysxCollisionAPI.Apply(cone.GetPrim())
+                physx_col.CreateContactOffsetAttr().Set(0.0005)
+                physx_col.CreateRestOffsetAttr().Set(0.0)
         paths.append(path)
     return paths
 

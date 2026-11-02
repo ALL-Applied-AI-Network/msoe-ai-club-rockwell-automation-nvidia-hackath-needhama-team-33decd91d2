@@ -52,14 +52,10 @@ class CollisionConfig:
     pad_dynamic_friction: float = 1.3
     pad_restitution: float = 0.0  # Completely inelastic (damps bounce)
 
-    # The optional side cone is printed in TPU.  Give only that opt-in proxy a
-    # compliant, low-slip-resistance material so a displaced cap slides down
-    # the funnel instead of sticking to its flank and being dragged sideways.
-    # The standard finger proxies retain their high-friction pickup material.
+    # The side cone uses a rigid, low-friction open contact shell. Compliance
+    # allowed its closed convex proxy to overlap and retain the cap flange.
     cone_static_friction: float = 0.20
     cone_dynamic_friction: float = 0.15
-    cone_compliant_stiffness_N_per_m: float = 1.0e5
-    cone_compliant_damping_Ns_per_m: float = 120.0
 
     # Smooth molded plastic against a clear plastic vial.  The old rubber-like
     # 1.2/1.0 pair wedged a four-point crooked cap onto the rim instead of
@@ -114,11 +110,6 @@ class CollisionSubAgent:
             restitution=self.cfg.pad_restitution,
             friction_combine_mode="min",
         )
-        cone_px = PhysxSchema.PhysxMaterialAPI(cone_material.GetPrim())
-        cone_px.CreateCompliantContactStiffnessAttr().Set(
-            self.cfg.cone_compliant_stiffness_N_per_m)
-        cone_px.CreateCompliantContactDampingAttr().Set(
-            self.cfg.cone_compliant_damping_Ns_per_m)
         cap_material = self._get_or_create_physics_material(
             stage,
             "/World/PhysicsMaterials/PlasticCapMaterial",
@@ -246,7 +237,7 @@ class CollisionSubAgent:
                 physx_col.CreateRestOffsetAttr().Set(self.cfg.rest_offset_m)
 
                 # Bind viscoelastic high-friction pad material with physics purpose
-                material = (cone_material if prim.GetName() == "ConePressTip"
+                material = (cone_material if prim.GetName().startswith("ConePressSurface_")
                             else pad_material)
                 UsdShade.MaterialBindingAPI.Apply(prim).Bind(
                     material, materialPurpose="physics")
