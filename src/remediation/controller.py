@@ -736,6 +736,24 @@ class RemediationController:
                                    cone_contact_z + self.cone_press_stroke_m)
                 cone_above = self._cone_tcp_for_tip(
                     [press_xy[0], press_xy[1], cone_above_z], selected_wpr)
+                # A single off-centre stroke can level the cap and then carry
+                # it across the mouth: hard-contact traces showed the cap at
+                # 7.5 deg while 7.2 mm off-axis, before it tipped onto the
+                # opposite rim.  Use the observed high side only for a shallow
+                # leveling touch, retract clear, then seat at the perception-
+                # derived aperture centre.  Both motions remain collision-only.
+                leveling_clearance_m = 0.006
+                level_contact_z = cone_contact_z + leveling_clearance_m
+                level_contact = self._cone_tcp_for_tip(
+                    [press_xy[0], press_xy[1], level_contact_z], selected_wpr)
+                level_above_z = max(contact_surface_top + 0.005,
+                                    level_contact_z + self.cone_press_stroke_m)
+                level_above = self._cone_tcp_for_tip(
+                    [press_xy[0], press_xy[1], level_above_z], selected_wpr)
+                center_above = self._cone_tcp_for_tip(
+                    [aperture[0], aperture[1], cone_above_z], selected_wpr)
+                center_contact = self._cone_tcp_for_tip(
+                    [aperture[0], aperture[1], cone_contact_z], selected_wpr)
                 if not self.cone_oriented:
                     current = uf0_to_base(np.asarray(obs["tcp_pose"][:3], dtype=float))
                     orientation_point = np.array([current[0], current[1], height])
@@ -770,7 +788,11 @@ class RemediationController:
                                     "selected_lean_deg": selected_lean_deg,
                                     "selected_heading_deg": float(selected_wpr[2]),
                                     "nominal_lean_deg": 45.0,
-                                    "press_stroke_m": float(cone_above_z - cone_contact_z)})
+                                    "press_stroke_m": float(cone_above_z - cone_contact_z),
+                                    "leveling_clearance_m": leveling_clearance_m,
+                                    "seating_target_base_m": [float(aperture[0]),
+                                                              float(aperture[1]),
+                                                              float(cone_contact_z)]})
                 self.cone_batch_targets.append(
                     [float(aperture[0]), float(aperture[1]),
                      float(self.vial_rim_z_m)])
@@ -780,9 +802,12 @@ class RemediationController:
                     for track in (self.defect_tracks or []))
                 final_cone_target = self.defect_tracks is None or remaining <= 1
                 self._add_pose(cone_high, selected_wpr, True)
-                self._add_pose(cone_above, selected_wpr, True)
-                self._add_pose(cone_contact, selected_wpr, True)
-                self._add_pose(cone_above, selected_wpr, True)
+                self._add_pose(level_above, selected_wpr, True)
+                self._add_pose(level_contact, selected_wpr, True)
+                self._add_pose(level_above, selected_wpr, True)
+                self._add_pose(center_above, selected_wpr, True)
+                self._add_pose(center_contact, selected_wpr, True)
+                self._add_pose(center_above, selected_wpr, True)
                 self._add_pose(cone_high, selected_wpr, True)
                 if final_cone_target:
                     # Clear TableCam exactly once after the complete cached

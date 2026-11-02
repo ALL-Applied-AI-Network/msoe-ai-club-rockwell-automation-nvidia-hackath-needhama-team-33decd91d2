@@ -443,10 +443,14 @@ class RemediationControllerTests(unittest.TestCase):
             uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
             for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
         ])
-        lowest = noses[np.argmin(noses[:, 2])]
+        expected_xy = np.asarray(detection["base_pos_m"][:2]) + offset
+        leveling = noses[np.linalg.norm(noses[:, :2] - expected_xy, axis=1) < 1e-9]
+        self.assertGreater(len(leveling), 0)
         np.testing.assert_allclose(
-            lowest[:2], np.asarray(detection["base_pos_m"][:2]) + offset,
+            leveling[np.argmin(leveling[:, 2])][:2], expected_xy,
             atol=1e-10)
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(lowest[:2], detection["base_pos_m"][:2], atol=1e-10)
 
     def test_cone_press_bounds_wrist_high_side_offset_to_ten_mm(self):
         controller = RemediationController(
@@ -463,8 +467,13 @@ class RemediationControllerTests(unittest.TestCase):
             uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
             for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
         ])
+        leveling_xy = aperture + [0.010, 0.0]
+        leveling = noses[np.linalg.norm(noses[:, :2] - leveling_xy, axis=1) < 1e-9]
+        self.assertGreater(len(leveling), 0)
+        np.testing.assert_allclose(
+            leveling[np.argmin(leveling[:, 2])][:2], leveling_xy, atol=1e-10)
         lowest = noses[np.argmin(noses[:, 2])]
-        np.testing.assert_allclose(lowest[:2], aperture + [0.010, 0.0], atol=1e-10)
+        np.testing.assert_allclose(lowest[:2], aperture, atol=1e-10)
 
     def test_cone_lean_selector_receives_calibrated_feature_coordinate(self):
         requested = []
@@ -509,10 +518,14 @@ class RemediationControllerTests(unittest.TestCase):
             uf0_to_base(action[:3]) + rotation @ np.asarray(DEFAULT_CONE_TIP_FROM_TCP_M)
             for action in actions if np.allclose(action[3:6], DEFAULT_CONE_PRESS_WPR_DEG)
         ])
-        lowest = noses[np.argmin(noses[:, 2])]
+        expected_xy = np.asarray(detection["base_pos_m"][:2]) + offset
+        leveling = noses[np.linalg.norm(noses[:, :2] - expected_xy, axis=1) < 1e-9]
+        self.assertGreater(len(leveling), 0)
         np.testing.assert_allclose(
-            lowest[:2], np.asarray(detection["base_pos_m"][:2]) + offset,
+            leveling[np.argmin(leveling[:, 2])][:2], expected_xy,
             atol=1e-10)
+        lowest = noses[np.argmin(noses[:, 2])]
+        np.testing.assert_allclose(lowest[:2], detection["base_pos_m"][:2], atol=1e-10)
 
     def test_cone_press_depth_is_tunable_above_or_below_rim(self):
         detection = self.detection("crooked_cap", [0.31, 0.02, 0.23])
