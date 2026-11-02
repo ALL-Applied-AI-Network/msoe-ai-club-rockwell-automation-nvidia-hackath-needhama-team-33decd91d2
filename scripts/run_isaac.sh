@@ -35,6 +35,10 @@ done
 if [ -n "$FOUND_ISAAC" ]; then
     echo "[run_isaac] Detected Isaac Sim at: $FOUND_ISAAC"
     export ISAAC="$FOUND_ISAAC"
+    # setgid python3 would lose LD_PRELOAD/LD_LIBRARY_PATH; see isaac_python_nosetgid.sh
+    if [ -g "$FOUND_ISAAC/kit/python/bin/python3" ]; then
+        export PYTHONEXE="$REPO_ROOT/scripts/isaac_python_nosetgid.sh"
+    fi
     exec "$FOUND_ISAAC/python.sh" "$@"
 fi
 

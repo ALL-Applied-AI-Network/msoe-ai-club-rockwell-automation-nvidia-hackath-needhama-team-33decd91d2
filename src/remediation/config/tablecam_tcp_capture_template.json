@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "purpose": "Fill from physical TableCam captures and a TCP-held calibration reference. Values are base-frame metres except pixels.",
+  "capture_requirements": {
+    "camera": "table",
+    "native_image_size_px": [1920, 1080],
+    "minimum_references": 6,
+    "minimum_xy_span_m": 0.12,
+    "procedure": [
+      "Place the same identifiable reference point at each location or hold it with the calibrated TCP.",
+      "Capture a native-resolution TableCam image with no crop or resize.",
+      "Record the reference centre pixel and its measured base-frame feature position.",
+      "Use the feature's actual height as feature_plane_base_z_m; do not substitute the table plane for a raised target."
+    ]
+  },
+  "correspondences": [
+    {"id": "near_left", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null},
+    {"id": "near_right", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null},
+    {"id": "far_left", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null},
+    {"id": "far_right", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null},
+    {"id": "center_a", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null},
+    {"id": "center_b", "pixel_xy": null, "feature_plane_base_z_m": null, "measured_feature_base_pos_m": null}
+  ]
+}
