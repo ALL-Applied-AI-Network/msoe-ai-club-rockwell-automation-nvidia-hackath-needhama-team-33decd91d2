@@ -1,0 +1,86 @@
+{
+  "checkpoint": "/data/ai_club/team_14_2026/yolo26x/best.pt",
+  "mode": "full",
+  "confidence": 0.7,
+  "imgsz": 1280,
+  "device": "0",
+  "allow_provisional_contact": true,
+  "pick_offset_m": null,
+  "effective_pick_offset_m": -0.0024920000000000003,
+  "pickup_z_offset_m": 0.013,
+  "pickup_slide_x_m": -0.04,
+  "pickup_z_offset_convention": "fingertip clearance above local table plane",
+  "pickup_z_source": "pickup_z_offset_m (fingertip height above table)",
+  "nominal_work_surface_z_m": -0.0051,
+  "work_surface_z_offset_m": 0.0,
+  "vial_rim_plane_offset_m": 0.0,
+  "vial_rim_plane_override_m": 0.0,
+  "vial_height_override_m": 0.0,
+  "effective_vial_height_m": 0.2032,
+  "legacy_table_plane_offset_m": null,
+  "legacy_vial_rim_z_m": null,
+  "offsets_file": "/home/ad.msoe.edu/needhama/Documents/GitHub/innovation-lab-fall-2026/PhysicalAI-Hackathon-2026/config/remediation_offsets.json",
+  "cone_table_pick_offset_m": null,
+  "place_offset_m": null,
+  "press_offset_m": null,
+  "missing_release_z_offset_m": -0.015,
+  "missing_release_z_source": "missing_release_z_offset_m",
+  "cone_press_z_offset_m": 0.03,
+  "cone_press_z_source": "cone_press_z_offset_m",
+  "table_cap_xy_offset_m": [
+    0.0,
+    0.0
+  ],
+  "missing_cap_xy_offset_m": [
+    0.0,
+    0.0
+  ],
+  "crooked_cap_xy_offset_m": [
+    0.0,
+    0.0
+  ],
+  "crooked_action": "cone-press",
+  "crooked_shoulder_depth_m": 0.0326838,
+  "crooked_tap_depth_m": 0.005,
+  "crooked_wiggle_radius_m": 0.00075,
+  "crooked_wiggle_cycles": 1,
+  "pickup_wiggle_radius_m": 0.0,
+  "pickup_wiggle_cycles": 0,
+  "initial_work_surface_z_m": -0.0051,
+  "initial_vial_rim_z_m": 0.20809999999999998,
+  "cone_tip_from_tcp_m": [
+    0.0,
+    -0.0360660669237695,
+    -0.0107523335762304
+  ],
+  "cone_press_below_rim_m": 0.003,
+  "cone_press_stroke_m": 0.02,
+  "cone_heading_deg": -90.0,
+  "cone_press_wpr_deg": [
+    -135.0,
+    0.0,
+    -90.0
+  ],
+  "missing_release_side_step_m": 0.001,
+  "missing_release_exit_step_m": 0.002,
+  "wrist_refinement": true,
+  "wrist_colour_size": [
+    1920,
+    1080
+  ],
+  "wrist_view_distance_m": 0.3,
+  "wrist_crooked_view_distance_m": 0.25,
+  "wrist_max_correction_m": 0.04,
+  "wrist_table_cap_xy_offset_m": [
+    0.01,
+    -0.001
+  ],
+  "wrist_missing_cap_xy_offset_m": [
+    0.0,
+    -0.002
+  ],
+  "wrist_crooked_cap_xy_offset_m": [
+    0.0799,
+    -0.005
+  ]
+}
