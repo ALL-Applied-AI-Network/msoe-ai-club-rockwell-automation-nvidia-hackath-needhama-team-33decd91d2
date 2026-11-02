@@ -1,8 +1,50 @@
-# Demonstration Results
+# Manufacturing Defect Correctorator
 
-This directory contains presentation-ready evidence from the physical and simulated vial-remediation workflows. Together, the artifacts demonstrate a generalizable manufacturing-defect workflow: build a digital twin, use synthetic data to train visual inspection, refine targets from in-context wrist-camera observations, and command a physical system to correct detected defects.
+The **Manufacturing Defect Correctorator** is an autonomous physical AI solution developed for the Rockwell Automation & NVIDIA Physical AI Hackathon. Using synthetic data from a digital twin, the system pairs a top-level YOLO detector with a wrist-mounted vision-language model (VLM) to detect assembly-line faults and guide a FANUC robotic arm. On the physical factory testbed, the robot identified and corrected missing and crooked vial caps. This demonstration represents a reusable approach for upgrading legacy manufacturing lines without a costly full-line overhaul.
 
-The recorded scenario includes a loose cap, an uncapped vial, and a crooked cap. The robot picks up and installs the loose cap, then presses the crooked cap into place. The simulated run reproduces the same workflow with collision-aware PhysX contact; caps are moved by contact rather than by directly setting their poses.
+**Project demonstration video:** [Watch on YouTube](https://youtu.be/skMFPrswsr4)
+
+## Physical AI Hackathon results executive summary
+
+**Team:** Adam Erdmann, Andrew Needham, Evan Chi, Jeremiah Cojon Keddie, Landon Van Mersbergen, and Tyler Dretske
+
+### Project goals
+
+Our goal was to autonomously guide a FANUC arm using YOLO models and a VLM to correct defects commonly encountered on manufacturing lines. Vial caps provide a concrete test case, but the intended contribution is a generalizable workflow that can be adapted to other manufacturing scenarios.
+
+### Data collected and generated
+
+We generated synthetic training images with an NVIDIA Isaac Sim digital twin and collected physical images for validation and model refinement. This combination reduced dependence on large, manually collected physical datasets while preserving real-world evidence for evaluation.
+
+### Approach
+
+The calibrated overhead TableCam provides the top-level view. A YOLO model detects defects and available remediation objects, and RGB-D backprojection supplies a coarse position in robot-base coordinates. The FANUC arm moves to that area and captures a close-range wrist image. A VLM identifies the target in context and refines the position before the shared policy commands the corrective action.
+
+The recorded physical scenario includes a loose cap, an uncapped vial, and a crooked cap. The robot autonomously picks up the loose cap, places it on the uncapped vial, and presses the crooked cap into place. The simulated run reproduces this workflow using collision-aware PhysX contact; caps move through simulated contact rather than direct pose assignment.
+
+### Manufacturing problem
+
+Many legacy manufacturing lines can detect a defect but still depend on an operator or a costly equipment redesign to correct it. This project demonstrates how one perception-guided robot can add flexible defect remediation to an existing cell. The approach can reduce recurring manual intervention and avoid replacing otherwise functional legacy equipment.
+
+### Use of physical AI
+
+The system combines:
+
+- a digital twin for synthetic training data and safe workflow development;
+- learned visual detection for top-level inspection;
+- an in-context VLM for close-range target refinement;
+- calibrated RGB-D localization for image-to-robot coordinates; and
+- a physical control policy that turns perception results into robot actions.
+
+### Physical equipment demonstration
+
+We tested the complete workflow on the CSI physical testbed. The FANUC arm successfully picked up a cap from the table, placed it onto a vial missing its cap, and corrected a crooked cap.
+
+### Evidence and estimated performance
+
+This directory contains working trials from both the digital twin and the physical robot, including multiple camera viewpoints, annotated detections, depth observations, VLM refinement outputs, runtime configuration, and the controller trace.
+
+Large-scale end-to-end testing was limited by available CSI testing time and the difficulty of reproducing crooked-cap contact in Isaac Sim. Based on **93% recall on the real-image detector evaluation** together with the observed physical trials, the team estimates approximately **90% defect-correction performance**. This is a project estimate, not a statistically established end-to-end success rate; detector recall alone does not measure manipulation success. Additional repeated physical trials across more defect types are required to establish a production-grade correction rate.
 
 ## Videos
 
