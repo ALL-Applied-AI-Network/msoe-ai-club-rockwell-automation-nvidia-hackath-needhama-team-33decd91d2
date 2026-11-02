@@ -30,6 +30,7 @@ Continuous 60 fps simulation playback without compute pauses, demonstrating the 
 | **`full_workflow_tablecam_fast.mp4`** | **Fast** | Overhead TableCam | 1:15 (6.0 MB) | High-speed continuous playback of the verified end-to-end run (`v22`). |
 | **`full_workflow_sidecam_diagnostic.mp4`** | **Continuous** | Diagnostic SideCam | 1:15 (6.8 MB) | Close-up side view of custom conformal finger grasping, transit clearance, and 45° cone press contact. |
 | **`cone_press_batch_tablecam.mp4`** | **Continuous** | Overhead TableCam | 0:54 (4.9 MB) | Dedicated batch run showing the TPU side-cone tool pressing multiple crooked caps sequentially. |
+| **`wrist_vlm_remediation_wristcam.mp4`** | **Realistic** | Gripper-mounted WristCam | 2:23 (25 MB) | Gripper-camera point of view from the `exact_copy_render_run` branch's kinematic replay of the real 2026-10-30 run (see that branch's `render_exact_copy_kinematic.py`). This is a **presentation render, not physics** — the robot's path and cap poses are a kinematic replay of the real trace, not perception- or contact-driven. |
 
 ---
 
