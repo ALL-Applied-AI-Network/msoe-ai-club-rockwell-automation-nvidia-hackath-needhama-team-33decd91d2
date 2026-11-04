@@ -67,10 +67,20 @@ def run(args):
         paper_color=tuple(float(x) for x in args.paper_color.split(',')) if args.paper_color else None
         if paper_color is not None and (len(paper_color) != 3 or any(x < 0 or x > 1 for x in paper_color)):
             raise ValueError('--paper-color must be r,g,b with values in [0,1]')
+        table_cap_positions = None
+        if args.table_cap_positions:
+            table_cap_positions = [
+                [float(value) for value in pair.split(',')]
+                for pair in args.table_cap_positions.split(';')]
+            if any(len(pair) != 2 for pair in table_cap_positions):
+                raise ValueError('--table-cap-positions must be X,Y pairs separated by semicolons')
         inventory=build_scene(stage,args.seed,args.crooked,args.missing,args.table_caps,not args.fixed,
                               paper_color,(args.tray_center_x,args.tray_center_y),
                               [float(x) for x in args.crooked_tilts.split(',')] if args.crooked_tilts else None,
-                              args.vials,args.table_cap_start_x,args.table_cap_start_y)
+                              args.vials,args.table_cap_start_x,args.table_cap_start_y,
+                              args.table_cap_spacing,
+                              (args.paper_center_x,args.paper_center_y),
+                              table_cap_positions,args.paper_yaw_deg)
         import cell
         cell.enable_ccd(world)
         world.reset()
@@ -95,8 +105,46 @@ def run(args):
             if step>=args.steps-60:
                 for item in inventory['caps']: history[item['path']].append(pose(stage,item['path']))
         measurements=evaluate(stage,inventory,history)
+        # Reject spare layouts whose actual settled pickup or slide endpoints
+        # are outside the ER-4iA IK workspace.  This is endpoint reachability,
+        # not a replacement for the collision-aware runtime planner.
+        from src.remediation.controller import wpr_to_rotation
+        from src.remediation.custom_gripper import (_jaw_mount, cap_seat_tcp,
+                                                    finger_tip_tcp)
+        from src.remediation.wrist_refinement import calibrated_home_joints_deg
+        _,_,body_face_x=_jaw_mount(stage,cell.JAW_PRIMS['L'])
+        tip=finger_tip_tcp(cap_seat_tcp(body_face_x))
+        vertical=wpr_to_rotation((-180.,0.,0.))
+        pickup_seed=np.deg2rad(calibrated_home_joints_deg())
+        pickup_reachability=[]
+        for item,measurement in zip(inventory['caps'],measurements):
+            if item['requested']!='table_cap':
+                continue
+            cap_base=np.asarray(measurement['position_world_m'],float)
+            cap_base[2]-=SPEC.world_base_z
+            pickup_z=(SPEC.surface_base_z+SPEC.plug_depth+
+                      args.cone_table_pick_offset_m)
+            endpoints={
+                'slide_transit':[cap_base[0]+args.pickup_slide_x_m,
+                                 cap_base[1],args.pickup_transit_z_m],
+                'slide_pick':[cap_base[0]+args.pickup_slide_x_m,
+                              cap_base[1],pickup_z],
+                'cap_pick':[cap_base[0],cap_base[1],pickup_z],
+                'cap_transit':[cap_base[0],cap_base[1],args.pickup_transit_z_m],
+            }
+            checks={}
+            for name,position in endpoints.items():
+                _,reachable=ik.solve(pickup_seed,position,vertical[:,2],limits,
+                                     tool_offset=tip,spread_dir=vertical[:,1])
+                checks[name]={'position_base_m':list(map(float,position)),
+                              'reachable':bool(reachable)}
+            pickup_reachability.append({'path':item['path'],'checks':checks,
+                                        'accepted':all(x['reachable'] for x in checks.values())})
         report.update({'inventory':inventory,'objects':measurements,'specification':asdict(SPEC),'layout':load_layout(),
-                       'accepted':all(x['accepted'] for x in measurements),'physics_steps':args.steps,
+                       'pickup_reachability':pickup_reachability,
+                       'accepted':(all(x['accepted'] for x in measurements) and
+                                   all(x['accepted'] for x in pickup_reachability)),
+                       'physics_steps':args.steps,
                        'physics_dt_s':1/120.,'penetration_check':'dense sampled cap surfaces against analytic tube wall/table; not a full swept collision certificate',
                        'hardware':'stock starter fingers during scene qualification; custom grooved fingers require CAD dimensions'})
         from pxr import UsdGeom
@@ -165,6 +213,12 @@ def parser():
     p.add_argument('--crooked',type=int,default=1); p.add_argument('--missing',type=int,default=1)
     p.add_argument('--table-caps',type=int,default=1); p.add_argument('--steps',type=int,default=360)
     p.add_argument('--paper-color', help='Optional colored paper under the table-cap area, as r,g,b in [0,1]')
+    p.add_argument('--paper-center-x',type=float,default=.37,
+                   help='World X centre of the table-cap paper (default: 0.37 m)')
+    p.add_argument('--paper-center-y',type=float,default=.315,
+                   help='World Y centre of the table-cap paper (default: 0.315 m)')
+    p.add_argument('--paper-yaw-deg',type=float,default=0.,
+                   help='Rotation of the table-cap paper about world Z (default: 0 degrees)')
     p.add_argument('--tray-center-x',type=float,default=.305,
                    help='Fixture center X in metres for scene construction (default: 0.305).')
     p.add_argument('--tray-center-y',type=float,default=.035,
@@ -176,6 +230,16 @@ def parser():
                    help='Robot-base/world X of the first loose-cap supply position (default: 0.28 m)')
     p.add_argument('--table-cap-start-y',type=float,default=.325,
                    help='Robot-base/world Y of the first loose-cap supply position (default: 0.325 m)')
+    p.add_argument('--table-cap-spacing',type=float,default=.05,
+                   help='Centre-to-centre loose-cap spacing in metres (minimum/default: 0.05 m)')
+    p.add_argument('--table-cap-positions',
+                   help='Optional explicit world XY pairs separated by semicolons, e.g. X1,Y1;X2,Y2')
+    p.add_argument('--pickup-slide-x-m',type=float,default=0.,
+                   help='Loose-cap slide approach X offset checked for IK reachability')
+    p.add_argument('--cone-table-pick-offset-m',type=float,default=-0.006,
+                   help='Cone pickup TCP offset used by loose-cap IK qualification')
+    p.add_argument('--pickup-transit-z-m',type=float,default=0.285,
+                   help='Loose-cap transit height checked for IK reachability')
     return p
 
 

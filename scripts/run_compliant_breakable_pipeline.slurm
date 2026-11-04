@@ -40,11 +40,16 @@ remediation_args=()
 perception_plane_args=()
 wrist_refinement=false
 skip_overlay=false
+outline_overlay=false
 raw_args=("$@")
 for ((i=0; i<${#raw_args[@]}; i++)); do
     case "${raw_args[$i]}" in
         --skip-overlay)
             skip_overlay=true
+            continue
+            ;;
+        --outline-overlay)
+            outline_overlay=true
             continue
             ;;
         --wrist-refinement)
@@ -191,6 +196,10 @@ if [[ "$skip_overlay" == true ]]; then
 fi
 
 echo "[pipeline] 4/4: Overlaying per-frame YOLO detections..."
+overlay_style_args=()
+if [[ "$outline_overlay" == true ]]; then
+    overlay_style_args+=(--outline-only --count-header)
+fi
 streaming_marker="$action/yolo_frames/.streaming"
 streaming_done="$action/yolo_frames/.complete"
 if [[ -e "$streaming_marker" && ! -e "$streaming_done" ]]; then
@@ -205,7 +214,8 @@ if [[ -e "$streaming_marker" && ! -e "$streaming_done" ]]; then
     fi
 fi
 "$yolo_python" src/remediation/overlay_yolo_frames.py \
-    --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0
+    --frames "$action/frames" --checkpoint "$checkpoint" --out "$action/yolo_frames" --device 0 \
+    "${overlay_style_args[@]}"
 
 # No system ffmpeg on the cluster nodes: fall back to imageio-ffmpeg's static build (has libx264).
 if [[ -x "$FFMPEG_BIN" ]]; then
