@@ -50,11 +50,13 @@ Large-scale end-to-end testing was limited by available CSI testing time and the
 
 | View | Physical run | Simulated run | What it shows |
 | --- | --- | --- | --- |
-| Table camera | [real_table_cam.mp4](real_table_cam.mp4) | [simulated_table_cam.mp4](simulated_table_cam.mp4) | Full-cell inspection and remediation from the calibrated overhead view |
+| Table camera | [Raw](real_table_cam.mp4) · [YOLO annotated](real_table_cam_annotated.mp4) | [simulated_table_cam.mp4](simulated_table_cam.mp4) | Full-cell inspection and remediation from the calibrated overhead view |
 | Wrist camera | [real_wrist_cam.mp4](real_wrist_cam.mp4) | [simulated_wrist_cam.mp4](simulated_wrist_cam.mp4) | Close-range target refinement during pickup and crooked-cap correction |
 | Side camera | [real_side_cam.mp4](real_side_cam.mp4) | [simulated_side_cam.mp4](simulated_side_cam.mp4) | Robot motion, clearance, pickup, placement, and contact from an external view |
 
 The real and simulated videos are separate executions of the same overall remediation workflow. They are intended for qualitative comparison, not synchronized frame-by-frame playback.
+
+The annotated physical TableCam video runs YOLO on the full-resolution captures associated with the initial inspection, pickup verification, placement verification, and final verification. Each result appears at its corresponding moment in the continuously playing lower-resolution demonstration video and remains visible until the next inspection replaces it. Colored outlines show the detections without per-object text, while a compact header reports the class counts for each stage.
 
 ## Complete physical-policy run
 

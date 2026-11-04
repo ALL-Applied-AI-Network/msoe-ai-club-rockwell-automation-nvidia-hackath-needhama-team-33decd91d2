@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run YOLO on every rendered TableCam frame and save labelled copies."""
 import argparse
+from collections import Counter
 from pathlib import Path
 import sys
 import time
@@ -25,6 +26,10 @@ def main():
                         help='detection-label font scale (default: .45)')
     parser.add_argument('--label-thickness', type=int, default=2,
                         help='detection-label text thickness (default: 2)')
+    parser.add_argument('--outline-only', action='store_true',
+                        help='draw detection outlines without per-object text')
+    parser.add_argument('--count-header', action='store_true',
+                        help='draw a compact header containing YOLO class counts')
     parser.add_argument('--watch', action='store_true',
                         help='continue annotating new frames until a stop file appears')
     parser.add_argument('--stop-file', action='append', type=Path, default=[],
@@ -74,23 +79,42 @@ def main():
                 conf=args.confidence, imgsz=1280, device=args.device,
                 batch=len(batch), verbose=False)
             for (path, image), result in zip(batch, results):
+                class_counts = Counter()
                 for box, confidence, class_id in zip(
                         result.boxes.xyxy.cpu().numpy(),
                         result.boxes.conf.cpu().numpy(),
                         result.boxes.cls.cpu().numpy()):
                     name = model.names[int(class_id)]
+                    class_counts[name] += 1
                     color = COLORS.get(name, (200, 200, 200))
                     x0, y0, x1, y1 = box.round().astype(int)
                     cv2.rectangle(image, (x0, y0), (x1, y1), color, 2)
-                    cv2.putText(image, f'{name} {confidence:.2f}',
-                                (x0, max(22, y0 - 6)),
-                                cv2.FONT_HERSHEY_SIMPLEX, args.label_scale, color,
-                                args.label_thickness,
+                    if not args.outline_only:
+                        cv2.putText(image, f'{name} {confidence:.2f}',
+                                    (x0, max(22, y0 - 6)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, args.label_scale, color,
+                                    args.label_thickness,
+                                    cv2.LINE_AA)
+                if args.count_header:
+                    order = ('good_cap', 'crooked_cap', 'missing_cap', 'table_cap')
+                    summary = 'YOLO  ' + '  '.join(
+                        f'{name} {class_counts[name]}' for name in order
+                        if class_counts[name])
+                    (text_width, text_height), baseline = cv2.getTextSize(
+                        summary, cv2.FONT_HERSHEY_SIMPLEX, .58, 1)
+                    cv2.rectangle(
+                        image, (12, 12),
+                        (min(image.shape[1] - 1, 28 + text_width),
+                         22 + text_height + baseline),
+                        (0, 0, 0), -1)
+                    cv2.putText(image, summary, (20, 18 + text_height),
+                                cv2.FONT_HERSHEY_SIMPLEX, .58,
+                                (255, 255, 255), 1, cv2.LINE_AA)
+                elif not args.outline_only:
+                    cv2.putText(image, 'YOLO predictions on this TableCam frame',
+                                (20, image.shape[0] - 20),
+                                cv2.FONT_HERSHEY_SIMPLEX, .58, (255, 255, 255), 2,
                                 cv2.LINE_AA)
-                cv2.putText(image, 'YOLO predictions on this TableCam frame',
-                            (20, image.shape[0] - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, .58, (255, 255, 255), 2,
-                            cv2.LINE_AA)
                 if not cv2.imwrite(str(args.out / path.name), image):
                     raise RuntimeError(f'Could not write frame {path.name}')
                 processed += 1

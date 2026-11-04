@@ -775,7 +775,20 @@ class RemediationController:
                 self._add_pose(cone_high, selected_wpr, True)
                 self._add_pose(cone_above, selected_wpr, True)
                 self._add_pose(cone_contact, selected_wpr, True)
-                self._add_pose(cone_above, selected_wpr, True)
+                # Unload the rigid cone/cap contact gradually. A single long
+                # withdrawal can keep the broad cone wedged on the cap and put
+                # enough simulated torque into J6 to separate the EOAT proxy.
+                # These are still ordinary physics-driven pose commands; no
+                # cap pose is written or snapped.
+                for retreat_z in (
+                        cone_contact_z + 0.002,
+                        cone_contact_z + 0.005,
+                        cone_contact_z + 0.010,
+                        cone_above_z):
+                    if retreat_z <= cone_above_z + 1e-9:
+                        retreat = self._cone_tcp_for_tip(
+                            [press_xy[0], press_xy[1], retreat_z], selected_wpr)
+                        self._add_pose(retreat, selected_wpr, True)
                 self._add_pose(cone_high, selected_wpr, True)
                 if final_cone_target:
                     # Clear TableCam exactly once after the complete cached

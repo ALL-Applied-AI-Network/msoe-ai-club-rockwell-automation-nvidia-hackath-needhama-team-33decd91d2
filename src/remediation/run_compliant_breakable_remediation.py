@@ -1073,7 +1073,8 @@ class Executor:
     def __init__(self, world, arm, names, arm_idx, camera, frame_dir, meter, monitor, slots,
                  tracked=(), press_control='position-limited', eoat_paths=(),
                  closed_loop_tracking=False, side_camera=None, side_frame_dir=None,
-                 wrist_frame_reader=None, wrist_frame_dir=None):
+                 wrist_frame_reader=None, wrist_frame_dir=None,
+                 frame_diagnostics=True):
         self.world, self.arm, self.names, self.arm_idx = world, arm, names, arm_idx
         self.tracked = list(tracked)   # cap prims whose pose and gripper contacts are logged each step
         self.trace = []
@@ -1092,6 +1093,7 @@ class Executor:
         self.eoat_reference = self._eoat_distances() if self.eoat_paths else ()
         self.closed_loop_tracking = bool(closed_loop_tracking)
         self.tracking_warnings = []
+        self.frame_diagnostics = bool(frame_diagnostics)
 
     def _record_tracking_warning(self, phase, error_deg):
         warning = {'phase': phase, 'tracking_error_deg': float(error_deg)}
@@ -1166,14 +1168,11 @@ class Executor:
             self._record_tracking_warning(phase, error_deg)
             return
         if allow_contact_stall:
-            # A rigid simulated cap can become wedged between the broad TPU
-            # cone proxy and another cap even though the bounded press endpoint
-            # has already been commanded.  Preserve all collision, vial-load,
-            # and EOAT-coherence checks above, but let the following waypoint
-            # retreat from contact instead of reporting an artificial drive
-            # failure.  This exception is supplied only for the cone's lowest
-            # contact endpoint; physical deployment retains its normal driver
-            # fault behavior.
+            # A rigid simulated cap can become wedged at the lowest bounded
+            # press endpoint. Preserve all collision, vial-load, EOAT-coherence
+            # and joint-step checks above, but allow the next strictly tracked
+            # staged withdrawal to pull free. Physical deployment retains its
+            # normal driver fault behavior.
             self.trace[-1]['contact_tracking_tolerated'] = True
             self._record_tracking_warning(phase + '_bounded_contact', error_deg)
             return
@@ -1262,14 +1261,15 @@ class Executor:
         if rgb is None or not np.asarray(rgb).size:
             return False
         frame = cv2.cvtColor(np.ascontiguousarray(rgb), cv2.COLOR_RGB2BGR)
-        cv2.putText(frame, f'PHYSICS-BASED REMEDIATION | {label}', (20, 32), cv2.FONT_HERSHEY_SIMPLEX, .65, (30, 230, 255), 2)
-        cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 60), cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
-        for k, slot in enumerate(self.slots):
-            axial, lateral = self.loads.get(slot, (0.0, 0.0))
-            st = self.monitor.state(slot)['status']
-            color = (100, 255, 100) if st == 'INTACT' else (50, 50, 255)
-            cv2.putText(frame, f'Vial {slot} measured load: {axial:5.1f} N axial, {lateral:5.1f} N lateral [{st}]',
-                        (20, 90 + 24 * k), cv2.FONT_HERSHEY_SIMPLEX, .50, color, 1)
+        if self.frame_diagnostics:
+            cv2.putText(frame, f'PHYSICS-BASED REMEDIATION | {label}', (20, 32), cv2.FONT_HERSHEY_SIMPLEX, .65, (30, 230, 255), 2)
+            cv2.putText(frame, phase.replace('_', ' ').upper(), (20, 60), cv2.FONT_HERSHEY_SIMPLEX, .62, (255, 255, 255), 2)
+            for k, slot in enumerate(self.slots):
+                axial, lateral = self.loads.get(slot, (0.0, 0.0))
+                st = self.monitor.state(slot)['status']
+                color = (100, 255, 100) if st == 'INTACT' else (50, 50, 255)
+                cv2.putText(frame, f'Vial {slot} measured load: {axial:5.1f} N axial, {lateral:5.1f} N lateral [{st}]',
+                            (20, 90 + 24 * k), cv2.FONT_HERSHEY_SIMPLEX, .50, color, 1)
         if not cv2.imwrite(str(frame_dir / f'{self.frames:04d}.png'), frame):
             raise RuntimeError(f'could not write {label} output frame')
         return True
@@ -1385,7 +1385,8 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                   closed_loop_tracking=True, side_camera=side,
                   side_frame_dir=side_frame_dir,
                   wrist_frame_reader=(lambda: read_wrist_colour(wrist)) if wrist else None,
-                  wrist_frame_dir=wrist_frame_dir if wrist else None)
+                  wrist_frame_dir=wrist_frame_dir if wrist else None,
+                  frame_diagnostics=not args.clean_render_frames)
     effective_pick_offset = (args.cone_table_pick_offset_m
                              if args.crooked_action == 'cone-press'
                              else args.pick_offset_m)
@@ -1859,17 +1860,28 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                     and np.linalg.norm(np.asarray(target[:2]) - spare_position[:2]) < 0.010
                     and float(target[2]) >= (
                         float(spare_position[2]) + controller.tool.pick_offset_m - 0.002))
-                slide_position = (spare_position +
-                                  np.array([controller.pickup_slide_x_m, 0.0, 0.0])
-                                  if spare_position is not None else None)
-                wrist_slide_approach_over_paper = (
-                    args.wrist_refinement and state in {
-                        'refine_spare', 'await_refine_spare', 'pickup'}
-                    and slide_position is not None
-                    and np.linalg.norm(
-                        np.asarray(target[:2]) - slide_position[:2]) < 0.010
-                    and float(target[2]) >= (
-                        float(spare_position[2]) + controller.tool.pick_offset_m - 0.002))
+                pickup_xy_offset = np.asarray(
+                    controller.wrist_table_cap_xy_offset_m if args.wrist_refinement
+                    else controller.table_cap_xy_offset_m, dtype=float)
+                cap_pick_position = (
+                    spare_position + np.r_[pickup_xy_offset, controller.tool.pick_offset_m]
+                    if spare_position is not None else None)
+                slide_position = (
+                    cap_pick_position + np.array([controller.pickup_slide_x_m, 0.0, 0.0])
+                    if cap_pick_position is not None else None)
+                # The complete pickup corridor is outside the tray: descend at
+                # the slide point, translate into the cap, then lift.  Permit a
+                # collision-checked endpoint fallback for either corridor end,
+                # independent of whether TableCam or wrist refinement supplied
+                # the XY position.  The 10 mm gate keeps this exception bounded
+                # to the selected spare rather than weakening tray clearance.
+                pickup_corridor_over_paper = (
+                    state in {'refine_spare', 'await_refine_spare', 'pickup'}
+                    and cap_pick_position is not None
+                    and min(
+                        np.linalg.norm(np.asarray(target[:2]) - cap_pick_position[:2]),
+                        np.linalg.norm(np.asarray(target[:2]) - slide_position[:2])) < 0.010
+                    and float(target[2]) >= float(cap_pick_position[2]) - 0.003)
                 pending_target = ((controller.pending or {}).get('target')
                                   if state in {'refine_missing', 'await_refine_missing', 'repair'}
                                   else None)
@@ -1882,11 +1894,20 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                     and missing_position is not None
                     and np.linalg.norm(np.asarray(target[:2]) - missing_position[:2]) < 0.005
                     and float(target[2]) >= float(missing_position[2]) + 0.020)
-                wrist_corrected_missing_place = (
-                    args.wrist_refinement and state == 'repair'
-                    and missing_position is not None
-                    and np.linalg.norm(np.asarray(target[:2]) - missing_position[:2]) < 0.010
-                    and float(target[2]) >= float(missing_position[2]) - 0.002)
+                missing_xy_offset = np.asarray(
+                    controller.wrist_missing_cap_xy_offset_m if args.wrist_refinement
+                    else controller.missing_cap_xy_offset_m, dtype=float)
+                missing_place_position = (
+                    missing_position + np.r_[missing_xy_offset, controller.tool.place_offset_m]
+                    if missing_position is not None else None)
+                # Placement, release side-step and rising exit all remain in a
+                # tightly bounded corridor around the selected missing vial.
+                # This route exists with or without wrist refinement.
+                missing_place_corridor = (
+                    state == 'repair' and missing_place_position is not None
+                    and np.linalg.norm(
+                        np.asarray(target[:2]) - missing_place_position[:2]) < 0.010
+                    and float(target[2]) >= float(missing_place_position[2]) - 0.003)
                 # The commanded transit plane is 285 mm, already 25 mm above
                 # the repository's absolute 260 mm tray-clearance minimum.
                 # Allow a 5 mm IK/tracking residual around that nominal plane;
@@ -1902,13 +1923,17 @@ def run_shared_policy_isaac(args, stage, world, mount, collision_report, initial
                         and not wrist_view_descent_over_spare
                         and not wrist_coarse_approach_over_paper
                         and not wrist_corrected_pick_over_paper
-                        and not wrist_slide_approach_over_paper
+                        and not pickup_corridor_over_paper
                         and not wrist_missing_approach
-                        and not wrist_corrected_missing_place
+                        and not missing_place_corridor
                         and not cone_clearance_transfer):
                     raise RuntimeError(
                         'refusing joint-space fallback below tray clearance; '
-                        'the Cartesian contact route is not safely executable') from cartesian_error
+                        'the Cartesian contact route is not safely executable; '
+                        f'state={state}, target={np.round(target, 4)}, '
+                        f'spare={None if spare_position is None else np.round(spare_position, 4)}, '
+                        f'pickup_corridor={pickup_corridor_over_paper}, '
+                        f'missing_corridor={missing_place_corridor}') from cartesian_error
                 q_target = P.solve(ex.q, target, rotation[:, 2], rotation[:, 1], tip)
                 path = speed_limited_joints(ex.q, q_target, min_steps=60)
                 phase += '_joint_fallback'
@@ -2113,6 +2138,9 @@ def main():
     parser.add_argument('--unbreakable-vials', action='store_true',
                         help='retain vial contact/load telemetry but never trigger visual fracture '
                              'geometry, regardless of measured force')
+    parser.add_argument('--clean-render-frames', action='store_true',
+                        help='save camera RGB without phase or vial-load diagnostic text; '
+                             'telemetry remains in the JSON audit artifacts')
     parser.add_argument('--crooked-action',
                         choices=('shoulder', 'shoulder-close', 'closed-tip', 'regrip', 'cone-press'),
                         default='shoulder',

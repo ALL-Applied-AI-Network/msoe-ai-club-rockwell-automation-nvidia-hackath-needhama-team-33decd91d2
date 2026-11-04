@@ -104,10 +104,12 @@ def annulus(stage, path, outer_bottom, outer_top, inner, z0, z1, mat, segments=9
     return mesh(stage,path,points,faces,mat)
 
 
-def box(stage, path, center, size, mat):
+def box(stage, path, center, size, mat, yaw_deg=None):
     b = UsdGeom.Cube.Define(stage,path)
     b.CreateSizeAttr(1.)
     b.AddTranslateOp().Set(Gf.Vec3d(*map(float,center)))
+    if yaw_deg is not None:
+        b.AddRotateZOp().Set(float(yaw_deg))
     b.AddScaleOp().Set(Gf.Vec3f(*map(float,size)))
     UsdShade.MaterialBindingAPI.Apply(b.GetPrim()).Bind(mat)
     collision(b.GetPrim())
@@ -205,10 +207,24 @@ def _cap_dynamics(prim,dynamic):
 
 def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=True,
                 paper_color=None, tray_center_xy=None, crooked_tilts=None, vials=30,
-                table_cap_start_x=.28, table_cap_start_y=.325):
+                table_cap_start_x=.28, table_cap_start_y=.325,
+                table_cap_spacing=.05, paper_center_xy=None,
+                table_cap_positions_xy=None, paper_yaw_deg=0.):
     import cell
     if min(crooked,missing,table_caps)<0 or not 0<crooked+missing<=vials<=30 or table_caps>10:
         raise ValueError('Invalid scene inventory (at most 30 vials, at most 10 separated spares)')
+    if not np.isfinite(table_cap_spacing) or table_cap_spacing < .05:
+        raise ValueError('Loose table caps must be spaced by at least 0.05 m')
+    if table_cap_positions_xy is not None:
+        table_cap_positions_xy = np.asarray(table_cap_positions_xy, dtype=float)
+        if table_cap_positions_xy.shape != (table_caps, 2):
+            raise ValueError('Explicit loose-cap positions must contain one XY pair per table cap')
+        if not np.isfinite(table_cap_positions_xy).all():
+            raise ValueError('Explicit loose-cap positions must be finite')
+        for i in range(table_caps):
+            for j in range(i):
+                if np.linalg.norm(table_cap_positions_xy[i] - table_cap_positions_xy[j]) < table_cap_spacing - 1e-9:
+                    raise ValueError('Explicit loose-cap positions violate the requested spacing')
     cell.build(stage,with_objects=False)
     if paper_color is not None:
         # A thin, non-authoritative colored paper sheet under the spare-cap
@@ -220,8 +236,12 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         # Lift the rendered sheet 0.5 mm beyond its physical half-thickness.
         # The starter cell has a separate white mat coplanar with the nominal
         # work surface; the extra visual clearance prevents depth fighting.
-        box(stage, '/World/TableCapPaper', (.37, .315, SPEC.surface_world_z + .0006),
-            (.27, .12, .0002), paper)
+        paper_center_xy = ((.37, .315) if paper_center_xy is None
+                           else tuple(map(float, paper_center_xy)))
+        if not np.isfinite(paper_yaw_deg):
+            raise ValueError('Loose-cap paper yaw must be finite')
+        box(stage, '/World/TableCapPaper', (*paper_center_xy, SPEC.surface_world_z + .0006),
+            (.27, .12, .0002), paper, yaw_deg=paper_yaw_deg)
     rng=np.random.default_rng(seed)
     camera_variation=randomize_table_camera(stage,rng) if randomize else None
     cap_color=np.clip(np.array((.96,.76,.04))+rng.normal(0,.035,3),0,1)
@@ -298,11 +318,15 @@ def build_scene(stage, seed=42, crooked=1, missing=1, table_caps=1, randomize=Tr
         inventory['caps'].append({'path':path,'slot':slot,'dynamic':tilted,'requested':'crooked_cap' if tilted else 'good_cap',
                                   **({'spawn_tilt_deg':tilt} if tilted else {})})
     for i in range(table_caps):
-        # Three per row: a fourth column (x 0.415 m and beyond) is at the edge of the arm's reach.
-        row,col=divmod(i,3)
-        # Stage loose replacement caps on the right from TableCam's viewpoint.
-        pos=np.array([float(table_cap_start_x)+col*.045,
-                      float(table_cap_start_y)-row*.043,0.])
+        if table_cap_positions_xy is None:
+            # Three per row: a fourth column is at the edge of the arm's reach.
+            row,col=divmod(i,3)
+            # Stage loose replacement caps on the right from TableCam's viewpoint.
+            xy = [float(table_cap_start_x)+col*table_cap_spacing,
+                  float(table_cap_start_y)-row*table_cap_spacing]
+        else:
+            xy = table_cap_positions_xy[i]
+        pos=np.array([*xy,0.])
         if randomize: pos[:2]+=rng.uniform(-.001,.001,2)
         cap_R=rotation(0,float(rng.uniform(0,360))); pos[2]=spawn_height(SPEC.surface_world_z,cap_R)
         path=f'/World/RemediationCaps/Table_{i:02d}'
