@@ -1,0 +1,63 @@
+{
+  "nominal_work_surface_z_m": -0.0051,
+  "work_surface_z_offset_m": 0.0,
+  "tray_base_thickness_m": 0.01,
+  "specified_vial_height_m": 0.2032,
+  "vial_height_override_m": 0.0,
+  "effective_vial_height_m": 0.2032,
+  "vial_rim_plane_offset_m": 0.0,
+  "vial_rim_plane_override_m": 0.0,
+  "override_active": false,
+  "current": {
+    "status": "fitted",
+    "timestamp": 1793391671.7830951,
+    "trial_id": "r20261029-23e5a9-t00",
+    "fit": {
+      "fitted_z_base_m": -0.005460752137336988,
+      "nominal_z_base_m": -0.0051,
+      "fit_correction_m": -0.0003607521373369879,
+      "candidate_count": 8337,
+      "inlier_count": 6584,
+      "rms_m": 0.0019142600952825554,
+      "xy_span_m": [
+        0.8835021060202727,
+        1.3239967307675449
+      ],
+      "constraint": "parallel to calibrated robot-base XY plane",
+      "source": "TableCam depth work-surface fit"
+    },
+    "fallback_reason": null,
+    "raw_fitted_work_surface_z_m": -0.005460752137336988,
+    "effective_work_surface_z_m": -0.005460752137336988,
+    "derived_vial_rim_z_m": 0.207739247862663,
+    "effective_vial_rim_z_m": 0.207739247862663,
+    "vial_rim_source": "fitted work surface + tray base + vial height + rim offset"
+  },
+  "fits": [
+    {
+      "status": "fitted",
+      "timestamp": 1793391671.7830951,
+      "trial_id": "r20261029-23e5a9-t00",
+      "fit": {
+        "fitted_z_base_m": -0.005460752137336988,
+        "nominal_z_base_m": -0.0051,
+        "fit_correction_m": -0.0003607521373369879,
+        "candidate_count": 8337,
+        "inlier_count": 6584,
+        "rms_m": 0.0019142600952825554,
+        "xy_span_m": [
+          0.8835021060202727,
+          1.3239967307675449
+        ],
+        "constraint": "parallel to calibrated robot-base XY plane",
+        "source": "TableCam depth work-surface fit"
+      },
+      "fallback_reason": null,
+      "raw_fitted_work_surface_z_m": -0.005460752137336988,
+      "effective_work_surface_z_m": -0.005460752137336988,
+      "derived_vial_rim_z_m": 0.207739247862663,
+      "effective_vial_rim_z_m": 0.207739247862663,
+      "vial_rim_source": "fitted work surface + tray base + vial height + rim offset"
+    }
+  ]
+}

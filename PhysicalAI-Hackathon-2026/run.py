@@ -1,0 +1,454 @@
+"""Run your policy on the cell, or on a local mock of it.
+
+    uv run run.py --mock         # check formats and connection against a local mock (3 rollouts)
+    uv run run.py --submit       # send submission/submission.yaml; we approve it into a run
+    uv run run.py --status       # is it approved yet? once it is: your results link
+    uv run run.py                # during your slot: runs your approved submission
+    uv run run.py --download     # your run's recorded LeRobotDataset
+
+Load your model in policy.py, or pass its path with --checkpoint <path> (given to Policy.__init__).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+import shutil
+import sys
+import threading
+import time
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+from cell_client import CellClient, run_all
+from policy import (DEFAULT_CONE_TIP_FROM_TCP_M,
+                    DEFAULT_CONE_PRESS_Z_OFFSET_M,
+                    DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_MISSING_RELEASE_Z_OFFSET_M,
+                    DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
+                    DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
+                    DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                    DEFAULT_PICKUP_SLIDE_X_M,
+                    DEFAULT_PICKUP_Z_OFFSET_M,
+                    DEFAULT_TABLE_CAP_XY_OFFSET_M,
+                    DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
+                    DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
+                    DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
+                    DEFAULT_WORK_SURFACE_Z_OFFSET_M,
+                    DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M,
+                    DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
+                    DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M, Policy)
+
+HERE = Path(__file__).resolve().parent
+SUBMISSION = HERE / "submission" / "submission.yaml"
+PLACEMENT = HERE / "submission" / "placement.yaml"  # each rollout's objects and prompt, when they change
+REQUEST = HERE / ".request.json"  # the request id and its secret, written by --submit (keep it private)
+
+
+def start_mock(trials: int, trial_s: float, instruction: str):
+    """Serve mock_cell.py on a free local port in this process; returns its URL and the mock."""
+    from mock_cell import Mock, handler
+
+    mock = Mock(trials, trial_s, "mock", instruction, quiet=True)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler(mock))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_address[1]}", mock
+
+
+class Checked:
+    """The policy, with each act() timed and its first exception kept, for the mock's verdict."""
+
+    def __init__(self, policy):
+        self.policy, self.times, self.error, self.first = policy, [], None, []
+
+    def __getattr__(self, name):
+        return getattr(self.policy, name)
+
+    def reset(self):
+        self.policy.reset()
+        self.first.append(None)
+
+    def act(self, obs):
+        t = time.perf_counter()
+        try:
+            out = self.policy.act(obs)
+        except Exception as e:
+            self.error = e
+            raise
+        self.times.append(time.perf_counter() - t)
+        if self.first and self.first[-1] is None:
+            self.first[-1] = out
+        return out
+
+
+def verdict(mock, checked: Checked) -> int:
+    """Print whether the policy is ready for the real robot; returns the exit code."""
+    import numpy as np
+
+    n_act = sum(r["actions"] for r in mock.rollouts)
+    n_rej = len(mock.rejections)
+    act_s = sorted(checked.times)[len(checked.times) // 2] if checked.times else None
+    print()
+    if checked.error is not None:
+        import traceback
+
+        frame = traceback.extract_tb(checked.error.__traceback__)[-1]
+        print(f"✗ Not ready: act() raised {type(checked.error).__name__}: {checked.error}")
+        print(f"  at {Path(frame.filename).name}, line {frame.lineno}: {frame.line}")
+        print("  Fix it in policy.py, then run again.")
+        return 1
+    if n_rej:
+        seen = []
+        for rollout, step, reason in mock.rejections:
+            if reason not in (r for r, _, _ in seen):
+                seen.append((reason, rollout, step))
+        print(f"✗ Not ready: {n_rej} action{'s were' if n_rej > 1 else ' was'} rejected")
+        for reason, rollout, step in seen[:3]:
+            print(f'  "{reason}"   first at rollout {rollout}, step {step + 1}')
+        print("  The real robot rejects the same actions. Fix them in policy.py, then run again.")
+        return 1
+    if n_act == 0:
+        print("✗ Not ready: no action reached the cell. Does act() return a target?")
+        return 1
+    print("✓ Ready for the real robot")
+    took = "" if act_s is None else (" · act() takes " + ("under 1 ms" if act_s < 0.001 else f"{act_s * 1000:.0f} ms"
+                                                          if act_s < 1 else f"{act_s:.1f} s (fine: the arm waits for it)"))
+    print(f"  {len(mock.rollouts)} rollouts · {n_act} actions · 0 rejected{took}")
+    if Policy.ACTION == "joints":
+        for out in checked.first:
+            a = np.asarray(out, dtype=float) if out is not None else None
+            if a is not None and a.size and np.all(np.abs(a.reshape(-1, 7)[0, :6]) < 5.0):
+                print("  Note: your first joint target is close to 0 deg on every joint. Joint actions are absolute\n"
+                      "  angles to move to, not changes from the current pose.")
+                break
+    from cell_client import PREFETCH_STATS as ps
+
+    if getattr(Policy, "PREFETCH", False) is True and ps["short"] > ps["chunks"] // 2:
+        print("  PREFETCH is on but rarely used: act() returns fewer actions than twice the time it takes, so\n"
+              "  the arm cannot keep moving while it plans. Return more actions per call to benefit from it.")
+    print("  The mock's images are synthetic, so your policy may not do anything useful here. That is fine:\n"
+          "  the mock only checks that your policy and the cell understand each other.")
+    return 0
+
+
+def submit(url: str, ca: str | None) -> None:
+    import yaml
+
+    sub = yaml.safe_load(SUBMISSION.read_text()) or {}
+    if str(sub.get("custom_hardware", "")).strip().lower() in ("none", "no", ""):
+        sub["custom_hardware"] = None
+    sub |= {"action": Policy.ACTION, "cameras": list(Policy.CAMERAS),  # from policy.py, so they always match
+            "depth": list(getattr(Policy, "DEPTH", []))}
+    place = (yaml.safe_load(PLACEMENT.read_text()) or {}) if PLACEMENT.exists() else {}
+    entries = place.get("rollouts") or []
+    changes = "different" in (str(sub.get("objects")).strip().lower(), str(sub.get("layout")).strip().lower())
+    want = sub.get("rollouts", 10)
+    if changes and len(entries) != want:
+        sys.exit(f"objects or layout is \"different\" in submission.yaml, so submission/placement.yaml lists every "
+                 f"rollout: it has {len(entries)} {'entry' if len(entries) == 1 else 'entries'}, rollouts is {want}")
+    if entries:
+        sub["placement"] = place  # the cell checks it, and says what is wrong
+    out = CellClient(url, "", ca).submit(sub)
+    REQUEST.write_text(json.dumps({"url": url, **out}))
+    REQUEST.chmod(0o600)
+    print(f"submitted as request {out['request_id']}.\n"
+          f"  Next: pick a 30-minute slot with this id at https://hackathon.sidclab.org/#calendar; we approve it for that slot.\n"
+          f"  `uv run run.py --status` shows when it is approved, and then your results link.\n"
+          f"  During your slot: `uv run run.py`, and leave it running.\n"
+          f"  Keep .request.json: your client needs it, and it is private.")
+
+
+def status(url: str, ca: str | None, wait: bool) -> dict:
+    if not REQUEST.exists():
+        sys.exit("no submission yet: fill in submission/submission.yaml, then `uv run run.py --submit`")
+    req = json.loads(REQUEST.read_text())
+    cell = CellClient(req.get("url", url), "", ca)
+    while True:
+        st = cell.request_status(req["request_id"], req["secret"])
+        if st["status"] != "pending" or not wait:
+            return st
+        logging.info("request %s is waiting for the operator's approval ...", req["request_id"])
+        time.sleep(15)
+
+
+def results_link(st: dict) -> str:
+    """Where this team (and only this team) sees its scores and videos."""
+    site = json.loads(REQUEST.read_text()).get("url", "https://hackathon.sidclab.org").rstrip("/")
+    return (f"your results (scores and videos, only your team sees them): {site}/#key={st['view_key']}\n"
+            f"  keep this link private, like .request.json")
+
+
+def download(url: str, ca: str | None) -> None:
+    """The approved run's LeRobotDataset (every recorded trial so far), into LeRobot's default dataset folder."""
+    import tarfile
+
+    import requests
+
+    st = status(url, ca, wait=False)
+    if not st.get("view_key"):
+        sys.exit(f"request {st['request_id']} is {st['status']}: no rollout recorded yet")
+    site = json.loads(REQUEST.read_text()).get("url", url).rstrip("/")
+    root = Path(os.environ.get("HF_LEROBOT_HOME", Path.home() / ".cache/huggingface/lerobot")) / "manipbench"
+    dest = root / st["run_id"]
+    tmp = root / f".{st['run_id']}.tar"
+    root.mkdir(parents=True, exist_ok=True)
+    with requests.get(f"{site}/vizdata/download/{st['view_key']}/{st['run_id']}.tar", stream=True, timeout=60,
+                      verify=ca or True) as r:
+        if r.status_code == 404:
+            sys.exit("no recorded rollouts to download yet")
+        r.raise_for_status()
+        with open(tmp, "wb") as f:
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
+    if dest.exists():
+        shutil.rmtree(dest)  # the run's latest recording replaces the older copy
+    with tarfile.open(tmp) as tar:
+        try:
+            tar.extractall(root, filter="data")
+        except TypeError:  # Python before 3.10.12: no filters; accept only plain files inside the run's folder
+            names = tar.getmembers()
+            if any(not (m.isfile() or m.isdir()) or not Path(m.name).parts[:1] == (st["run_id"],) or ".." in Path(m.name).parts
+                   for m in names):
+                sys.exit("the download looks wrong; ask us in Slack")
+            tar.extractall(root, members=names)
+    tmp.unlink()
+    print(f"downloaded run {st['run_id']} to {dest}")
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--mock", action="store_true", help="start a local mock of the cell and run against it")
+    p.add_argument("--submit", action="store_true", help="send submission/submission.yaml for approval")
+    p.add_argument("--status", action="store_true", help="show whether your submission is approved")
+    p.add_argument("--download", action="store_true", help="download your run's recorded LeRobotDataset")
+    p.add_argument("--trials", type=int, default=3, help="--mock: number of trials")
+    p.add_argument("--trial-s", type=float, default=20.0, help="--mock: seconds per trial")
+    p.add_argument("--instruction", default="pick up the cube", help="--mock: the instruction for every trial")
+    p.add_argument("--url", default="https://hackathon.sidclab.org")
+    p.add_argument("--token", help="a run token, if issued directly; prefer PHYSICAL_CELL_TOKEN to avoid shell history")
+    p.add_argument("--checkpoint", help="default: shared/yolo26x/best.pt")
+    p.add_argument("--mode", choices=("hover", "full"), default="hover")
+    p.add_argument("--confidence", type=float, default=0.70)
+    p.add_argument("--imgsz", type=int, default=1280)
+    p.add_argument("--device", default="0", help="Ultralytics inference device; default 0 (first CUDA GPU)")
+    p.add_argument("--allow-provisional-contact", action="store_true",
+                   help="allow full mode with the currently unmeasured TCP (supervised trials only)")
+    p.add_argument("--pickup-z-offset-m", type=float,
+                   default=DEFAULT_PICKUP_Z_OFFSET_M,
+                   help="fingertip clearance above the local table plane during table-cap pickup (default from config/remediation_offsets.json)")
+    p.add_argument("--pickup-slide-x-m", type=float,
+                   default=DEFAULT_PICKUP_SLIDE_X_M,
+                   help="base-frame X offset for the low pickup approach; descend there, then slide to the cap")
+    p.add_argument("--work-surface-z-offset-m", type=float,
+                   default=DEFAULT_WORK_SURFACE_Z_OFFSET_M,
+                   help="signed correction added to the per-run TableCam depth plane")
+    p.add_argument("--table-plane-offset-m", type=float, default=None,
+                   help="deprecated alias for --work-surface-z-offset-m")
+    p.add_argument("--pick-offset-m", type=float, default=None,
+                   help="legacy signed pickup correction; positive raises and overrides --pickup-z-offset-m")
+    p.add_argument("--cone-table-pick-offset-m", type=float,
+                   default=None,
+                   help="optional cone-workflow table-cap pickup Z correction; "
+                        "default uses --pick-offset-m")
+    p.add_argument("--missing-release-z-offset-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_Z_OFFSET_M,
+                   help="positive-up Z correction for opening the gripper over a missing vial")
+    p.add_argument("--cone-press-z-offset-m", type=float,
+                   default=DEFAULT_CONE_PRESS_Z_OFFSET_M,
+                   help="positive-up residual correction for the cone contact endpoint")
+    p.add_argument("--place-offset-m", type=float, default=None,
+                   help="deprecated alias for --missing-release-z-offset-m")
+    p.add_argument("--press-offset-m", type=float, default=None,
+                   help="deprecated alias for --cone-press-z-offset-m")
+    p.add_argument("--missing-release-side-step-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_SIDE_STEP_M,
+                   help="small jaw-axis clearance after opening on a placed cap")
+    p.add_argument("--missing-release-exit-step-m", type=float,
+                   default=DEFAULT_MISSING_RELEASE_EXIT_STEP_M,
+                   help="opposite jaw-axis component of the rising placement exit")
+    p.add_argument("--table-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_TABLE_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for loose table-cap pickup")
+    p.add_argument("--missing-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_MISSING_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for missing-vial place/press")
+    p.add_argument("--crooked-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_CROOKED_CAP_XY_OFFSET_M,
+                   help="base-frame XY correction for crooked-cap contact")
+    p.add_argument("--wrist-refinement", action="store_true",
+                   help="use bounded LocateAnything wrist RGB refinement before contact")
+    p.add_argument("--wrist-view-distance-m", type=float, default=0.300)
+    p.add_argument("--wrist-crooked-view-distance-m", type=float, default=0.250,
+                   help="crooked-cap wrist RGB optical distance; default 0.250 m")
+    p.add_argument("--wrist-max-correction-m", type=float, default=0.040)
+    p.add_argument("--wrist-table-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_TABLE_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
+    p.add_argument("--wrist-missing-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_MISSING_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
+    p.add_argument("--wrist-crooked-cap-xy-offset-m", type=float, nargs=2,
+                   metavar=("X", "Y"), default=DEFAULT_WRIST_CROOKED_CAP_XY_OFFSET_M,
+                   help="post-wrist-refinement base-frame XY correction (default from config/remediation_offsets.json)")
+    p.add_argument("--work-surface-z-m", type=float, default=-0.0051)
+    p.add_argument("--vial-rim-plane-offset-m", type=float,
+                   default=DEFAULT_VIAL_RIM_PLANE_OFFSET_M,
+                   help="signed correction added after deriving rim Z from the fitted surface")
+    p.add_argument("--vial-rim-plane-override-m", type=float,
+                   default=DEFAULT_VIAL_RIM_PLANE_OVERRIDE_M,
+                   help="absolute rim Z; zero keeps automatic plane fitting")
+    p.add_argument("--vial-height-override-m", type=float,
+                   default=DEFAULT_VIAL_HEIGHT_OVERRIDE_M,
+                   help="measured vial height; zero uses the 203.2 mm specification")
+    p.add_argument("--vial-rim-z-m", type=float,
+                   help="deprecated nonzero alias for --vial-rim-plane-override-m")
+    p.add_argument("--crooked-shoulder-depth-m", type=float, default=0.0326838)
+    p.add_argument("--crooked-tap-depth-m", type=float, default=0.005,
+                   help="position-controlled descent beyond measured shoulder contact; default 0.005 m")
+    p.add_argument("--crooked-action",
+                   choices=("shoulder", "shoulder-close", "closed-tip", "regrip", "cone-press"),
+                   default="shoulder")
+    p.add_argument("--cone-tip-from-tcp-m", type=float, nargs=3,
+                   metavar=("X", "Y", "Z"), default=None,
+                   help="measured cone-nose offset from UTOOL1 in metres (default: CAD value)")
+    p.add_argument("--cone-press-below-rim-m", type=float, default=0.003,
+                   help="cone endpoint below the calibrated rim; positive is lower, negative is clearance")
+    p.add_argument("--cone-press-stroke-m", type=float, default=0.020,
+                   help="vertical down/up cone stroke above the endpoint")
+    p.add_argument("--cone-heading-deg", type=float, default=-90.0,
+                   help="fixed heading retained for every 45-degree cone press")
+    p.add_argument("--crooked-wiggle-radius-m", type=float, default=0.00075)
+    p.add_argument("--crooked-wiggle-cycles", type=int, default=1)
+    p.add_argument("--pickup-wiggle-radius-m", type=float, default=0.0)
+    p.add_argument("--pickup-wiggle-cycles", type=int, default=0)
+    p.add_argument("--trace-dir", help="directory for physical-policy images and trace.jsonl")
+    p.add_argument("--ca", help="certificate file, only for a server with a self-signed certificate")
+    args = p.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.submit:
+        return submit(args.url, args.ca)
+    if args.download:
+        return download(args.url, args.ca)
+    if args.status:
+        st = status(args.url, args.ca, wait=False)
+        print(f"request {st['request_id']}: {st['status']}" + (f" ({st['reason']})" if st.get("reason") else "")
+              + (f", run {st['run_id']}" if st.get("run_id") else ""))
+        if st.get("view_key"):
+            print(results_link(st))
+        return
+    if args.mock:
+        url, mock = start_mock(args.trials, args.trial_s, args.instruction)
+        logging.getLogger().setLevel(logging.ERROR)  # the summary below says what matters
+        print(f"Checking your policy on a local mock of the cell ({args.trials} rollouts, no robot) ...")
+        checked = Checked(Policy(args.checkpoint, mode=args.mode, confidence=args.confidence,
+                                 imgsz=args.imgsz, device=args.device,
+                                 allow_provisional_contact=args.allow_provisional_contact,
+                                 pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
+                                 press_offset_m=args.press_offset_m,
+                                 missing_release_z_offset_m=args.missing_release_z_offset_m,
+                                 cone_press_z_offset_m=args.cone_press_z_offset_m,
+                                 cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                                 pickup_z_offset_m=args.pickup_z_offset_m,
+                                 pickup_slide_x_m=args.pickup_slide_x_m,
+                                 work_surface_z_offset_m=args.work_surface_z_offset_m,
+                                 table_plane_offset_m=args.table_plane_offset_m,
+                                 table_cap_xy_offset_m=args.table_cap_xy_offset_m,
+                                 missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
+                                 crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
+                                 crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
+                                 crooked_tap_depth_m=args.crooked_tap_depth_m,
+                                 crooked_action=args.crooked_action,
+                                 cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
+                                                     if args.cone_tip_from_tcp_m is not None
+                                                     else DEFAULT_CONE_TIP_FROM_TCP_M),
+                                 cone_press_below_rim_m=args.cone_press_below_rim_m,
+                                 cone_press_stroke_m=args.cone_press_stroke_m,
+                                 cone_heading_deg=args.cone_heading_deg,
+                                 missing_release_side_step_m=args.missing_release_side_step_m,
+                                 missing_release_exit_step_m=args.missing_release_exit_step_m,
+                                 crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                                 crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                                 pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                                 pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+                                 work_surface_z_m=args.work_surface_z_m,
+                                 vial_rim_plane_offset_m=args.vial_rim_plane_offset_m,
+                                 vial_rim_plane_override_m=args.vial_rim_plane_override_m,
+                                 vial_height_override_m=args.vial_height_override_m,
+                                 vial_rim_z_m=args.vial_rim_z_m,
+                                 wrist_refinement=args.wrist_refinement,
+                                 wrist_view_distance_m=args.wrist_view_distance_m,
+                                 wrist_crooked_view_distance_m=args.wrist_crooked_view_distance_m,
+                                 wrist_max_correction_m=args.wrist_max_correction_m,
+                                 wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
+                                 wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
+                                 wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
+                                 trace_dir=args.trace_dir))
+        try:
+            run_all(CellClient(url, "mock", args.ca), checked)
+        except Exception:  # noqa: BLE001  (reported by verdict)
+            if checked.error is None:
+                raise
+        sys.exit(verdict(mock, checked))
+    direct_token = args.token or os.environ.get("PHYSICAL_CELL_TOKEN")
+    if direct_token:
+        url, token = args.url, direct_token
+    else:
+        st = status(args.url, args.ca, wait=True)
+        if st["status"] != "approved":
+            sys.exit(f"request {st['request_id']} was {st['status']}: {st.get('reason') or 'ask us in Slack'}")
+        url, token = json.loads(REQUEST.read_text()).get("url", args.url), st["token"]
+        logging.info("request %s approved: run %s", st["request_id"], st["run_id"])
+        if st.get("view_key"):
+            logging.info(results_link(st))
+    run_all(CellClient(url, token, args.ca),
+            Policy(args.checkpoint, mode=args.mode, confidence=args.confidence,
+                   imgsz=args.imgsz, device=args.device,
+                   allow_provisional_contact=args.allow_provisional_contact,
+                   pick_offset_m=args.pick_offset_m, place_offset_m=args.place_offset_m,
+                   press_offset_m=args.press_offset_m,
+                   missing_release_z_offset_m=args.missing_release_z_offset_m,
+                   cone_press_z_offset_m=args.cone_press_z_offset_m,
+                   cone_table_pick_offset_m=args.cone_table_pick_offset_m,
+                   pickup_z_offset_m=args.pickup_z_offset_m,
+                   pickup_slide_x_m=args.pickup_slide_x_m,
+                   work_surface_z_offset_m=args.work_surface_z_offset_m,
+                   table_plane_offset_m=args.table_plane_offset_m,
+                   table_cap_xy_offset_m=args.table_cap_xy_offset_m,
+                   missing_cap_xy_offset_m=args.missing_cap_xy_offset_m,
+                   crooked_cap_xy_offset_m=args.crooked_cap_xy_offset_m,
+                   crooked_shoulder_depth_m=args.crooked_shoulder_depth_m,
+                   crooked_tap_depth_m=args.crooked_tap_depth_m,
+                   crooked_action=args.crooked_action,
+                   cone_tip_from_tcp_m=(args.cone_tip_from_tcp_m
+                                        if args.cone_tip_from_tcp_m is not None
+                                        else DEFAULT_CONE_TIP_FROM_TCP_M),
+                   cone_press_below_rim_m=args.cone_press_below_rim_m,
+                   cone_press_stroke_m=args.cone_press_stroke_m,
+                   cone_heading_deg=args.cone_heading_deg,
+                   missing_release_side_step_m=args.missing_release_side_step_m,
+                   missing_release_exit_step_m=args.missing_release_exit_step_m,
+                   crooked_wiggle_radius_m=args.crooked_wiggle_radius_m,
+                   crooked_wiggle_cycles=args.crooked_wiggle_cycles,
+                   pickup_wiggle_radius_m=args.pickup_wiggle_radius_m,
+                   pickup_wiggle_cycles=args.pickup_wiggle_cycles,
+                   work_surface_z_m=args.work_surface_z_m,
+                   vial_rim_plane_offset_m=args.vial_rim_plane_offset_m,
+                   vial_rim_plane_override_m=args.vial_rim_plane_override_m,
+                   vial_height_override_m=args.vial_height_override_m,
+                   vial_rim_z_m=args.vial_rim_z_m,
+                   wrist_refinement=args.wrist_refinement,
+                   wrist_view_distance_m=args.wrist_view_distance_m,
+                   wrist_crooked_view_distance_m=args.wrist_crooked_view_distance_m,
+                   wrist_max_correction_m=args.wrist_max_correction_m,
+                   wrist_table_cap_xy_offset_m=args.wrist_table_cap_xy_offset_m,
+                   wrist_missing_cap_xy_offset_m=args.wrist_missing_cap_xy_offset_m,
+                   wrist_crooked_cap_xy_offset_m=args.wrist_crooked_cap_xy_offset_m,
+                   trace_dir=args.trace_dir))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RuntimeError, OSError) as e:  # the cell's answer (or no answer): one line, no traceback
+        sys.exit(f"error: {e}")

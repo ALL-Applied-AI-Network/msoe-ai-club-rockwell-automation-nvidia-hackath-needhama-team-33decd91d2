@@ -1,0 +1,9 @@
+# Placement layout across rollouts
+# Supervised test: one loose replacement cap; the operator prepares one missing
+# tray cap and one visibly crooked tray cap before the rollout begins.
+
+rollouts:
+  - objects:
+      table_cap:
+        - [380, -200, 0]
+    prompt: Use the loose cap to replace the missing tray cap, then reseat the crooked tray cap. Supervised test.
